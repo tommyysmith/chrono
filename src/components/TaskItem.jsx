@@ -4,10 +4,14 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, Trash2 } from 'lucide-react';
 import Checkbox from './Checkbox';
+import { format } from 'date-fns';
+import { Calendar } from '../assets/icons/Calendar';
+import { Trash } from '../assets/icons/Trash';
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, isSelected }) {
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showContextMenu, setShowContextMenu] = useState(false);
+
   const contextMenuRef = useRef(null);
 
   useEffect(() => {
@@ -25,6 +29,14 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showContextMenu]);
+
+  const handleClick = (e) => {
+    // Don't trigger selection when clicking checkbox or context menu
+    if (e.target.closest('.checkbox') || contextMenuRef.current?.contains(e.target)) {
+      return;
+    }
+    onClick?.(e);
+  };
 
   const handleContextMenu = (e) => {
     e.preventDefault();
@@ -44,8 +56,9 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   return (
     <div 
-      className="group flex items-center gap-2 p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md relative"
+      className={`task-item group flex items-top gap-2 p-2 ${isSelected ? 'bg-black/5 dark:bg-white/5' : 'hover:bg-black/5 dark:hover:bg-white/5'} rounded-md relative`}
       onContextMenu={handleContextMenu}
+      onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}
       draggable="true"
       onDragStart={(e) => {
@@ -53,15 +66,23 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         e.dataTransfer.effectAllowed = 'move';
       }}
     >
-      <div className="flex-shrink-0">
+      <div className="checkbox flex-shrink-0 mt-0.5">
         <Checkbox 
           checked={task.completed}
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <span className={`text-sm flex-grow ${task.completed ? 'line-through opacity-50' : ''}`}>
-        {task.title}
-      </span>
+      <div className="flex flex-col gap-1 flex-grow">
+        <span className={`text-sm ${task.completed ? 'line-through opacity-50' : ''}`}>
+          {task.title}
+        </span>
+        {task.scheduledDate && (
+          <div className="inline-flex self-start items-center gap-1 mt-1 px-1.5 py-0.5 text-xs bg-primary/10 text-primary rounded">
+            <Calendar className="h-3 w-3" />
+            {format(new Date(task.scheduledDate), 'd MMM')}
+          </div>
+        )}
+      </div>
 
       <AnimatePresence>
         {showContextMenu && (
@@ -89,7 +110,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
               onClick={handleDelete}
               className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2  hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white hover:font-semibold text-[#EC0F0F]"
             >
-              <Trash2 className="w-3 h-3" />
+              <Trash className="w-3 h-3" />
              Delete
             </button>
           </motion.div>

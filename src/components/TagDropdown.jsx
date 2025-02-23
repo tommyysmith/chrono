@@ -110,7 +110,7 @@ export default function TagDropdown({ isOpen, onClose, onSelectTag, selectedTag,
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.95 }}
             transition={{ duration: 0.1 }}
-            className="absolute p-1 w-[132px] backdrop-blur-lg flex flex-col gap-1 top-full left-0 min-w-full mt-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] border border-light-border dark:border-dark-border shadow-md overflow-hidden z-50"
+            className="absolute p-1 w-[132px] flex flex-col gap-1 top-full left-0 min-w-full mt-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] border border-light-border dark:border-dark-border shadow-md overflow-hidden z-50"
           >
             {filteredTags.length > 0 ? (
               filteredTags.map((tag) => (

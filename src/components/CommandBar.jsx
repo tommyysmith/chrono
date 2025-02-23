@@ -149,6 +149,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const titleInputRef = useRef(null);
   const datePickerRef = useRef(null);
 
+  // Add draft scheduling state
+  const [draftSchedule, setDraftSchedule] = useState(null);
+
+  // Modify scheduling handlers to use draft state
+  const handleScheduleChange = useCallback((newSchedule) => {
+    setDraftSchedule(newSchedule);
+  }, []);
+
+  const applyScheduleChanges = useCallback(() => {
+    if (draftSchedule) {
+      onUpdateEvent(draftSchedule);
+      setDraftSchedule(null);
+    }
+  }, [draftSchedule, onUpdateEvent]);
+
   const handleClose = useCallback((options = {}) => {
     const { skipDelete = false } = options;
     
@@ -596,7 +611,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       }}
                       className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                     >
-                      <Task className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                      <Task className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                       <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
                     </button>
                     <button
@@ -606,7 +621,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       }}
                       className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                     >
-                      <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text " />
+                      <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 " />
                       <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
                     </button>
                   </PopoverContent>
@@ -689,23 +704,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             <Task
                               className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
                             />
-                            <div className="flex flex-col gap-1 px-4">
+                            <div className="flex-1 flex-col gap-1 px-4">
                               <input
                                 type="text"
                                 placeholder="Task title"
                                 value={taskTitle}
                                 onChange={(e) => {
                                   setTaskTitle(e.target.value);
-                                  if (editingTaskId) {
-                                    const updatedTask = {
-                                      ...taskToEdit,
-                                      title: e.target.value,
-                                      notes: taskNotes,
-                                      tag: selectedTag,
-                                      scheduledDate: scheduledDate
-                                    };
-                                    onUpdateTask(updatedTask);
-                                  }
                                 }}
                                 className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
                                 autoFocus
@@ -716,16 +721,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 value={taskNotes}
                                 onChange={(e) => {
                                   setTaskNotes(e.target.value);
-                                  if (editingTaskId) {
-                                    const updatedTask = {
-                                      ...taskToEdit,
-                                      title: taskTitle,
-                                      notes: e.target.value,
-                                      tag: selectedTag,
-                                      scheduledDate: scheduledDate
-                                    };
-                                    onUpdateTask(updatedTask);
-                                  }
                                 }}
                                 className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
                               />
@@ -734,7 +729,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                             <PopoverTrigger asChild>
                               <button 
-                                className="flex items-center gap-2 px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors"
+                                className="flex items-center gap-2 px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -747,7 +742,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </button>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-light-bg dark:bg-dark-bg-lighter shadow-lg border border-light-border dark:border-dark-border" 
+                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-light-bg dark:bg-dark-bg-lighter backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
                               align="start"
                             >
                               <div 
@@ -758,7 +753,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 {SCHEDULE_OPTIONS.map(option => (
                                   <button
                                     key={option.id}
-                                    className="flex items-center gap-2 px-2 py-2 text-sm rounded-[5px] hover:bg-black/5 dark:hover:bg-white/5"
+                                    className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-black/5 dark:hover:bg-white/5"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.preventDefault();
@@ -775,17 +770,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                         }
                                         setScheduledDate(date);
                                         setIsScheduleOpen(false);
-                                        
-                                        if (editingTaskId) {
-                                          const updatedTask = {
-                                            ...taskToEdit,
-                                            title: taskTitle,
-                                            notes: taskNotes,
-                                            tag: selectedTag,
-                                            scheduledDate: date
-                                          };
-                                          onUpdateTask(updatedTask);
-                                        }
                                       }
                                     }}
                                   >
@@ -819,7 +803,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </div>
                             </PopoverContent>
                           </Popover>
-                          <div className="flex items-center group gap-2 px-4 h-[56px] hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                          <div className="flex items-center group gap-2 px-4 h-[56px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                             <div className="relative flex-1">
                               <div className="flex items-center gap-1 py-1">
@@ -866,7 +850,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   }}
                                 />
                               {isTagDropdownOpen && tagSearchText.length > 0 && (
-                                <div className="absolute left-0 right-0 max-w-[240px] p-1 top-full backdrop-blur-lg mt-1 z-50 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
+                                <div className="absolute left-0 z-50 right-0 max-w-[240px]backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg-lighter  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
                                   {tags
                                     .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
                                     .map(tag => (
@@ -932,15 +916,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         onClick={() => {
                           if (taskTitle.trim()) {
                             if (editingTaskId) {
+                              console.log('Saving task changes...', {
+                                original: taskToEdit,
+                                title: taskTitle.trim(),
+                                notes: taskNotes.trim(),
+                                tag: draftTag,
+                                scheduledDate: scheduledDate
+                              });
                               const updatedTask = {
                                 ...taskToEdit,
                                 title: taskTitle.trim(),
                                 notes: taskNotes.trim(),
                                 tag: draftTag,
-                                scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
+                                scheduledDate: scheduledDate
                               };
                               // Save tags to localStorage when updating task
                               localStorage.setItem('tags', JSON.stringify(tags));
+                              console.log('Updating task with final state:', updatedTask);
                               onUpdateTask(updatedTask);
                             } else {
                               // Save tags to localStorage when creating task

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { format, isToday, isTomorrow } from 'date-fns';
 import ThemeToggle from '../components/ThemeToggle';
 import { ChevronDown, ChevronRight, Clock, Inbox, Circle, List, Plus, ListTodo, Briefcase, Heart, User, Plane, CalendarDays, CalendarClock, LayoutGrid, X } from 'lucide-react';
@@ -15,8 +15,13 @@ import { Calendar } from '../assets/icons/Calendar';
 import { Tag } from '../assets/icons/Tag';
 import { Flag } from '../assets/icons/Flag';
 import { Add } from '../assets/icons/Add';
+import { Task } from '../assets/icons/Task';
+import { Clipboard } from '../assets/icons/Clipboard';
+import { Inbox as InboxIcon } from '../assets/icons/Inbox';
+import AgendaView from './AgendaView';
 
-export default function Sidebar({ commandBarRef }) {
+export default function Sidebar({ commandBarRef, events = [], selectedDate, onDateSelect }) {
+  const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'agenda'
   const [expandedSections, setExpandedSections] = useState({
     today: true,
     scheduled: false,
@@ -45,6 +50,19 @@ export default function Sidebar({ commandBarRef }) {
   });
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [originalTask, setOriginalTask] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+
+  // Clear task selection when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.task-item')) {
+        setSelectedTaskId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   
   const [tasks, setTasks] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -67,6 +85,49 @@ export default function Sidebar({ commandBarRef }) {
       all: []
     };
   });
+
+  // Add draft scheduling state
+  const [draftSchedule, setDraftSchedule] = useState(null);
+
+  // Add isEditing state
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Modify scheduling handlers
+  const handleScheduleChange = useCallback((taskId, newSchedule) => {
+    if (!isEditing) {
+      // Apply changes immediately if not in edit mode
+      setTasks(prevTasks => {
+        const updatedTasks = { ...prevTasks };
+        Object.keys(updatedTasks).forEach(group => {
+          updatedTasks[group] = updatedTasks[group].map(task => 
+            task.id === taskId ? { ...task, ...newSchedule } : task
+          );
+        });
+        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        return updatedTasks;
+      });
+    } else {
+      // Store changes in draft state when in edit mode
+      setDraftSchedule({ taskId, ...newSchedule });
+    }
+  }, [isEditing]);
+
+  const applyScheduleChanges = useCallback(() => {
+    if (draftSchedule) {
+      const { taskId, ...schedule } = draftSchedule;
+      setTasks(prevTasks => {
+        const updatedTasks = { ...prevTasks };
+        Object.keys(updatedTasks).forEach(group => {
+          updatedTasks[group] = updatedTasks[group].map(task => 
+            task.id === taskId ? { ...task, ...schedule } : task
+          );
+        });
+        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        return updatedTasks;
+      });
+      setDraftSchedule(null);
+    }
+  }, [draftSchedule]);
 
   // Save data to localStorage whenever it changes
   useEffect(() => {
@@ -304,44 +365,53 @@ export default function Sidebar({ commandBarRef }) {
   };
 
   return (
-    <aside className="w-sidebar border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg">
-      <div className="p-4 h-full flex flex-col">
-        <div className="flex flex-col gap-4 mb-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">Tasks</h1>
-            <ThemeToggle />
-          </div>
-          <div className="flex gap-2 rounded-[9px]">
-            <button
-              className={`flex w-auto px-3 py-2 text-xs rounded-[5px] ${
-                selectedView === 'all' ? 'bg-light-bg-lighter font-semibold dark:bg-dark-bg-lighter shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'
-              }`}
-              onClick={() => setSelectedView('all')}
-            >
-              All
-            </button>
-            <button
-              className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
-                selectedView === 'today' ? 'bg-light-bg-lighter font-semibold dark:bg-dark-bg-lighter shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'
-              }`}
-              onClick={() => setSelectedView('today')}
-            >
-              Today
-            </button>
-            <button
-              className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
-                selectedView === 'upcoming' ? 'bg-light-bg-lighter font-semibold dark:bg-dark-bg-lighter shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'
-              }`}
-              onClick={() => setSelectedView('upcoming')}
-            >
-              Upcoming
-            </button>
-          </div>
-        </div>
+    <aside className="w-sidebar border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg-lighter relative">
+      <div className="p-2 h-full flex flex-col">
+      
 
-        <motion.div layout="position" className="flex-1 min-h-0 flex flex-col" transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}>
-          <nav className="flex-1 overflow-auto">
-            <div className="space-y-1 flex flex-col gap-1">
+        <div className="flex-1 min-h-0 relative overflow-hidden">
+          <AnimatePresence initial={false} mode="sync">
+            {activeTab === 'tasks' ? (
+              <motion.div 
+                key="tasks"
+                className="absolute inset-0 flex flex-col"
+                initial={{ x: '-100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '-100%' }}
+                transition={{ 
+                  type: 'easeInOut',
+                  duration: 0.2,
+                  ease: [0.25, 1, 0.5, 1]
+                }}
+              >
+                <div className="flex rounded-[9px] py-4 px-2">
+                  <button
+                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px] ${
+                      selectedView === 'all' ? 'bg-light-bg-lighter font-semibold dark:bg-white/5' : 'text-light-text/50 dark:text-dark-text/50'
+                    }`}
+                    onClick={() => setSelectedView('all')}
+                  >
+                    All
+                  </button>
+                  <button
+                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
+                      selectedView === 'today' ? 'bg-light-bg-lighter font-semibold dark:bg-white/5' : 'text-light-text/50 dark:text-dark-text/50'
+                    }`}
+                    onClick={() => setSelectedView('today')}
+                  >
+                    Today
+                  </button>
+                  <button
+                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
+                      selectedView === 'upcoming' ? 'bg-light-bg-lighter font-semibold dark:bg-white/5' : 'text-light-text/50 dark:text-dark-text/50'
+                    }`}
+                    onClick={() => setSelectedView('upcoming')}
+                  >
+                    Upcoming
+                  </button>
+                </div>
+                <nav className="flex-1 overflow-auto">
+                  <div className="space-y-1 flex flex-col gap-1">
                 {selectedView === 'all' ? (
                   sections.map((section) => (
                     <div
@@ -393,7 +463,7 @@ export default function Sidebar({ commandBarRef }) {
                             animate={{ height: 'auto' }}
                             exit={{ height: 0 }}
                             transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                            className="overflow-hidden"
+                            className=""
                           >
                             <div className="flex flex-col gap-1 py-1">
                               <div className="mt-1">
@@ -405,6 +475,8 @@ export default function Sidebar({ commandBarRef }) {
                                     onDelete={handleDeleteTask}
                                     onEdit={handleEditTask}
                                     onDoubleClickEdit={handleEditTask}
+                                    onClick={() => setSelectedTaskId(task.id)}
+                                    isSelected={selectedTaskId === task.id}
                                   />
                                 ))}
                               </div>
@@ -427,6 +499,8 @@ export default function Sidebar({ commandBarRef }) {
                             onComplete={handleCompleteTask}
                             onDelete={handleDeleteTask}
                             onEdit={handleEditTask}
+                            onClick={() => setSelectedTaskId(task.id)}
+                            isSelected={selectedTaskId === task.id}
                           />
                         ));
                       } else {
@@ -468,6 +542,8 @@ export default function Sidebar({ commandBarRef }) {
                                   onComplete={handleCompleteTask}
                                   onDelete={handleDeleteTask}
                                   onEdit={handleEditTask}
+                                  onClick={() => setSelectedTaskId(task.id)}
+                                  isSelected={selectedTaskId === task.id}
                                 />
                               ))}
                             </div>
@@ -480,8 +556,32 @@ export default function Sidebar({ commandBarRef }) {
                 )}
             </div>
       
-          </nav>
-        </motion.div>
+              </nav>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="agenda"
+                className="absolute inset-0 flex flex-col"
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ 
+                  type: 'easeInOut',
+                  duration: 0.2,
+                  ease: [0.25, 1, 0.5, 1]
+                }}
+              >
+                <div className="flex-1 overflow-y-auto px-1">
+                  <AgendaView 
+                    events={events}
+                    selectedDate={selectedDate}
+                    onDateSelect={onDateSelect}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         <ColorPickerMenu
           isOpen={colorMenuOpen}
           onClose={() => setColorMenuOpen(false)}
@@ -505,6 +605,32 @@ export default function Sidebar({ commandBarRef }) {
             setColorMenuOpen(false);
           } : undefined}
         />
+
+        {/* Tab selector */}
+        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
+          <button
+            onClick={() => setActiveTab('tasks')}
+            className={`py-2 px-3 rounded-[5px] transition-colors duration-200 relative group ${
+              activeTab === 'tasks' ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+          >
+            <Task className={`w-5 h-5 ${activeTab === 'tasks' ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1.5 bg-dark-bg dark:bg-white/5 border border-light-border dark:border-dark-border shadow-lg text-dark-text text-xs font-medium rounded-[5px] whitespace-nowrap opacity-0 group-hover:opacity-100">
+              Tasks
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab('agenda')}
+            className={`py-2 px-3 rounded-[5px] transition-colors duration-200 relative group ${
+              activeTab === 'agenda' ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+            }`}
+          >
+            <InboxIcon className={`w-5 h-5 ${activeTab === 'agenda' ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1.5 bg-dark-bg dark:bg-white/5 border border-light-border dark:border-dark-border shadow-lg text-dark-text text-xs font-medium rounded-[5px] whitespace-nowrap opacity-0 group-hover:opacity-100 ">
+              Agenda
+            </div>
+          </button>
+        </div>
       </div>
     </aside>
   );

@@ -5,7 +5,7 @@ export default {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: 'class',
+  darkMode: 'media',
   theme: {
   	extend: {
   		fontFamily: {
@@ -27,7 +27,7 @@ export default {
   			'primary-highlight': 'rgba(255, 102, 31, 0.04)',
   			'dark-bg': '#040506',
   			'dark-sidebar': '#09090C',
-  			'dark-bg-light': '#09090C',
+  			'dark-bg-light': '#101014',
   			'dark-bg-lighter': '#14151A',
   			'dark-text': '#ffffff',
   			'dark-border': 'rgba(208, 209, 238, 0.06)',

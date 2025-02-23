@@ -8,9 +8,10 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         <ThemeProvider 
-          attribute="class" 
-          defaultTheme="system" 
+          attribute="class"
+          defaultTheme="system"
           enableSystem
+          disableTransitionOnChange
         >
           <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
             {children}

@@ -37,6 +37,7 @@ import { TAG_COLORS } from '../constants/colors';
 import { Repeat } from '@/assets/icons/Repeat';
 import { Trash } from '@/assets/icons/Trash';
 import Sidebar from './Sidebar';
+import ThemeToggle from '../components/ThemeToggle';
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -48,8 +49,9 @@ const ViewType = {
   MONTH: 'month',
 };
 
-export default function Calendar({ selectedDate, onDateSelect }) {
+export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [viewType, setViewType] = useState(ViewType.WEEK);
+  const [currentDate, setCurrentDate] = useState(selectedDate);
   const [events, setEvents] = useState([]);
   const [scrollPosition, setScrollPosition] = useState(null);
   const [modalState, setModalState] = useState({
@@ -80,6 +82,11 @@ export default function Calendar({ selectedDate, onDateSelect }) {
   const wasResizingRef = useRef(false);
   const editingEventId = useRef(null);
 
+  // Sync with selectedDate prop
+  useEffect(() => {
+    setCurrentDate(selectedDate);
+  }, [selectedDate]);
+
   // Load events from localStorage when component mounts
   useEffect(() => {
     const savedEvents = localStorage.getItem('calendarEvents');
@@ -106,26 +113,27 @@ export default function Calendar({ selectedDate, onDateSelect }) {
   // Navigation handlers
   const handlePrevious = () => {
     if (viewType === ViewType.WEEK) {
-      onDateSelect(subDays(selectedDate, 7));
+      onDateSelect?.(subDays(currentDate, 7));
     } else if (viewType === ViewType.DAY) {
-      onDateSelect(subDays(selectedDate, 1));
+      onDateSelect?.(subDays(currentDate, 1));
     } else if (viewType === ViewType.MONTH) {
-      onDateSelect(addMonths(selectedDate, -1));
+      onDateSelect?.(addMonths(currentDate, -1));
     }
   };
 
   const handleNext = () => {
     if (viewType === ViewType.WEEK) {
-      onDateSelect(addDays(selectedDate, 7));
+      onDateSelect?.(addDays(currentDate, 7));
     } else if (viewType === ViewType.DAY) {
-      onDateSelect(addDays(selectedDate, 1));
+      onDateSelect?.(addDays(currentDate, 1));
     } else if (viewType === ViewType.MONTH) {
-      onDateSelect(addMonths(selectedDate, 1));
+      onDateSelect?.(addMonths(currentDate, 1));
     }
   };
 
   const handleToday = () => {
-    onDateSelect(new Date());
+    const today = new Date();
+    onDateSelect?.(today);
   };
 
   const getTimeFromMousePosition = (mouseY, containerRect) => {
@@ -142,10 +150,10 @@ export default function Calendar({ selectedDate, onDateSelect }) {
     const minutes = roundedMinutes % 60;
     
     // Create date at the exact time
-    const time = new Date(selectedDate);
+    const time = new Date(currentDate);
     if (hours === 24) {
       // Handle midnight case
-      const nextDay = new Date(selectedDate);
+      const nextDay = new Date(currentDate);
       nextDay.setDate(nextDay.getDate() + 1);
       nextDay.setHours(0, 0, 0, 0);
       return nextDay;
@@ -1487,6 +1495,7 @@ export default function Calendar({ selectedDate, onDateSelect }) {
     return (
       <div className="flex items-center justify-between p-4 border-b border-light-border dark:border-dark-border">
         <div className="flex w-full justify-between items-center gap-4">
+          <ThemeToggle/>
           <div className="flex items-baseline">
             <h1 className="text-xl font-semibold">
               {selectedDate.toLocaleString('en-US', { month: 'long' })}
@@ -2036,8 +2045,8 @@ export default function Calendar({ selectedDate, onDateSelect }) {
   };
 
   const getColumnDate = (columnIndex) => {
-    const date = new Date(selectedDate);
-    date.setDate(selectedDate.getDate() - selectedDate.getDay() + columnIndex);
+    const date = new Date(currentDate);
+    date.setDate(currentDate.getDate() - currentDate.getDay() + columnIndex);
     return date;
   };
 
@@ -2318,8 +2327,8 @@ export default function Calendar({ selectedDate, onDateSelect }) {
 
   return (
     <div className="flex h-full w-full overflow-hidden">
-      <Sidebar commandBarRef={commandBarRef} />
-      <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-sidebar">
+      <Sidebar commandBarRef={commandBarRef} events={events} selectedDate={selectedDate} onDateSelect={onDateSelect} />
+      <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light">
       <div className="flex items-center justify-between px-4 py-2">
         <div className="flex w-full justify-between items-center gap-4">
           <div className="flex items-baseline">
