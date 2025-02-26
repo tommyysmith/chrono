@@ -81,6 +81,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const contextMenuRef = useRef(null);
   const wasResizingRef = useRef(false);
   const editingEventId = useRef(null);
+  const viewDropdownRef = useRef(null);
 
   // Sync with selectedDate prop
   useEffect(() => {
@@ -1519,7 +1520,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               </div>
 
               {isViewDropdownOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-white dark:bg-dark-bg border border-light-border dark:border-dark-border text-xs rounded-[13px] shadow-lg py-1 min-w-[120px] z-50">
+                <div 
+                  ref={viewDropdownRef}
+                  className="absolute top-full right-0 mt-1 bg-white dark:bg-dark-bg border border-light-border dark:border-dark-border text-xs rounded-[13px] shadow-lg py-1 min-w-[120px] z-50"
+                >
                   {Object.values(ViewType).map((type) => (
                     <button
                       key={type}
@@ -2294,6 +2298,22 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, [contextMenu.show]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isViewDropdownOpen && viewDropdownRef.current && !viewDropdownRef.current.contains(event.target)) {
+        setIsViewDropdownOpen(false);
+      }
+    };
+
+    if (isViewDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isViewDropdownOpen]);
+
   const handleSaveEvent = (eventData) => {
     const { title, start, end, repeat } = eventData;
     const newEvent = {
@@ -2354,7 +2374,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               </div>
 
               {isViewDropdownOpen && (
-                <div className="absolute top-full right-0 mt-1 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border flex flex-col rounded-[9px] gap-1 shadow-lg p-1 min-w-[120px] z-50">
+                <div 
+                  ref={viewDropdownRef}
+                  className="absolute top-full right-0 mt-1 bg-dark-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border flex flex-col rounded-[9px] gap-1 shadow-lg p-1 min-w-[120px] z-50"
+                >
                 {Object.values(ViewType).map((type) => (
                   <button
                     key={type}
@@ -2364,12 +2387,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     }}
                     className={`w-full text-left px-2 py-1 text-xs rounded-[5px] font-medium flex items-center justify-between ${
                       viewType === type 
-                        ? 'text-light-text text-xs dark:text-dark-text' 
-                        : 'text-light-text/50 text-xs dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5'
+                        ? 'text-dark-text text-xs font-semibold dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/5' 
+                        : 'text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 hover:text-dark-text dark:hover:bg-white/5'
                     }`}
                   >
                     <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                    <span className="text-light-text/30 dark:text-dark-text/30 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border dark:border-dark-border">
+                    <span className="text-dark-text/50 dark:text-dark-text/50 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-dark-border dark:border-dark-border">
                       {type.charAt(0).toUpperCase()}
                     </span>
                   </button>
@@ -2390,33 +2413,31 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       {contextMenu.show && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-light-bg dark:bg-dark-bg-lighter shadow-lg rounded-[13px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
+          className="fixed bg-dark-bg-lighter dark:bg-dark-bg-lighter shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           <div className="">
-            <div className="px-3 pt-3 pb-1 text-xs text-light-text/50 dark:text-dark-text/50 font-medium">
-              Color
-            </div>
-            <div className="flex flex-wrap gap-2 p-3">
+            
+            <div className="flex flex-wrap gap-2 pb-2 p-3">
               {colors.map(color => (
                 <motion.button
                   key={color}
                   whileHover={{ scale: 1.05 }}
-                  className="w-6 h-6 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
+                  className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
                   style={{ backgroundColor: color }}
                   onClick={(e) => handleColorSelect(e, color)}
                   onMouseDown={(e) => e.stopPropagation()}
                 />
               ))}
             </div>
-            <div className="border-t border-light-border dark:border-dark-border mt-2" />
+            <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
             <div className="p-1">
               <button
-                className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[9px] font-medium text-sm text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
                 onClick={(e) => handleEventDelete(e)}
                 onMouseDown={(e) => e.stopPropagation()}
               >
-              <Trash className="w-4 h-4 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
+              <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
 
                 Delete
               </button>

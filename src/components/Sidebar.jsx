@@ -19,6 +19,7 @@ import { Task } from '../assets/icons/Task';
 import { Clipboard } from '../assets/icons/Clipboard';
 import { Inbox as InboxIcon } from '../assets/icons/Inbox';
 import AgendaView from './AgendaView';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 
 export default function Sidebar({ commandBarRef, events = [], selectedDate, onDateSelect }) {
   const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'agenda'
@@ -142,62 +143,90 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
     }
   }, [tags]);
 
-  // Update data directly and listen for changes from other tabs
+  // Subscribe to localStorage changes
   useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'tasks') {
-        const newTasks = JSON.parse(e.newValue);
-        setTasks(newTasks);
-      } else if (e.key === 'tags') {
-        const newTags = JSON.parse(e.newValue);
-        setTags(newTags);
-      }
-    };
-
-    // Initial load from localStorage
+    // Remove the MutationObserver as it's not appropriate for watching localStorage
+    // and is causing tasks to revert to previous state
+    
+    // Instead, only load data on mount
     const loadData = () => {
       const savedTasks = localStorage.getItem('tasks');
       const savedTags = localStorage.getItem('tags');
 
       if (savedTasks) {
-        setTasks(JSON.parse(savedTasks));
+        try {
+          const parsedTasks = JSON.parse(savedTasks);
+          console.log("Loading tasks from localStorage:", parsedTasks);
+          setTasks(parsedTasks);
+        } catch (e) {
+          console.error("Error parsing tasks from localStorage:", e);
+        }
       }
       if (savedTags) {
-        setTags(JSON.parse(savedTags));
+        try {
+          setTags(JSON.parse(savedTags));
+        } catch (e) {
+          console.error("Error parsing tags from localStorage:", e);
+        }
       }
     };
 
-    loadData(); // Load all data on mount
+    // Only load data on mount
+    loadData();
+    
+    // Listen for storage events from other tabs, but not from the current one
+    const handleStorageChange = (e) => {
+      if (e.key === 'tasks' || e.key === 'tags') {
+        // Only process events from other tabs/windows
+        if (e.storageArea === localStorage && e.newValue) {
+          if (e.key === 'tasks') {
+            try {
+              const parsedTasks = JSON.parse(e.newValue);
+              console.log("Storage event - updating tasks:", parsedTasks);
+              setTasks(parsedTasks);
+            } catch (e) {
+              console.error("Error parsing tasks from storage event:", e);
+            }
+          } else if (e.key === 'tags') {
+            try {
+              setTags(JSON.parse(e.newValue));
+            } catch (e) {
+              console.error("Error parsing tags from storage event:", e);
+            }
+          }
+        }
+      }
+    };
+    
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
 
-  // Subscribe to localStorage changes
-  useEffect(() => {
+    // Add a new listener for local updates (when tasks are added from CommandBar)
     const checkLocalStorage = () => {
       const savedTasks = localStorage.getItem('tasks');
-      const savedTags = localStorage.getItem('tags');
-
       if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        setTasks(parsedTasks);
-        // Reset editing state when tasks are updated
-        setEditingTaskId(null);
-        setOriginalTask(null);
-      }
-      if (savedTags) {
-        const parsedTags = JSON.parse(savedTags);
-        setTags(parsedTags);
+        try {
+          const parsedTasks = JSON.parse(savedTasks);
+          setTasks(current => {
+            // Only update if the data is different to avoid infinite loops
+            if (JSON.stringify(current) !== savedTasks) {
+              console.log("Local storage check - updating tasks:", parsedTasks);
+              return parsedTasks;
+            }
+            return current;
+          });
+        } catch (e) {
+          console.error("Error checking localStorage:", e);
+        }
       }
     };
-
-    // Create a MutationObserver to watch for localStorage changes
-    const observer = new MutationObserver(checkLocalStorage);
     
-    // Observe changes to localStorage
-    observer.observe(document, { subtree: true, childList: true });
-
-    return () => observer.disconnect();
+    // Check localStorage periodically for changes
+    const intervalId = setInterval(checkLocalStorage, 1000);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearInterval(intervalId);
+    };
   }, []);
 
   const addTaskRef = useRef(null);
@@ -227,7 +256,11 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
       };
 
       if (pendingTag) {
-        setTags(prevTags => [...prevTags, pendingTag]);
+        setTags(prevTags => {
+          const updatedTags = [...prevTags, pendingTag];
+          localStorage.setItem('tags', JSON.stringify(updatedTags));
+          return updatedTags;
+        });
         setPendingTag(null);
       }
 
@@ -276,6 +309,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
       Object.keys(newTasks).forEach(group => {
         newTasks[group] = newTasks[group].filter(task => task.id !== taskId);
       });
+      localStorage.setItem('tasks', JSON.stringify(newTasks));
       return newTasks;
     });
   };
@@ -296,6 +330,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
           task.id === taskId ? { ...task, completed: !task.completed } : task
         );
       });
+      localStorage.setItem('tasks', JSON.stringify(newTasks));
       return newTasks;
     });
   };
@@ -366,7 +401,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
 
   return (
     <aside className="w-sidebar border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg-lighter relative">
-      <div className="p-2 h-full flex flex-col">
+      <div className="h-full flex flex-col">
       
 
         <div className="flex-1 min-h-0 relative overflow-hidden">
@@ -571,11 +606,15 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                   ease: [0.25, 1, 0.5, 1]
                 }}
               >
-                <div className="flex-1 overflow-y-auto px-1">
+                <div className="flex-1 overflow-y-auto">
                   <AgendaView 
                     events={events}
+                    tasks={allTasks}
                     selectedDate={selectedDate}
                     onDateSelect={onDateSelect}
+                    onTaskComplete={handleCompleteTask}
+                    onTaskDelete={handleDeleteTask}
+                    onTaskEdit={handleEditTask}
                   />
                 </div>
               </motion.div>
@@ -608,28 +647,35 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
 
         {/* Tab selector */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
-          <button
-            onClick={() => setActiveTab('tasks')}
-            className={`py-2 px-3 rounded-[5px] transition-colors duration-200 relative group ${
-              activeTab === 'tasks' ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-          >
-            <Task className={`w-5 h-5 ${activeTab === 'tasks' ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1.5 bg-dark-bg dark:bg-white/5 border border-light-border dark:border-dark-border shadow-lg text-dark-text text-xs font-medium rounded-[5px] whitespace-nowrap opacity-0 group-hover:opacity-100">
-              Tasks
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab('agenda')}
-            className={`py-2 px-3 rounded-[5px] transition-colors duration-200 relative group ${
-              activeTab === 'agenda' ? 'bg-black/10 dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
-            }`}
-          >
-            <InboxIcon className={`w-5 h-5 ${activeTab === 'agenda' ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1.5 bg-dark-bg dark:bg-white/5 border border-light-border dark:border-dark-border shadow-lg text-dark-text text-xs font-medium rounded-[5px] whitespace-nowrap opacity-0 group-hover:opacity-100 ">
-              Agenda
-            </div>
-          </button>
+          <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setActiveTab('tasks')}
+                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
+                    activeTab === 'tasks' ? 'bg-dark-bg-lighter dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <Task className={`w-5 h-5 ${activeTab === 'tasks' ? 'text-dark-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Tasks</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setActiveTab('agenda')}
+                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
+                    activeTab === 'agenda' ? 'bg-dark-bg-lighter dark:bg-white/10' : 'hover:bg-black/5 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <InboxIcon className={`w-5 h-5 ${activeTab === 'agenda' ? 'text-dark-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Agenda</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
     </aside>

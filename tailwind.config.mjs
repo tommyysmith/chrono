@@ -21,6 +21,7 @@ export default {
 			'light-bg-lighter': '#EDEDED',
   			'light-text': '#1a1a1a',
   			'light-border': '#e5e5e5',
+			'light-border-2': 'rgba(208, 209, 238, 0.16)',
   			'light-hover': '#f0f0f0',
   			'light-accent': '#007AFF',
   			primary: '#FF661F',

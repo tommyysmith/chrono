@@ -930,23 +930,54 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 tag: draftTag,
                                 scheduledDate: scheduledDate
                               };
-                              // Save tags to localStorage when updating task
-                              localStorage.setItem('tags', JSON.stringify(tags));
+                              
+                              // Update tags in localStorage
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem('tags', JSON.stringify(tags));
+                              }
+                              
                               console.log('Updating task with final state:', updatedTask);
                               onUpdateTask(updatedTask);
                             } else {
-                              // Save tags to localStorage when creating task
-                              localStorage.setItem('tags', JSON.stringify(tags));
-                              // Create task with title, notes, tag, and scheduled date
-                              onCreateTask({
+                              // Create a new task
+                              const newTask = {
                                 id: Date.now(),
                                 title: taskTitle.trim(),
                                 notes: taskNotes.trim(),
-                                tag: selectedTag,
+                                tag: draftTag || selectedTag,
                                 completed: false,
                                 createdAt: new Date().toISOString(),
                                 scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
-                              });
+                              };
+                              
+                              // Update tags in localStorage
+                              if (typeof window !== 'undefined') {
+                                localStorage.setItem('tags', JSON.stringify(tags));
+                              }
+                              
+                              // Create the task
+                              console.log("Creating new task:", newTask);
+                              onCreateTask(newTask);
+                              
+                              // Force update localStorage with the new task
+                              try {
+                                const savedTasks = localStorage.getItem('tasks') || '{}';
+                                const tasks = JSON.parse(savedTasks);
+                                
+                                // Add task to its tag group and the 'all' group
+                                const tagGroup = newTask.tag ? newTask.tag.id : 'all';
+                                const updatedTasks = {
+                                  ...tasks,
+                                  [tagGroup]: [...(tasks[tagGroup] || []), newTask],
+                                  all: [...(tasks.all || []), newTask]
+                                };
+                                
+                                // Save directly to localStorage
+                                localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                                console.log("Updated tasks in localStorage:", updatedTasks);
+                              } catch (e) {
+                                console.error("Error updating localStorage:", e);
+                              }
                             }
                             handleClose();
                           }
