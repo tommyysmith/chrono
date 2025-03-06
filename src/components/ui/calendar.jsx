@@ -23,14 +23,14 @@ function Calendar({
         caption: "flex justify-between relative items-center pl-4 pr-1",
         caption_label: "text-sm font-semibold text-dark-text dark:text-dark-text",
         nav: "flex items-center",
-        nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 text-dark-text dark:text-dark-text flex items-center justify-center",
+        nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 !text-dark-text dark:text-dark-text flex items-center justify-center",
         nav_button_previous: "rotate-180",
         nav_button_next: "",
         table: "w-full border-collapse space-y-2",
         head_row: "flex w-full justify-between gap-2 px-2",
         head_cell: "text-dark-text/50 dark:text-dark-text/50 rounded-md w-7 font-normal text-[0.8rem] text-center",
         row: "flex w-full justify-between gap-2 px-2 py-1",
-        cell: "text-center text-xs p-0 relative focus-within:relative focus-within:z-20",
+        cell: "text-center text-dark-text text-xs p-0 relative focus-within:relative focus-within:z-20",
         day: cn(
           buttonVariants({ variant: "ghost" }),
           "h-7 w-7 p-0 font-normal text-light-text dark:text-dark-text hover:!bg-white/15 dark:hover:bg-white/5 rounded-[5px]"
@@ -46,10 +46,10 @@ function Calendar({
       }}
       components={{
         IconLeft: ({ ...props }) => (
-          <Chevron className="h-4 w-4 text-light-text/50 dark:text-dark-text/50" {...props} />
+          <Chevron className="h-4 w-4 !text-dark-text/50 dark:text-dark-text/50" {...props} />
         ),
         IconRight: ({ ...props }) => (
-          <Chevron className="h-4 w-4 text-light-text/50 dark:text-dark-text/50" {...props} />
+          <Chevron className="h-4 w-4 !text-dark-text/50 dark:text-dark-text/50" {...props} />
         ),
       }}
       {...props} />)

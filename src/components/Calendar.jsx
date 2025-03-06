@@ -15,7 +15,6 @@ import {
   isWeekend,
   isSameMonth
 } from 'date-fns';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import DeleteEventModal from './DeleteEventModal';
 import { motion } from 'framer-motion';
 import CommandBar from './CommandBar';
@@ -222,6 +221,25 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       
       // If updating a series event
       if (existingEvent?.seriesId) {
+        // If the repeat option changed (indicated by _repeatChanged flag)
+        // or if the event is changing from one repeat type to another
+        if (eventData._repeatChanged || 
+            (existingEvent.repeat !== eventData.repeat && eventData.repeat !== 'none')) {
+          // Remove all events in the current series
+          const otherEvents = prev.filter(e => e.seriesId !== existingEvent.seriesId);
+          
+          // Generate a new series with the updated repeat option
+          const repeatedEvents = generateRepeatedEvents({
+            ...eventData,
+            id: existingEvent.id // Keep the original ID for the first event
+          }, eventData.repeat);
+          
+          const newEvents = [...otherEvents, ...repeatedEvents];
+          localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
+          return newEvents;
+        }
+        
+        // Otherwise, update all events in the series normally
         // Get all events in the series
         const seriesEvents = prev.filter(e => e.seriesId === existingEvent.seriesId);
         
@@ -2413,7 +2431,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       {contextMenu.show && (
         <div
           ref={contextMenuRef}
-          className="fixed bg-dark-bg-lighter dark:bg-dark-bg-lighter shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
+          className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           <div className="">

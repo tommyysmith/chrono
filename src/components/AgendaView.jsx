@@ -133,7 +133,9 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   }, [filterEvents, currentDate]);
 
   const filteredTasks = useMemo(() => {
-    return filterTasks(currentDate);
+    const tasks = filterTasks(currentDate);
+    console.log('AgendaView filteredTasks:', tasks);
+    return tasks;
   }, [filterTasks, currentDate]);
 
   // Determine if we need to show the selector
@@ -151,8 +153,8 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   return (
     <div className="flex flex-col gap-4">
       <TooltipProvider delayDuration={750}>
-        <div className='bg-light-bg-light dark:bg-dark-bg'>
-        <div className="flex mt-2 justify-center">
+        <div className='bg-light-bg-light dark:bg-dark-bg-light'>
+        <div className="flex px-3 mt-2 justify-center">
           <DayPicker
             mode="single"
             selected={currentDate}
@@ -198,7 +200,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                         setMonth(today);
                         handleDateSelect(today);
                       }}
-                      className="absolute top-[7px] right-16 p-1 rounded hover:text-light-text dark:hover:text-dark-text text-light-text/50 dark:text-dark-text/50"
+                      className="absolute top-[15px] right-[70px] p-1 rounded hover:text-light-text dark:hover:text-dark-text text-light-text/50 dark:text-dark-text/50"
                       aria-label="Return to today"
                     >
                       <Return className="w-4 h-4" />
@@ -219,7 +221,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
           {showSelector && (
             <div className="flex gap-1 mt-2 mb-2 bg-white border border-light-border dark:border-dark-border shadow-sm dark:bg-white/5 rounded-[9px] p-1 w-fit">
               <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'events' ? 'bg-dark-bg-lighter dark:bg-dark-bg-lighter text-dark-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
+                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'events' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
                 onClick={() => setViewMode('events')}
               >
                 <CalendarIcon className="w-4 h-4" />
@@ -228,7 +230,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                 </span>
               </button>
               <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'tasks' ? 'bg-dark-bg-lighter dark:bg-dark-bg-lighter text-dark-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
+                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'tasks' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
                 onClick={() => setViewMode('tasks')}
               >
                 <Task className="w-4 h-4" />
@@ -262,11 +264,15 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                 No tasks scheduled for {isToday(currentDate) ? 'today' : format(currentDate, 'MMM d, yyyy')}
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex px-2 flex-col gap-2">
                 {filteredTasks.map((task) => (
                   <TaskItem 
                     key={task.id} 
-                    task={task} 
+                    task={{
+                      ...task,
+                      tag: task.tag || null  // Ensure tag is always passed
+                    }}
+                    hideScheduledDate={true}  // Hide scheduled date in AgendaView
                     onComplete={onTaskComplete}
                     onDelete={onTaskDelete}
                     onDoubleClickEdit={onTaskEdit}

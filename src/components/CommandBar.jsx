@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { format, addHours, parse, isToday, isTomorrow, isYesterday } from 'date-fns';
+import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
@@ -39,8 +38,7 @@ const REPEAT_OPTIONS = [
   { id: 'monthly', label: 'Every month', sublabel: 'on the 30th' },
   { id: 'monthlyWeekday', label: 'Every month', sublabel: 'on the 5th Mon' },
   { id: 'monthlyLastWeekday', label: 'Every month', sublabel: 'on the last Mon' },
-  { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' },
-  { id: 'custom', label: 'Custom...' }
+  { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' }
 ];
 
 const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose }, ref) => {
@@ -211,7 +209,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setEventEndTime(format(event.end, 'HH:mm'));
     setIsAllDay(event.isAllDay || false);
     setSelectedColor(event.color || '#3B82F6');
-    setRepeatOption(event.repeatOption || event.repeat || 'none');
+    setRepeatOption(event.repeat || 'none');
     setEditingEventId(event.id);
     setRepeatSeriesId(event.seriesId);
     // Store the complete original event
@@ -254,12 +252,41 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       isAllDay, selectedColor, repeatOption, eventToEdit, onUpdateEvent]);
 
   const handleRepeatOptionChange = useCallback((option) => {
+    // Immediately update the repeat option state
     setRepeatOption(option);
     
-    // If changing from a repeat option to 'none', show confirmation modal
-    if (eventToEdit?.seriesId && (!option || option === 'none')) {
+    // Close the dropdown immediately
+    setIsRepeatDropdownOpen(false);
+    
+    // If editing an existing event, update it with the new repeat option
+    if (editingEventId) {
+      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+      const updatedFields = {
+        id: editingEventId,
+        title: eventTitle.trim(),
+        description: eventDescription.trim(),
+        start: startDateTime,
+        end: endDateTime,
+        isAllDay,
+        color: selectedColor,
+        repeat: option,
+        // Add a flag to indicate that repeat option has changed directly
+        // This will trigger proper regeneration of the repeating events
+        _repeatChanged: true
+      };
+
+      // Keep the series ID if it exists
+      if (eventToEdit?.seriesId) {
+        updatedFields.seriesId = eventToEdit.seriesId;
+      }
+
+      // Update the event with the new repeat option
+      onUpdateEvent(updatedFields);
     }
-  }, [eventToEdit]);
+  }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
+      isAllDay, selectedColor, eventToEdit, onUpdateEvent]);
 
   const handleEditSeriesSelect = useCallback((mode) => {
     setShowEditSeriesModal(false);
@@ -459,11 +486,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       }
     }
 
-    document.addEventListener('mousedown', handleClickOutside);
+    // Only add the event listener when the dropdown is open
+    if (isRepeatDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          setIsRepeatDropdownOpen(false);
+        }
+      });
+    }
+    
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleClickOutside);
     };
-  }, []);
+  }, [isRepeatDropdownOpen]);
 
   useEffect(() => {
     if (isAddingEvent && titleInputRef.current) {
@@ -742,7 +779,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </button>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-light-bg dark:bg-dark-bg-lighter backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
+                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter text-dark-text dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
                               align="start"
                             >
                               <div 
@@ -753,7 +790,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 {SCHEDULE_OPTIONS.map(option => (
                                   <button
                                     key={option.id}
-                                    className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-black/5 dark:hover:bg-white/5"
+                                    className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.preventDefault();
@@ -784,7 +821,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <div className="absolute w-0 h-0 overflow-hidden" />
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-light-bg dark:bg-dark-bg-lighter shadow-lg border border-light-border dark:border-dark-border" 
+                              className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
                               align="start"
                             >
                               <div
@@ -850,7 +887,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   }}
                                 />
                               {isTagDropdownOpen && tagSearchText.length > 0 && (
-                                <div className="absolute left-0 z-50 right-0 max-w-[240px]backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg-lighter  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
+                                <div className="absolute left-0 z-50 right-0 max-w-[240 px] backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
                                   {tags
                                     .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
                                     .map(tag => (
@@ -1269,35 +1306,90 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       </div>
 
                       <div className="relative flex" ref={repeatDropdownRef}>
-                        <div 
-                          className="flex items-center gap-2 cursor-pointer p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md"
-                          onClick={() => setIsRepeatDropdownOpen(!isRepeatDropdownOpen)}
+                        <button 
+                          type="button"
+                          className="flex items-center gap-2 cursor-pointer p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md focus:outline-none"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            // Force the dropdown to open regardless of previous state
+                            setIsRepeatDropdownOpen(true);
+                          }}
+                          aria-expanded={isRepeatDropdownOpen}
+                          aria-haspopup="true"
                         >
                           <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                           <span className="text-sm font-semibold text-light-text/50 dark:text-dark-text/50">
                             {REPEAT_OPTIONS.find(option => option.id === repeatOption)?.label}
                           </span>
-                        
-                        </div>
+                        </button>
 
-                        {isRepeatDropdownOpen && (
-                          <div className="absolute right-0 bottom-full mb-1 w-[250px] p-1 overflow-hidden bg-light-bg dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[13px] shadow-md z-10">
-                            {REPEAT_OPTIONS.map((option) => (
-                              <div
-                                key={option.id}
-                                className="px-2 py-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-[9px] cursor-pointer"
-                                onClick={() => handleRepeatOptionChange(option.id)}
-                              >
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm text-light-text dark:text-dark-text">{option.label}</span>
-                                  {option.sublabel && (
-                                    <span className="text-xs text-light-text/50 dark:text-dark-text/50">{option.sublabel}</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
+                        <AnimatePresence>
+                          {isRepeatDropdownOpen && (
+                          <div 
+                            className="absolute right-0 bottom-full mb-1 w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-10"
+                            role="listbox"
+                            tabIndex={-1}
+                          >
+                            {REPEAT_OPTIONS.map((option) => {
+                              // Dynamically generate sublabels based on the current event date
+                              let sublabel = option.sublabel;
+                              
+                              if (option.id === 'weekly' || option.id === 'biweekly') {
+                                // Format: "on Mon" (based on event day of week)
+                                const date = parse(eventDate, 'yyyy-MM-dd', new Date());
+                                const dayOfWeek = format(date, 'EEE');
+                                sublabel = `on ${dayOfWeek}`;
+                              } else if (option.id === 'monthly') {
+                                // Format: "on the 15th" (based on day of month)
+                                const date = parse(eventDate, 'yyyy-MM-dd', new Date());
+                                const dayOfMonth = format(date, 'do');
+                                sublabel = `on the ${dayOfMonth}`;
+                              } else if (option.id === 'monthlyWeekday') {
+                                // Format: "on the 2nd Mon" 
+                                const date = parse(eventDate, 'yyyy-MM-dd', new Date());
+                                const dayOfMonth = getDate(date);
+                                const weekNum = Math.ceil(dayOfMonth / 7);
+                                const dayOfWeek = format(date, 'EEE');
+                                const ordinal = weekNum === 1 ? '1st' : weekNum === 2 ? '2nd' : weekNum === 3 ? '3rd' : `${weekNum}th`;
+                                sublabel = `on the ${ordinal} ${dayOfWeek}`;
+                              } else if (option.id === 'monthlyLastWeekday') {
+                                // Format: "on the last Mon"
+                                const date = parse(eventDate, 'yyyy-MM-dd', new Date());
+                                const dayOfWeek = format(date, 'EEE');
+                                sublabel = `on the last ${dayOfWeek}`;
+                              } else if (option.id === 'yearly') {
+                                // Format: "on Dec 30"
+                                const date = parse(eventDate, 'yyyy-MM-dd', new Date());
+                                const monthDay = format(date, 'MMM d');
+                                sublabel = `on ${monthDay}`;
+                              }
+                              
+                              return (
+                                <button
+                                  type="button"
+                                  key={option.id}
+                                  className={`w-full text-left px-2 py-2 hover:bg-white/15 dark:hover:bg-dark-bg-lighter rounded-[5px] cursor-pointer ${repeatOption === option.id ? '' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    handleRepeatOptionChange(option.id);
+                                  }}
+                                  role="option"
+                                  aria-selected={repeatOption === option.id}
+                                >
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-xs text-dark-text dark:text-dark-text">{option.label}</span>
+                                    {sublabel && (
+                                      <span className="text-xs text-dark-text/50 dark:text-dark-text/50">{sublabel}</span>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
                           </div>
                         )}
+                        </AnimatePresence>
                       </div>
                     </div>
                   </div>

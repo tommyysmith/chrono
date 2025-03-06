@@ -7,12 +7,23 @@ import Checkbox from './Checkbox';
 import { format } from 'date-fns';
 import { Calendar } from '../assets/icons/Calendar';
 import { Trash } from '../assets/icons/Trash';
+import { Tag } from '../assets/icons/Tag';
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, isSelected }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, isSelected, hideScheduledDate, hideTag }) {
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [showContextMenu, setShowContextMenu] = useState(false);
 
   const contextMenuRef = useRef(null);
+
+  // Debug logs
+  useEffect(() => {
+    console.log('TaskItem received task:', JSON.stringify(task, null, 2));
+    if (task.tag) {
+      console.log('TaskItem task.tag:', JSON.stringify(task.tag, null, 2));
+    } else {
+      console.log('TaskItem task.tag: undefined or empty');
+    }
+  }, [task]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -60,7 +71,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   return (
     <div 
-      className={`task-item group flex items-top gap-2 p-2 ${isSelected ? 'bg-black/5 dark:bg-white/5' : 'hover:bg-black/5 dark:hover:bg-white/5'} rounded-md relative`}
+      className={`task-item group flex items-top gap-2 p-2 ${isSelected ? 'bg-light-bg-light dark:bg-dark-bg-lighter' : 'hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter'} rounded-md relative`}
       onContextMenu={handleContextMenu}
       onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}
@@ -75,12 +86,34 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         <span className={`text-sm ${task.completed ? 'line-through opacity-50' : ''}`}>
           {task.title}
         </span>
-        {task.scheduledDate && (
-          <div className="inline-flex self-start items-center gap-1 mt-1 px-1.5 py-0.5 text-xs bg-primary/10 text-primary rounded">
+        <div className="flex items-center flex-row gap-1">
+        {!hideScheduledDate && task.scheduledDate && (
+          <div className="inline-flex self-start items-center px-1 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
             <Calendar className="h-3 w-3" />
+            <span className="px-1">
             {format(new Date(task.scheduledDate), 'd MMM')}
+            </span>
           </div>
         )}
+        {!hideTag && task.tag && (
+          <div className="flex flex-wrap gap-1">
+            <div
+              key={task.tag.id}
+              className="inline-flex self-start items-center px-1 py-1 text-xs rounded-[5px]"
+              style={{
+                backgroundColor: `${task.tag.color}15`,
+                color: task.tag.color
+              }}
+            >
+              <Tag className="h-3 w-3"
+              style={{ color: task.tag.color }} />
+              <span className="px-1">
+              {task.tag.label}
+              </span>
+            </div>
+          </div>
+        )}
+        </div>
       </div>
 
       <AnimatePresence>

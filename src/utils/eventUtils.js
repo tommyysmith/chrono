@@ -415,6 +415,30 @@ export const generateRepeatedEvents = (baseEvent, repeatType, count = 52) => {
   let nextEndDate = new Date(firstEvent.end);
   const duration = firstEvent.end - firstEvent.start;
 
+  // Get the weekday (0-6, where 0 is Sunday) of the original event
+  const originalWeekday = firstEvent.start.getDay();
+  
+  // Get the day of month of the original event (1-31)
+  const originalDayOfMonth = firstEvent.start.getDate();
+  
+  // Check which week of the month the event falls on (1st, 2nd, 3rd, 4th, or 5th/last)
+  const getWeekOfMonth = (date) => {
+    const dayOfMonth = date.getDate();
+    return Math.ceil(dayOfMonth / 7);
+  };
+  
+  // Is this the last occurrence of this weekday in the month?
+  const isLastWeekdayOfMonth = (date) => {
+    const dayOfMonth = date.getDate();
+    const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    const daysLeftInMonth = lastDayOfMonth - dayOfMonth;
+    // If there are fewer than 7 days left in the month or no more occurrences of this weekday
+    return daysLeftInMonth < 7 && date.getDay() === originalWeekday;
+  };
+  
+  const originalWeekOfMonth = getWeekOfMonth(firstEvent.start);
+  const originalIsLastWeekday = isLastWeekdayOfMonth(firstEvent.start);
+
   // For subsequent events in the series
   for (let i = 1; i < count; i++) {
     switch (repeatType) {
@@ -422,6 +446,7 @@ export const generateRepeatedEvents = (baseEvent, repeatType, count = 52) => {
         nextDate = addDays(nextDate, 1);
         nextEndDate = addDays(nextEndDate, 1);
         break;
+        
       case 'weekday':
         nextDate = addDays(nextDate, 1);
         nextEndDate = addDays(nextEndDate, 1);
@@ -434,22 +459,87 @@ export const generateRepeatedEvents = (baseEvent, repeatType, count = 52) => {
           nextEndDate = addDays(nextEndDate, 2);
         }
         break;
+        
       case 'weekly':
         nextDate = addWeeks(nextDate, 1);
         nextEndDate = addWeeks(nextEndDate, 1);
         break;
+        
       case 'biweekly':
         nextDate = addWeeks(nextDate, 2);
         nextEndDate = addWeeks(nextEndDate, 2);
         break;
+        
       case 'monthly':
+        // Simple monthly repeat - same day each month
         nextDate = addMonths(nextDate, 1);
         nextEndDate = new Date(nextDate.getTime() + duration);
         break;
+        
+      case 'monthlyWeekday':
+        // Monthly on a specific weekday (e.g., 3rd Monday)
+        nextDate = addMonths(nextDate, 1);
+        nextEndDate = addMonths(nextEndDate, 1);
+        
+        // Adjust to correct week of month for the same weekday
+        // First find the first day of the month
+        const firstOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1);
+        
+        // Find the first occurrence of the target weekday
+        let dayDiff = originalWeekday - firstOfMonth.getDay();
+        if (dayDiff < 0) dayDiff += 7;
+        const firstWeekdayOfMonth = new Date(firstOfMonth);
+        firstWeekdayOfMonth.setDate(firstOfMonth.getDate() + dayDiff);
+        
+        // Now calculate the target date by adding the right number of weeks
+        const targetDate = new Date(firstWeekdayOfMonth);
+        targetDate.setDate(firstWeekdayOfMonth.getDate() + (originalWeekOfMonth - 1) * 7);
+        
+        // Ensure we're still in the same month
+        if (targetDate.getMonth() !== nextDate.getMonth()) {
+          // Skip this month if the pattern doesn't fit (e.g., 5th Monday in a month with only 4 Mondays)
+          continue;
+        }
+        
+        // Adjust the time to match the original event's time
+        targetDate.setHours(nextDate.getHours(), nextDate.getMinutes(), nextDate.getSeconds());
+        
+        // Update next dates
+        nextDate = targetDate;
+        nextEndDate = new Date(nextDate.getTime() + duration);
+        break;
+        
+      case 'monthlyLastWeekday':
+        // Monthly on the last specific weekday (e.g., last Monday)
+        nextDate = addMonths(nextDate, 1);
+        nextEndDate = addMonths(nextEndDate, 1);
+        
+        // Find the last day of the month
+        const lastOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0);
+        
+        // Find the last occurrence of the target weekday
+        let lastDayDiff = originalWeekday - lastOfMonth.getDay();
+        // If the last day is already our target weekday, lastDayDiff will be 0
+        // Otherwise, we need to go back to the previous occurrence
+        if (lastDayDiff > 0) lastDayDiff -= 7;
+        
+        // Calculate the last occurrence of this weekday
+        const lastWeekdayOfMonth = new Date(lastOfMonth);
+        lastWeekdayOfMonth.setDate(lastOfMonth.getDate() + lastDayDiff);
+        
+        // Adjust the time to match the original event's time
+        lastWeekdayOfMonth.setHours(nextDate.getHours(), nextDate.getMinutes(), nextDate.getSeconds());
+        
+        // Update next dates
+        nextDate = lastWeekdayOfMonth;
+        nextEndDate = new Date(nextDate.getTime() + duration);
+        break;
+        
       case 'yearly':
         nextDate = addYears(nextDate, 1);
         nextEndDate = new Date(nextDate.getTime() + duration);
         break;
+        
       default:
         continue;
     }
