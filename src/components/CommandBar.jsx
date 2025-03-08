@@ -16,6 +16,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Task } from '../assets/icons/Task';
 import { Tag } from '../assets/icons/Tag';
 import TagDropdown from './TagDropdown';
+import RepeatEditModal from './RepeatEditModal';
 import {
   Popover,
   PopoverContent,
@@ -138,6 +139,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#808080');
   const [editMode, setEditMode] = useState(null);
+  const [showRepeatEditModal, setShowRepeatEditModal] = useState(false);
 
   const originalEventId = useRef(null);
 
@@ -147,20 +149,22 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const titleInputRef = useRef(null);
   const datePickerRef = useRef(null);
 
-  // Add draft scheduling state
-  const [draftSchedule, setDraftSchedule] = useState(null);
+  // Use ref for draft schedule to avoid unnecessary re-renders
+  const draftScheduleRef = useRef(null);
 
-  // Modify scheduling handlers to use draft state
+  // Modify scheduling handlers to use ref instead of state
   const handleScheduleChange = useCallback((newSchedule) => {
-    setDraftSchedule(newSchedule);
+    draftScheduleRef.current = newSchedule;
   }, []);
 
   const applyScheduleChanges = useCallback(() => {
-    if (draftSchedule) {
-      onUpdateEvent(draftSchedule);
-      setDraftSchedule(null);
+    if (draftScheduleRef.current) {
+      // Clone the schedule data to prevent reference issues when updating
+      const scheduleCopy = JSON.parse(JSON.stringify(draftScheduleRef.current));
+      onUpdateEvent(scheduleCopy);
+      draftScheduleRef.current = null;
     }
-  }, [draftSchedule, onUpdateEvent]);
+  }, [onUpdateEvent]);
 
   const handleClose = useCallback((options = {}) => {
     const { skipDelete = false } = options;
@@ -197,59 +201,93 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setScheduledDate(null);
     setIsScheduleOpen(false);
     setIsDatePickerOpen(false);
+    setShowRepeatEditModal(false);
   }, [editingEventId, eventTitle, onClose]);
 
   const openForEdit = useCallback((event) => {
-    setIsOpen(true);
-    setIsAddingEvent(true);
-    setEventTitle(event.title || '');
-    setEventDescription(event.description || '');
-    setEventDate(format(event.start, 'yyyy-MM-dd'));
-    setEventStartTime(format(event.start, 'HH:mm'));
-    setEventEndTime(format(event.end, 'HH:mm'));
-    setIsAllDay(event.isAllDay || false);
-    setSelectedColor(event.color || '#3B82F6');
-    setRepeatOption(event.repeat || 'none');
-    setEditingEventId(event.id);
-    setRepeatSeriesId(event.seriesId);
-    // Store the complete original event
-    setEventToEdit(event);
+    console.log('[CommandBar] Opening for edit', event.id);
+    
+    // Use React's batch updates to prevent multiple renders
+    // Prepare all the event data in a single batch
+    const prepareEvent = () => {
+      // Store all event data regardless of event type in a single batch
+      setEventToEdit(event);
+      setEditingEventId(event.id);
+      // Other state updates will be handled by the useEffect that watches eventToEdit
+    };
+    
+    // First close any open UI
+    setIsOpen(false);
+    setIsAddingEvent(false);
+    setShowRepeatEditModal(false);
+    
+    // Use a single timeout for smoother animation
+    // Wait for the UI to close completely
+    setTimeout(() => {
+      // Update all form state
+      prepareEvent();
+      
+      // Check if this is a repeat event
+      if (event.seriesId || (event.repeat && event.repeat !== 'none')) {
+        // For repeat events, show the modal
+        setShowRepeatEditModal(true);
+      } else {
+        // For regular non-repeat events, open the CommandBar
+        // Use requestAnimationFrame for smoother animation
+        requestAnimationFrame(() => {
+          setIsOpen(true);
+          setIsAddingEvent(true);
+        });
+      }
+    }, 100); // Increase the duration slightly for smoother transitions
   }, []);
 
-  const updateEventLive = useCallback(() => {
-    if (!editingEventId) {
-      console.log('No editingEventId in updateEventLive');
-      return;
-    }
-
-    const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
-
-    // When editing an existing event, only send the fields that should be updated
-    const updatedFields = {
-      id: editingEventId,
-      title: eventTitle.trim(),
-      description: eventDescription.trim(),
-      start: startDateTime,
-      end: endDateTime,
-      isAllDay,
+  const handleAddEventClick = useCallback(() => {
+    // Batch these operations to prevent multiple re-renders
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour duration
+    
+    // Create the event immediately and get its ID
+    const newEventData = {
+      title: 'New Event',
+      description: '',
+      start: now,
+      end: endTime,
+      isAllDay: false,
       color: selectedColor,
-      repeat: repeatOption // Always include the repeat option
+      repeat: 'none'
     };
 
-    // If this is part of a series, include the series ID
-    if (eventToEdit?.seriesId) {
-      updatedFields.seriesId = eventToEdit.seriesId;
-    }
-
-    console.log('Updating event:', {
-      original: eventToEdit,
-      updated: updatedFields
+    // First reset UI state
+    setIsOpen(true);
+    
+    // Reset event fields to defaults in a batch
+    setEventTitle('New Event');
+    setEventDescription('');
+    setEventDate(format(now, 'yyyy-MM-dd'));
+    setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
+    setEventEndTime(roundToNearest15Min(format(endTime, 'HH:mm')));
+    setIsAllDay(false);
+    setSelectedColor('#3B82F6');
+    setRepeatOption('none');
+    setEventToEdit(null);
+    setRepeatSeriesId(null);
+    
+    // Create event after initial form setup
+    // This approach creates a smoother transition since we already have form values ready
+    const createdEvent = onCreateEvent(newEventData);
+    setEditingEventId(createdEvent.id);
+    
+    // Defer the UI change to the next animation frame for smoother animation
+    requestAnimationFrame(() => {
+      setIsAddingEvent(true);
+      
+      // Focus the title input after animation completes
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 200);
     });
-
-    onUpdateEvent(updatedFields);
-  }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
-      isAllDay, selectedColor, repeatOption, eventToEdit, onUpdateEvent]);
+  }, [onCreateEvent, selectedColor]);
 
   const handleRepeatOptionChange = useCallback((option) => {
     // Immediately update the repeat option state
@@ -260,80 +298,144 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     
     // If editing an existing event, update it with the new repeat option
     if (editingEventId) {
-      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      // Batch updates using setTimeout to avoid layout thrashing
+      setTimeout(() => {
+        const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+        const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-      const updatedFields = {
-        id: editingEventId,
-        title: eventTitle.trim(),
-        description: eventDescription.trim(),
-        start: startDateTime,
-        end: endDateTime,
-        isAllDay,
-        color: selectedColor,
-        repeat: option,
-        // Add a flag to indicate that repeat option has changed directly
-        // This will trigger proper regeneration of the repeating events
-        _repeatChanged: true
-      };
+        const updatedFields = {
+          id: editingEventId,
+          title: eventTitle.trim(),
+          description: eventDescription.trim(),
+          start: startDateTime,
+          end: endDateTime,
+          isAllDay,
+          color: selectedColor,
+          repeat: option,
+          // Add a flag to indicate that repeat option has changed directly
+          // This will trigger proper regeneration of the repeating events
+          _repeatChanged: true
+        };
 
-      // Keep the series ID if it exists
-      if (eventToEdit?.seriesId) {
-        updatedFields.seriesId = eventToEdit.seriesId;
-      }
+        // Keep the series ID if it exists
+        if (eventToEdit?.seriesId) {
+          updatedFields.seriesId = eventToEdit.seriesId;
+        }
 
-      // Update the event with the new repeat option
-      onUpdateEvent(updatedFields);
+        // For recurring events, always include the edit scope
+        // If no explicit editMode is set but we're editing a recurring event, default to 'single'
+        if (eventToEdit?.seriesId || (eventToEdit?.repeat && eventToEdit.repeat !== 'none')) {
+          // If editMode is explicitly set, use it, otherwise default to 'single' (this event only)
+          updatedFields._editScope = editMode || 'single';
+          
+          // Store the original seriesId for reference (needed to preserve other events)
+          updatedFields._originalSeriesId = eventToEdit?.seriesId;
+          
+          // If we're editing a single instance, ensure it's properly detached from the series
+          if (updatedFields._editScope === 'single') {
+            // When editing a single instance, we want to detach it from the series
+            // but we need to keep track of the original series ID
+            console.log('[CommandBar] Animation debug - Detaching event from series for single edit');
+            console.log('[CommandBar] Animation debug - Original series ID:', eventToEdit?.seriesId);
+            
+            // Keep the original series ID for reference but mark this event as detached
+            updatedFields.seriesId = null;
+            updatedFields.repeat = 'none';
+            updatedFields.isRepeat = false;
+            // Important: Add flag to preserve other events in the series
+            updatedFields._preserveSeriesEvents = true;
+          }
+          
+          console.log(`[CommandBar] Animation debug - Applying edit scope: ${updatedFields._editScope} for repeat option change`);
+        }
+
+        // Update the event with the new repeat option
+        // Use requestAnimationFrame to ensure UI updates properly
+        requestAnimationFrame(() => {
+          onUpdateEvent(updatedFields);
+        });
+      }, 0);
     }
   }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
-      isAllDay, selectedColor, eventToEdit, onUpdateEvent]);
+      isAllDay, selectedColor, eventToEdit, onUpdateEvent, editMode]);
 
-  const handleEditSeriesSelect = useCallback((mode) => {
-    setShowEditSeriesModal(false);
-    if (eventToEdit) {
-      // Don't trigger live updates when editing a series
-      setEditMode(mode);
+  const handleEditSeriesSelect = useCallback((editScope) => {
+    if (!eventToEdit) return;
+
+    console.log(`[CommandBar] Animation debug - Selected edit scope: ${editScope}`);
+    
+    // First close the modal
+    setShowRepeatEditModal(false);
+    
+    // Wait for the modal to close completely
+    setTimeout(() => {
+      // If selecting 'single' (this event only), reset the repeat option to 'none'
+      if (editScope === 'single') {
+        setRepeatOption('none');
+      }
       
-      // Update the event with the current form values
-      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      // Set edit mode
+      setEditMode(editScope);
       
-      // Calculate time differences
-      const startDiff = startDateTime - eventToEdit.start;
-      const endDiff = endDateTime - eventToEdit.end;
-      
-      const updatedEvent = {
-        ...eventToEdit,
-        title: eventTitle.trim(),
-        description: eventDescription.trim(),
-        start: startDateTime,
-        end: endDateTime,
-        isAllDay,
-        color: selectedColor,
-        repeat: repeatOption,
-        id: eventToEdit.id, // Ensure we keep the original ID
-        seriesId: eventToEdit.seriesId, // Ensure we keep the series ID if it exists
-        _timeChange: { // Pass time change info to handleUpdateEvent
-          startDiff,
-          endDiff
-        }
-      };
-      
-      // Disable live updates temporarily
-      const currentEditingId = editingEventId;
-      setEditingEventId(null);
-      
-      onUpdateEvent(updatedEvent);
-      
-      // Re-enable live updates after a short delay
+      // Wait for state to be fully updated
       setTimeout(() => {
-        setEditingEventId(currentEditingId);
-      }, 100);
-      
-      handleClose();
-    }
-  }, [eventToEdit, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
-      isAllDay, selectedColor, repeatOption, onUpdateEvent, handleClose, editingEventId]);
+        // Open the command bar
+        setIsOpen(true);
+        setIsAddingEvent(true);
+        
+        // Wait for the command bar to open
+        setTimeout(() => {
+          // If we're in edit mode already, trigger an immediate update with the selected scope
+          if (editingEventId) {
+            const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+            const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+            
+            const updatedFields = {
+              id: editingEventId,
+              title: eventTitle.trim(),
+              description: eventDescription.trim(),
+              start: startDateTime,
+              end: endDateTime,
+              isAllDay,
+              color: selectedColor,
+              repeat: repeatOption,
+              _editScope: editScope
+            };
+            
+            // If this is part of a series, include the series ID
+            if (eventToEdit?.seriesId) {
+              // Store the original seriesId for reference (needed to preserve other events)
+              updatedFields._originalSeriesId = eventToEdit.seriesId;
+              
+              // If we're editing a single instance, detach it from the series
+              if (editScope === 'single') {
+                updatedFields.seriesId = null;
+                updatedFields.repeat = 'none';
+                updatedFields.isRepeat = false;
+                // Important: Add flag to preserve other events in the series
+                updatedFields._preserveSeriesEvents = true;
+              } else {
+                updatedFields.seriesId = eventToEdit.seriesId;
+              }
+            }
+            
+            // Calculate time differences for series updates
+            const startDiff = startDateTime - eventToEdit.start;
+            const endDiff = endDateTime - eventToEdit.end;
+            
+            updatedFields._timeChange = {
+              startDiff,
+              endDiff
+            };
+            
+            console.log('[CommandBar] Animation debug - Updating event with edit scope:', updatedFields);
+            onUpdateEvent(updatedFields);
+          }
+        }, 50);
+      }, 50);
+    }, 50);
+  }, [eventToEdit, editingEventId, eventDate, eventStartTime, eventEndTime, eventTitle, 
+      eventDescription, isAllDay, selectedColor, repeatOption, onUpdateEvent]);
 
   const handleAllDayToggle = (checked) => {
     setIsAllDay(checked);
@@ -356,7 +458,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setSelectedColor('#808080');
     setIsAllDay(false);
     setEditMode('all');
-    setShowEditSeriesModal(false);
+    setShowRepeatEditModal(false);
     
     const now = new Date();
     setEventDate(format(now, 'yyyy-MM-dd'));
@@ -405,6 +507,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setRepeatOption('none');
       setEditingEventId(eventId);
       setIsAddingEvent(true);  
+      setIsOpen(true); // Make sure the command bar is open
       setIsRepeatDropdownOpen(false);
       setShowColorPicker(false);
       // Focus the title input after a short delay to ensure the component is mounted
@@ -445,39 +548,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     openForEdit,
     openForTaskEdit,
   }));
-
-  const handleAddEventClick = () => {
-    const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour duration
-    
-    const newEventData = {
-      title: 'New Event',
-      description: '',
-      start: now,
-      end: endTime,
-      isAllDay: false,
-      color: selectedColor,
-      repeat: 'none'
-    };
-
-    // Create the event immediately and get its ID
-    const createdEvent = onCreateEvent(newEventData);
-    
-    setEventDate(format(now, 'yyyy-MM-dd'));
-    setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
-    setEventEndTime(roundToNearest15Min(format(endTime, 'HH:mm')));
-    setEventTitle('New Event');
-    setEventDescription('');
-    setIsAllDay(false);
-    setRepeatOption('none');
-    setEditingEventId(createdEvent.id); // Set the editing ID to enable live updates
-    setIsAddingEvent(true);
-    setIsRepeatDropdownOpen(false);
-    setShowColorPicker(false);
-    setTimeout(() => {
-      titleInputRef.current?.focus();
-    }, 100);
-  };
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -548,10 +618,81 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [showColorPicker]);
 
-  // Single consolidated effect for live updates
+  // Define updateEventLive first - before it's referenced in useEffect
+  const updateEventLive = useCallback(() => {
+    if (!editingEventId || animationInProgressRef.current) return;
+    
+    console.log('[CommandBar] Animation debug - updateEventLive executing');
+
+    const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+    
+    const updatedFields = {
+      id: editingEventId,
+      title: eventTitle.trim(),
+      description: eventDescription.trim(),
+      start: startDateTime,
+      end: endDateTime,
+      isAllDay,
+      color: selectedColor,
+      repeat: repeatOption
+    };
+    
+    // Preserve series information if we're editing a recurring event
+    if (eventToEdit) {
+      // Handle editing recurring events
+      if (eventToEdit.seriesId || (eventToEdit.repeat && eventToEdit.repeat !== 'none')) {
+        // For a recurring event, we need to specify the edit scope
+        updatedFields._editScope = editMode || 'single';
+        
+        // If editing a single instance of a recurring event
+        if (updatedFields._editScope === 'single') {
+          // Keep the original series ID for reference
+          updatedFields._originalSeriesId = eventToEdit.seriesId;
+          
+          // Detach from series for single-instance edit
+          updatedFields.seriesId = null;
+          
+          // Calculate time differences for series updates
+          const startDiff = startDateTime - eventToEdit.start;
+          const endDiff = endDateTime - eventToEdit.end;
+          
+          updatedFields._timeChange = {
+            startDiff,
+            endDiff
+          };
+        }
+      }
+    }
+
+    // Use requestAnimationFrame to ensure updates happen in the next frame
+    // This helps prevent layout thrashing when multiple updates happen in sequence
+    requestAnimationFrame(() => {
+      onUpdateEvent(updatedFields);
+    });
+  }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
+      isAllDay, selectedColor, repeatOption, eventToEdit, onUpdateEvent, editMode]);
+
+  // Single consolidated effect for live updates with improved handling for repeat events
   useEffect(() => {
-    if (editingEventId) {
-      updateEventLive();
+    console.log('[CommandBar] Animation debug - Command bar state changed:', { isOpen, isAddingEvent, showRepeatEditModal });
+    
+    // Only update the event if we're in the CommandBar and not showing the repeat edit modal
+    if (editingEventId && isAddingEvent && !showRepeatEditModal) {
+      // Use a longer debounce for repeat events to prevent layout thrashing
+      const debounceTime = repeatOption !== 'none' ? 400 : 200;
+      
+      console.log('[CommandBar] Animation debug - Setting up debounce for event update:', { debounceTime, repeatOption });
+      
+      // Debounce to avoid too many updates
+      const timer = setTimeout(() => {
+        console.log('[CommandBar] Animation debug - Debounce timer completed, running updateEventLive');
+        updateEventLive();
+      }, debounceTime);
+      return () => {
+        console.log('[CommandBar] Animation debug - Clearing debounce timer');
+        clearTimeout(timer);
+      };
     }
   }, [
     editingEventId,
@@ -563,7 +704,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     isAllDay,
     selectedColor,
     updateEventLive,
-    eventToEdit
+    isAddingEvent,
+    showRepeatEditModal,
+    repeatOption // Add repeatOption to dependencies to ensure proper updates
   ]);
 
   useEffect(() => {
@@ -593,7 +736,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       if (
         containerRef.current && 
         !containerRef.current.contains(event.target) &&
-        (!datePickerRef.current || !datePickerRef.current.contains(event.target))
+        (!datePickerRef.current || !datePickerRef.current.contains(event.target)) &&
+        !event.target.closest('.react-calendar') && // Don't close when clicking on calendar
+        !event.target.closest('.calendar-popup') // Don't close when clicking on calendar popup
       ) {
         handleClose();
       }
@@ -608,21 +753,41 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [isOpen, handleClose]);
 
+  // Use a ref to track the animation state
+  const animationInProgressRef = useRef(false);
+  
   return (
     <LayoutGroup>
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
         <motion.div 
           ref={containerRef}
           layout
-          initial={false}
+          animate={{
+            width: 'auto',
+            height: 'auto'
+          }}
+          onAnimationStart={() => {
+            animationInProgressRef.current = true;
+          }}
+          onAnimationComplete={() => {
+            // Mark animation as complete and allow state updates again
+            animationInProgressRef.current = false;
+          }}
           transition={{
             layout: {
+              duration: 0.3, // Increase duration slightly for smoother animation
+              ease: [0.1, 0, 0.3, 1]  // Adjusted ease curve for smoother animation
+            },
+            width: {
               duration: 0.3,
-              ease: [0, 0, 0.2, 1]  // Optimized ease-out curve
+              ease: [0.1, 0, 0.3, 1]
+            },
+            height: {
+              duration: 0.3,
+              ease: [0.1, 0, 0.3, 1]
             }
           }}
           className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
-
         >
           <motion.div layout className="flex items-center gap-4">
             <AnimatePresence mode="popLayout">
@@ -731,12 +896,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   initial={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
                   animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
                   exit={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
+                  transition={{
+                    opacity: { duration: 0.2 },
+                    filter: { duration: 0.2 },
+                    y: { duration: 0.2, ease: 'easeInOut' },
+                    layout: { duration: 0.2, ease: 'easeInOut' }
+                  }}
                   className="flex flex-col gap-4 min-w-[450px]"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex flex-col -mx-4">
-                        <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
+                      <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
+                        <div className="flex flex-col">
                           <div className="flex px-4 py-3 flex-row">
                             <Task
                               className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
@@ -779,7 +950,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </button>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter text-dark-text dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
+                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
                               align="start"
                             >
                               <div 
@@ -1040,9 +1211,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   initial={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
                   animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
                   exit={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
+                  onAnimationStart={() => {
+                    animationInProgressRef.current = true;
+                  }}
+                  onAnimationComplete={() => {
+                    animationInProgressRef.current = false;
+                  }}
+                  transition={{
+                    opacity: { duration: 0.25 },
+                    filter: { duration: 0.25 },
+                    y: { duration: 0.25, ease: [0.2, 0.1, 0.3, 1] },
+                    layout: { duration: 0.3, ease: [0.1, 0, 0.3, 1] }
+                  }}
                   className="flex flex-col gap-4 min-w-[450px]"
                 >
-                  <div className="flex flex-col -mx-4">
+                  <motion.div layout 
+                    transition={{
+                      layout: { duration: 0.3, ease: [0.1, 0, 0.3, 1] }
+                    }}
+                    className="flex flex-col -mx-4">
                     {/* Title Section with Color */}
                     <div 
                     className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
@@ -1295,6 +1482,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     style={{ backgroundColor: color }}
                                     onClick={() => {
                                       setSelectedColor(color);
+                                      // Save the selected color to localStorage for drag preview consistency
+                                      if (typeof window !== 'undefined') {
+                                        localStorage.setItem('lastSelectedEventColor', color);
+                                      }
                                       setShowColorPicker(false);
                                     }}
                                   />
@@ -1392,13 +1583,31 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </AnimatePresence>
                       </div>
                     </div>
-                  </div>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
           </motion.div>
         </motion.div>
       </div>
+      
+      {/* Repeat Edit Modal */}
+      {showRepeatEditModal && (
+        <RepeatEditModal
+          key={`repeat-modal-${editingEventId}`}
+          isOpen={true}
+          eventTitle={eventTitle}
+          onClose={() => {
+            // When closing the modal through the close button or backdrop,
+            // make sure we reset all states
+            setShowRepeatEditModal(false);
+            setIsOpen(false);
+            setIsAddingEvent(false);
+            setEditMode(null);
+          }}
+          onEditConfirm={handleEditSeriesSelect}
+        />
+      )}
     </LayoutGroup>
   );
 };

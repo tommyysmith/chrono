@@ -16,6 +16,7 @@ import {
   isSameMonth
 } from 'date-fns';
 import DeleteEventModal from './DeleteEventModal';
+import RepeatEditModal from './RepeatEditModal';
 import { motion } from 'framer-motion';
 import CommandBar from './CommandBar';
 import GoToDateCommand from './GoToDateCommand';
@@ -35,6 +36,7 @@ import {
 import { TAG_COLORS } from '../constants/colors';
 import { Repeat } from '@/assets/icons/Repeat';
 import { Trash } from '@/assets/icons/Trash';
+import { Copy } from '@/assets/icons/Copy';
 import Sidebar from './Sidebar';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -61,6 +63,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
     event: null,
+  });
+  const [repeatEditModalState, setRepeatEditModalState] = useState({
+    isOpen: false,
+    event: null,
+    draggedEvent: null,
+    originalEvent: null
   });
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -133,7 +141,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   const handleToday = () => {
     const today = new Date();
-    onDateSelect?.(today);
+    // Create date using local time
+    const todayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    onDateSelect?.(todayDate);
   };
 
   const getTimeFromMousePosition = (mouseY, containerRect) => {
@@ -197,30 +207,140 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, []);
 
   const handleUpdateEvent = useCallback((eventData) => {
-    console.log('Handling event update:', eventData);
+    console.log('%c[DEBUG] Handling event update', 'background: #222; color: #bada55', eventData);
+    console.log('%c[DEBUG] Edit scope', 'background: #222; color: #bada55', eventData._editScope);
+    
+    // Create a clean copy of the event data without internal properties
+    const cleanEventData = { ...eventData };
+    
+    // Store important metadata before we remove it
+    const editScope = eventData._editScope;
+    const originalSeriesId = eventData._originalSeriesId || eventData.seriesId;
+    const repeatChanged = eventData._repeatChanged;
+    
+    console.log('%c[DEBUG] Edit scope:', 'background: #222; color: #bada55', editScope);
+    console.log('%c[DEBUG] Original series ID:', 'background: #222; color: #bada55', originalSeriesId);
+    console.log('%c[DEBUG] Repeat changed:', 'background: #222; color: #bada55', repeatChanged);
+    console.log('%c[DEBUG] Preserve series events flag:', 'background: #222; color: #bada55', eventData._preserveSeriesEvents);
+    
+    // Remove internal properties that shouldn't be stored
+    const preserveSeriesEvents = eventData._preserveSeriesEvents;
+    delete cleanEventData._editScope;
+    delete cleanEventData._repeatChanged;
+    delete cleanEventData._timeChange;
+    delete cleanEventData._originalSeriesId;
+    delete cleanEventData._preserveSeriesEvents;
+    
+    // Debug: Log all events before update
+    const beforeEvents = JSON.parse(localStorage.getItem('calendarEvents') || '[]');
+    console.log('Events before update:', beforeEvents);
     
     setEvents(prev => {
       // Find the existing event to determine if it's part of a series
       const existingEvent = prev.find(e => e.id === eventData.id);
       
+      // Track if this is the first update for this event
+      const isFirstUpdate = !prev.some(e => e.id === eventData.id && e._lastUpdated);
+      
       // If converting from repeat to non-repeat
       if (existingEvent?.seriesId && (!eventData.repeat || eventData.repeat === 'none')) {
-        // Keep only this event and remove the series
-        const otherEvents = prev.filter(e => e.seriesId !== existingEvent.seriesId);
-        const singleEvent = {
-          ...eventData,
-          id: existingEvent.id,
-          seriesId: null,
-          repeat: 'none',
-          isRepeat: false
-        };
-        const newEvents = [...otherEvents, singleEvent];
-        localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
-        return newEvents;
+        console.log('%c[DEBUG] Converting from repeat to non-repeat', 'background: #222; color: #bada55', {
+          existingEvent,
+          seriesId: existingEvent.seriesId,
+          preserveSeriesEvents: eventData._preserveSeriesEvents
+        });
+        
+        // This condition might be removing all series events!
+        // If preserve flag is set, only update this event and don't remove others
+        if (eventData._preserveSeriesEvents) {
+          console.log('%c[DEBUG] Preserving other events in series', 'background: #222; color: #bada55');
+          
+          // Update only this event without affecting others
+          const newEvents = prev.map(event => {
+            if (event.id === existingEvent.id) {
+              return {
+                ...eventData,
+                id: existingEvent.id,
+                seriesId: null,
+                repeat: 'none',
+                isRepeat: false
+              };
+            }
+            return event;
+          });
+          
+          console.log('%c[DEBUG] Events after preserve update:', 'background: #222; color: #bada55', 
+            newEvents.filter(e => e.seriesId === existingEvent.seriesId).length);
+          
+          localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
+          return newEvents;
+        } else {
+          // Original behavior - Keep only this event and remove the series
+          console.log('%c[DEBUG] Removing all events in series', 'background: #222; color: #bada55');
+          const otherEvents = prev.filter(e => e.seriesId !== existingEvent.seriesId);
+          const singleEvent = {
+            ...eventData,
+            id: existingEvent.id,
+            seriesId: null,
+            repeat: 'none',
+            isRepeat: false
+          };
+          const newEvents = [...otherEvents, singleEvent];
+          localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
+          return newEvents;
+        }
       }
       
       // If updating a series event
       if (existingEvent?.seriesId) {
+        console.log('%c[DEBUG] Updating a series event', 'background: #222; color: #ff9900');
+        console.log('%c[DEBUG] Applying edit scope:', 'background: #222; color: #ff9900', editScope, 'for event with seriesId:', existingEvent.seriesId);
+        
+        // If editing only this event, update just this one
+        if (editScope === 'single') {
+          console.log('%c[DEBUG] Editing only this single event instance', 'background: #222; color: #ff9900');
+          console.log('%c[DEBUG] Preserve series events flag:', 'background: #222; color: #ff9900', preserveSeriesEvents);
+          
+          // Get the series ID before we detach this event
+          const seriesId = existingEvent.seriesId;
+          console.log('%c[DEBUG] Series ID:', 'background: #222; color: #ff9900', seriesId);
+          
+          // Count events in this series before update
+          const seriesEventsBefore = prev.filter(e => e.seriesId === seriesId);
+          console.log('%c[DEBUG] Found events in series before update:', 'background: #222; color: #ff9900', seriesEventsBefore.length);
+          console.log('%c[DEBUG] All events before update:', 'background: #222; color: #ff9900', prev.length);
+          
+          // Create a detached copy of the event we're editing
+          const updatedEvent = {
+            ...cleanEventData,
+            id: existingEvent.id,
+            seriesId: null, // Remove from series
+            repeat: 'none', // No longer repeating
+            isRepeat: false,
+            _lastUpdated: new Date().getTime() // Add timestamp to track updates
+          };
+          
+          // Create a new array of events
+          const newEvents = prev.map(event => {
+            if (event.id === existingEvent.id) {
+              // Return the updated event
+              return updatedEvent;
+            }
+            // Keep all other events unchanged
+            return event;
+          });
+          
+          // Count events in this series after update
+          const seriesEventsAfter = newEvents.filter(e => e.seriesId === seriesId);
+          console.log('%c[DEBUG] Found events in series after update:', 'background: #222; color: #ff9900', seriesEventsAfter.length);
+          console.log('%c[DEBUG] All events after update:', 'background: #222; color: #ff9900', newEvents.length);
+          console.log('%c[DEBUG] Updated event:', 'background: #222; color: #ff9900', updatedEvent);
+          
+          // Save and return the new events
+          localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
+          return newEvents;
+        }
+        
         // If the repeat option changed (indicated by _repeatChanged flag)
         // or if the event is changing from one repeat type to another
         if (eventData._repeatChanged || 
@@ -292,8 +412,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         if (event.id === eventData.id) {
           return {
             ...event,
-            ...eventData,
-            id: event.id // Preserve the original ID
+            ...cleanEventData,
+            id: event.id, // Preserve the original ID
+            _lastUpdated: new Date().getTime() // Add timestamp to track updates
           };
         }
         return event;
@@ -391,6 +512,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     const MIN_DRAG_DISTANCE = 5;
     const startX = e.clientX;
     const startY = e.clientY;
+    
+    // Store the original event for potential reversion
+    let dragStartOriginalEvent = null;
+    
+    // Track the final dragged position
+    let finalDraggedEvent = null;
 
     const handleMove = (moveEvent) => {
       moveEvent.preventDefault();
@@ -402,6 +529,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
       if (!hasMoved && distance >= MIN_DRAG_DISTANCE) {
         hasMoved = true;
+        // Store original event state on first move for potential reversion
+        dragStartOriginalEvent = {
+          ...event,
+          start: new Date(event.start.getTime()),
+          end: new Date(event.end.getTime())
+        };
       }
 
       if (!hasMoved) return;
@@ -432,11 +565,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           const duration = originalEvent.end.getTime() - originalEvent.start.getTime();
           const newStart = adjustedCurrentTime;
           const newEnd = new Date(newStart.getTime() + duration);
-          return {
+          
+          // Store the dragged event details for later use
+          finalDraggedEvent = {
             ...e,
             start: newStart,
             end: newEnd
           };
+          
+          return finalDraggedEvent;
         }
         return e;
       }));
@@ -446,6 +583,22 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       setTimeout(() => {
         wasResizingRef.current = false;
       }, 0);
+
+      // Handle mouseup for drag operation
+      if (hasMoved) {
+        // Check if this is a repeated event
+        const isRepeatedEvent = event.seriesId || (event.repeat && event.repeat !== 'none');
+        
+        if (isRepeatedEvent && finalDraggedEvent) {
+          // For repeated events, show the RepeatEditModal
+          setRepeatEditModalState({
+            isOpen: true,
+            event: event,
+            draggedEvent: finalDraggedEvent,
+            originalEvent: dragStartOriginalEvent
+          });
+        }
+      }
 
       setDragState({
         isResizing: false,
@@ -470,6 +623,122 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
   }, [selectedDate, viewType, getTimeFromMousePosition, getColumnFromMousePosition]);
+
+  const handleRepeatEditConfirm = useCallback((editScope) => {
+    const { event, draggedEvent, originalEvent } = repeatEditModalState;
+    
+    if (!event || !draggedEvent || !originalEvent) {
+      setRepeatEditModalState({
+        isOpen: false,
+        event: null,
+        draggedEvent: null,
+        originalEvent: null
+      });
+      return;
+    }
+    
+    // Calculate the time difference for the drag
+    const startDiff = draggedEvent.start.getTime() - originalEvent.start.getTime();
+    const endDiff = draggedEvent.end.getTime() - originalEvent.end.getTime();
+    
+    // Update events based on the selected scope
+    setEvents(prev => {
+      let updatedEvents = [...prev];
+      
+      if (editScope === 'single') {
+        // Only update this specific event instance and detach it from the series
+        updatedEvents = prev.map(e => {
+          if (e.id === event.id) {
+            return {
+              ...draggedEvent,
+              seriesId: null, // Remove from series
+              repeat: 'none', // No longer repeating
+              isRepeat: false
+            };
+          }
+          return e;
+        });
+      } 
+      else if (editScope === 'future') {
+        // Update this event and all future events in the series
+        updatedEvents = prev.map(e => {
+          if (e.seriesId === event.seriesId && e.start >= originalEvent.start) {
+            // For the dragged event itself, keep it as is without applying the shift again
+            if (e.id === event.id) {
+              return draggedEvent;
+            }
+            
+            // For other events in the series, apply the time shift
+            const newStart = new Date(e.start.getTime() + startDiff);
+            const newEnd = new Date(e.end.getTime() + endDiff);
+            
+            return {
+              ...e,
+              start: newStart,
+              end: newEnd
+            };
+          }
+          return e;
+        });
+      }
+      else if (editScope === 'all') {
+        // Update all events in the series
+        updatedEvents = prev.map(e => {
+          if (e.seriesId === event.seriesId) {
+            // For the dragged event itself, keep it as is without applying the shift again
+            if (e.id === event.id) {
+              return draggedEvent;
+            }
+            
+            // For other events in the series, apply the time shift
+            const newStart = new Date(e.start.getTime() + startDiff);
+            const newEnd = new Date(e.end.getTime() + endDiff);
+            
+            return {
+              ...e,
+              start: newStart,
+              end: newEnd
+            };
+          }
+          return e;
+        });
+      }
+      
+      // Save to localStorage
+      localStorage.setItem('calendarEvents', JSON.stringify(updatedEvents));
+      return updatedEvents;
+    });
+    
+    // Close the modal
+    setRepeatEditModalState({
+      isOpen: false,
+      event: null,
+      draggedEvent: null,
+      originalEvent: null
+    });
+  }, [repeatEditModalState]);
+
+  const handleRepeatEditDiscard = useCallback(() => {
+    const { originalEvent } = repeatEditModalState;
+    
+    // Revert the event to its original position
+    if (originalEvent) {
+      setEvents(prev => prev.map(e => {
+        if (e.id === originalEvent.id) {
+          return originalEvent;
+        }
+        return e;
+      }));
+    }
+    
+    // Close the modal
+    setRepeatEditModalState({
+      isOpen: false,
+      event: null,
+      draggedEvent: null,
+      originalEvent: null
+    });
+  }, [repeatEditModalState]);
 
   const getEventRepeatOption = useCallback((event) => {
     // If the event has a repeat property, use that
@@ -569,6 +838,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     const startY = e.clientY;
     let currentEndTime = initialTime;  // Start with same time, will be updated during drag
 
+    // Get the last selected color from localStorage or use a random color if none exists
+    const getLastSelectedColor = () => {
+      if (typeof window !== 'undefined') {
+        const savedColor = localStorage.getItem('lastSelectedEventColor');
+        if (savedColor) return savedColor;
+      }
+      return colors[Math.floor(Math.random() * colors.length)];
+    };
+
     // Create the event immediately with a unique ID
     const newEventId = crypto.randomUUID();
     const newEvent = {
@@ -576,7 +854,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       title: 'New Event',
       start: initialTime,
       end: new Date(initialTime.getTime() + 30 * 60 * 1000), // Start with 30 min duration
-      color: colors[Math.floor(Math.random() * colors.length)],
+      color: getLastSelectedColor(),
       repeat: 'none',
       isEditing: true
     };
@@ -799,6 +1077,32 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     e.stopPropagation();
     const event = events.find(event => event.id === contextMenu.eventId);
     handleDeleteEvent(event);
+    setContextMenu({ show: false, x: 0, y: 0, eventId: null });
+  }, [contextMenu.eventId, events]);
+
+  const handleEventDuplicate = useCallback((e) => {
+    e.stopPropagation();
+    const eventToDuplicate = events.find(event => event.id === contextMenu.eventId);
+    if (!eventToDuplicate) return;
+
+    // Create a duplicate with a new ID
+    const duplicateEvent = {
+      ...eventToDuplicate,
+      id: crypto.randomUUID(),
+      seriesId: eventToDuplicate.repeat !== 'none' ? crypto.randomUUID() : undefined
+    };
+
+    setEvents(prevEvents => {
+      const updatedEvents = [...prevEvents, duplicateEvent];
+      
+      try {
+        localStorage.setItem('calendarEvents', JSON.stringify(updatedEvents));
+      } catch (error) {
+        console.error('Error saving events to localStorage:', error);
+      }
+      return updatedEvents;
+    });
+
     setContextMenu({ show: false, x: 0, y: 0, eventId: null });
   }, [contextMenu.eventId, events]);
 
@@ -1097,7 +1401,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       if (event.end) {
         const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
         const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
-        style.height = `${(endMinutes - startMinutes) * (64 / 60)}px`;
+        style.height = `${(endMinutes - startMinutes) * (64 / 60) - 8}px`;
       }
     }
 
@@ -1131,11 +1435,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         const eventWidth = (columnWidth * 0.95) / totalEvents; // 95% of column width divided by number of events
         const offset = (eventWidth * eventIndex) + (columnWidth * 0.025); // Add 2.5% padding on each side
         
-        style.width = `${eventWidth}%`;
+        style.width = `calc(${eventWidth}% - 16px)`;
         style.left = `${baseLeft + offset}%`;
       } else {
         // No overlapping events, use full column width with small margins
-        style.width = `calc(${100 / 7}% - 4px)`;
+        style.width = `calc(${100 / 7}% - 20px)`;
         style.left = `calc(${baseLeft}% + 2px)`;
       }
     } else {
@@ -1164,11 +1468,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         const eventWidth = 95 / totalEvents; // 95% of total width divided by number of events
         const offset = (eventWidth * eventIndex) + 2.5; // Add 2.5% padding on each side
         
-        style.width = `${eventWidth}%`;
+        style.width = `calc(${eventWidth}% - 16px)`;
         style.left = `${offset}%`;
       } else {
         // No overlapping events in day view, use 95% width with centered position
-        style.width = '95%';
+        style.width = 'calc(95% - 16px)';
         style.left = '2.5%';
       }
     }
@@ -1196,9 +1500,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
     return {
       top: `${(startMinutes / 60) * hourHeight}px`,
-      height: `${((endMinutes - startMinutes) / 60) * hourHeight}px`,
+      height: `${((endMinutes - startMinutes) / 60) * hourHeight - 2}px`,
       left: `calc(60px + ((100% - 60px) * ${startDayDiff} / 7))`,
-      width: `${100 / 7}%`
+      width: `calc(${100 / 7}% - 16px)`
     };
   };
 
@@ -1221,6 +1525,17 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
     const snappedStart = snapToInterval(isReverse ? end : start);
     const snappedEnd = snapToInterval(isReverse ? start : end);
+    
+    // Get the last color from localStorage or use a default color
+    const getLastSelectedColor = () => {
+      if (typeof window !== 'undefined') {
+        const savedColor = localStorage.getItem('lastSelectedEventColor');
+        return savedColor || '#3B82F6'; // Use blue as default if no color was saved
+      }
+      return '#3B82F6';
+    };
+    
+    const lastSelectedColor = getLastSelectedColor();
 
     // Create temporary event object for preview
     const previewEvent = {
@@ -1228,6 +1543,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       start: snappedStart,
       end: snappedEnd,
       title: 'New Event',
+      color: lastSelectedColor // Use the previously selected color
     };
 
     // Find overlapping events for the preview time slot
@@ -1241,7 +1557,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         className="absolute z-[5] backdrop-blur-sm rounded-[9px] overflow-hidden pointer-events-none overflow-hidden"
         style={getEventStyle(previewEvent, overlappingEvents)}
       >
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/50" />
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-1 opacity-50"
+          style={{ backgroundColor: lastSelectedColor }} // Apply the color to the left border
+        />
         <div className="px-3 py-1">
           <div className="font-medium text-xs opacity-50">New Event</div>
           <div className="text-xs text-light-text/30 dark:text-dark-text/30">
@@ -1424,7 +1743,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
             All-day
           </div>
-          <div className="grid grid-cols-7">
+          <div className="relative grid grid-cols-7">
             {Array.from({ length: 7 }).map((_, dayIndex) => {
               const currentDate = addDays(weekStart, dayIndex);
               const dayEvents = events.filter(
@@ -1645,7 +1964,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       {/* Time grid */}
       <div 
         ref={timeGridRef}
-        className="flex-1 overflow-y-auto scrollbar-hide"
+        className="flex-1 overflow-y-auto scrollbar-hide relative"
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}
@@ -1663,7 +1982,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </div>
 
           {/* Main grid area */}
-          <div className="relative grid grid-cols-1" onMouseDown={handleCellDragStart}>
+          <div className="relative">
             {/* Background grid lines */}
             <div className="absolute inset-0">
               {HOURS.map(hour => (
@@ -1678,7 +1997,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
             {/* Events layer */}
             <div className="relative h-full">
-              {/* Drag overlay */}
+              {/* Drag overlays */}
               {dragState.isDragging && renderDropPreview()}
               {renderEvents()}
               {/* Pending event highlight */}
@@ -1689,7 +2008,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     left: `${(pendingEventCell.column / 7) * 100}%`,
                     width: `${100 / 7}%`,
                     top: `${pendingEventCell.startTime.getHours() * 64}px`,
-                    height: '64px'
+                    height: '64px',
+                    backgroundColor: 'rgba(var(--primary-rgb), 0.1)',
+                    border: '2px dashed rgba(var(--primary-rgb), 0.3)'
                   }}
                 />
               )}
@@ -1763,12 +2084,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             </div>
 
             {/* Main grid area */}
-            <div className="relative grid grid-cols-7">
+            <div className="grid grid-cols-7">
               {/* Background grid lines */}
               <div className="absolute inset-0">
                 <div className="absolute inset-0 grid grid-cols-7">
                   {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className=" h-full" />
+                    <div key={i} className=" h-full relative" />
                   ))}
                 </div>
               </div>
@@ -1811,7 +2132,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         {/* Time grid */}
         <div 
           ref={timeGridRef}
-          className="flex-1 overflow-y-auto scrollbar-hide"
+          className="flex-1 overflow-y-auto scrollbar-hide relative"
         >
           <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
             {/* Time indicator */}
@@ -1829,7 +2150,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             </div>
 
             {/* Main grid area */}
-            <div className="relative grid grid-cols-7">
+            <div className="relative">
               {/* Background grid lines */}
               <div className="absolute inset-0">
                 {HOURS.map(hour => (
@@ -1837,15 +2158,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
                   </div>
                 ))}
-                <div className="absolute inset-0 grid grid-cols-7">
+                <div className="absolute inset-0 grid grid-cols-7 h-full">
                   {Array.from({ length: 7 }).map((_, i) => (
-                    <div key={i} className="border-l border-light-border dark:border-dark-border h-full" />
+                    <div key={i} className="border-l border-light-border dark:border-dark-border h-full relative" />
                   ))}
                 </div>
               </div>
 
               {/* Events layer */}
-              <div className="relative col-span-7 h-full">
+              <div className="col-span-7 h-full relative">
                 {/* Drag overlays */}
                 {dragState.isDragging && (
                   dragState.eventId ? renderDropPreview() : renderDragOverlay()
@@ -1859,7 +2180,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                       left: `${(pendingEventCell.column / 7) * 100}%`,
                       width: `${100 / 7}%`,
                       top: `${pendingEventCell.startTime.getHours() * 64}px`,
-                      height: '64px'
+                      height: '64px',
+                      backgroundColor: 'rgba(var(--primary-rgb), 0.1)',
+                      border: '2px dashed rgba(var(--primary-rgb), 0.3)'
                     }}
                   />
                 )}
@@ -2186,6 +2509,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       };
 
       setEvents(prevEvents => {
+        let updatedEvents;
+        
         // Remove any existing repeated events with the same base ID
         const nonRepeatedEvents = prevEvents.filter(e => !e.id.includes(newEvent.id));
 
@@ -2366,162 +2691,124 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   return (
     <div className="flex h-full w-full overflow-hidden">
       <Sidebar commandBarRef={commandBarRef} events={events} selectedDate={selectedDate} onDateSelect={onDateSelect} />
-      <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light">
-      <div className="flex items-center justify-between px-4 py-2">
-        <div className="flex w-full justify-between items-center gap-4">
-          <div className="flex items-baseline">
-            <h1 className="text-xl text-light-text dark:text-dark-text font-semibold">
-              {selectedDate.toLocaleString('en-US', { month: 'long' })}
-            </h1>
-            <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-2">
-              {selectedDate.getFullYear()}
-            </span>
-          </div>
-          <div className="flex items-center justify-center gap-1">
-            <div className="relative">
-              <div 
-                className="flex items-center gap-2 cursor-pointer p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md"
-                onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-              >
-                <span className="text-xs font-medium text-light-text dark:text-dark-text">
-                  {viewType === ViewType.DAY ? 'Day' : viewType === ViewType.WEEK ? 'Week' : 'Month'}
-                </span>
-                <svg className={`w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform ${isViewDropdownOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none">
-                  <path d="M19 9l-7 7-7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-
-              {isViewDropdownOpen && (
-                <div 
-                  ref={viewDropdownRef}
-                  className="absolute top-full right-0 mt-1 bg-dark-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border flex flex-col rounded-[9px] gap-1 shadow-lg p-1 min-w-[120px] z-50"
-                >
-                {Object.values(ViewType).map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setViewType(type);
-                      setIsViewDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-2 py-1 text-xs rounded-[5px] font-medium flex items-center justify-between ${
-                      viewType === type 
-                        ? 'text-dark-text text-xs font-semibold dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/5' 
-                        : 'text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 hover:text-dark-text dark:hover:bg-white/5'
-                    }`}
-                  >
-                    <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                    <span className="text-dark-text/50 dark:text-dark-text/50 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-dark-border dark:border-dark-border">
-                      {type.charAt(0).toUpperCase()}
-                    </span>
-                  </button>
+      <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative">
+        {/* Calendar views */}
+        {viewType === ViewType.WEEK && renderWeekView()}
+        {viewType === ViewType.DAY && renderDayView()}
+        {viewType === ViewType.MONTH && renderMonthView()}
+        
+        {/* Context menu */}
+        {contextMenu.show && (
+          <div
+            ref={contextMenuRef}
+            className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
+            style={{ top: contextMenu.y, left: contextMenu.x }}
+          >
+            <div className="">
+              
+              <div className="flex flex-wrap gap-2 pb-2 p-3">
+                {colors.map(color => (
+                  <motion.button
+                    key={color}
+                    whileHover={{ scale: 1.05 }}
+                    className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
+                    style={{ backgroundColor: color }}
+                    onClick={(e) => handleColorSelect(e, color)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  />
                 ))}
               </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Calendar views */}
-      {viewType === ViewType.WEEK && renderWeekView()}
-      {viewType === ViewType.DAY && renderDayView()}
-      {viewType === ViewType.MONTH && renderMonthView()}
-      
-      {/* Context menu */}
-      {contextMenu.show && (
-        <div
-          ref={contextMenuRef}
-          className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-        >
-          <div className="">
-            
-            <div className="flex flex-wrap gap-2 pb-2 p-3">
-              {colors.map(color => (
-                <motion.button
-                  key={color}
-                  whileHover={{ scale: 1.05 }}
-                  className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
-                  style={{ backgroundColor: color }}
-                  onClick={(e) => handleColorSelect(e, color)}
+              <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
+              <div className="p-1">
+                <button
+                  className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
+                  onClick={(e) => handleEventDuplicate(e)}
                   onMouseDown={(e) => e.stopPropagation()}
-                />
-              ))}
-            </div>
-            <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-            <div className="p-1">
-              <button
-                className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
-                onClick={(e) => handleEventDelete(e)}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-              <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
+                >
+                  <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
+                  Duplicate
+                </button>
+                
+                <button
+                  className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                  onClick={(e) => handleEventDelete(e)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
 
-                Delete
-              </button>
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <DeleteEventModal
-        isOpen={deleteModalState.isOpen}
-        eventTitle={deleteModalState.event?.title}
-        onClose={handleDeleteModalClose}
-        onDelete={handleDeleteConfirm}
-      />
-      <CommandBar
-        ref={commandBarRef}
-        onCreateEvent={handleCreateEvent}
-        onUpdateEvent={handleUpdateEvent}
-        onPrevious={handlePrevious}
-        onNext={handleNext}
-        onToday={handleToday}
-        onClose={handleCommandBarClose}
-        onCreateTask={(task) => {
-          // Store the task in localStorage
-          const savedTasks = localStorage.getItem('tasks') || '{}';
-          const tasks = JSON.parse(savedTasks);
-          
-          // Add task to its tag group and the 'all' group
-          const tagGroup = task.tag ? task.tag.id : 'all';
-          const updatedTasks = {
-            ...tasks,
-            [tagGroup]: [...(tasks[tagGroup] || []), task],
-            all: [...(tasks.all || []), task]
-          };
-          
-          // Save back to localStorage
-          localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-        }}
-        onUpdateTask={(task) => {
-          // Get current tasks from localStorage
-          const savedTasks = localStorage.getItem('tasks') || '{}';
-          const tasks = JSON.parse(savedTasks);
-          
-          // Remove task from all groups
-          const cleanedTasks = Object.keys(tasks).reduce((acc, key) => {
-            acc[key] = tasks[key].filter(t => t.id !== task.id);
-            return acc;
-          }, {});
-          
-          // Add updated task to its tag group and the 'all' group
-          const tagGroup = task.tag ? task.tag.id : 'all';
-          const updatedTasks = {
-            ...cleanedTasks,
-            [tagGroup]: [...(cleanedTasks[tagGroup] || []), task],
-            all: [...(cleanedTasks.all || []).filter(t => t.id !== task.id), task]
-          };
-          
-          // Save back to localStorage
-          localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-        }}
-      />
-      <GoToDateCommand
-        isOpen={isGoToDateOpen}
-        onClose={() => setIsGoToDateOpen(false)}
-        onDateSelect={onDateSelect}
-      />
+        <DeleteEventModal
+          isOpen={deleteModalState.isOpen}
+          eventTitle={deleteModalState.event?.title}
+          onClose={handleDeleteModalClose}
+          onDelete={handleDeleteConfirm}
+        />
+        <RepeatEditModal
+          isOpen={repeatEditModalState.isOpen}
+          eventTitle={repeatEditModalState.event?.title}
+          onClose={handleRepeatEditDiscard}
+          onEditConfirm={handleRepeatEditConfirm}
+          originalEvent={repeatEditModalState.originalEvent}
+          draggedEvent={repeatEditModalState.draggedEvent}
+        />
+        <CommandBar
+          ref={commandBarRef}
+          onCreateEvent={useCallback(handleCreateEvent, [])}
+          onUpdateEvent={useCallback(handleUpdateEvent, [])}
+          onPrevious={useCallback(handlePrevious, [onDateSelect, currentDate, viewType])}
+          onNext={useCallback(handleNext, [onDateSelect, currentDate, viewType])}
+          onToday={useCallback(handleToday, [onDateSelect])}
+          onClose={useCallback(handleCommandBarClose, [])}
+          onCreateTask={useCallback((task) => {
+            // Store the task in localStorage
+            const savedTasks = localStorage.getItem('tasks') || '{}';
+            const tasks = JSON.parse(savedTasks);
+            
+            // Add task to its tag group and the 'all' group
+            const tagGroup = task.tag ? task.tag.id : 'all';
+            const updatedTasks = {
+              ...tasks,
+              [tagGroup]: [...(tasks[tagGroup] || []), task],
+              all: [...(tasks.all || []), task]
+            };
+            
+            // Save back to localStorage
+            localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+          }, [])}
+          onUpdateTask={useCallback((task) => {
+            // Get current tasks from localStorage
+            const savedTasks = localStorage.getItem('tasks') || '{}';
+            const tasks = JSON.parse(savedTasks);
+            
+            // Remove task from all groups
+            const cleanedTasks = Object.keys(tasks).reduce((acc, key) => {
+              acc[key] = tasks[key].filter(t => t.id !== task.id);
+              return acc;
+            }, {});
+            
+            // Add updated task to its groups
+            const tagGroup = task.tag ? task.tag.id : 'all';
+            const updatedTasks = {
+              ...cleanedTasks,
+              [tagGroup]: [...(cleanedTasks[tagGroup] || []), task],
+              all: [...(cleanedTasks.all || []), task]
+            };
+            
+            // Save back to localStorage
+            localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+          }, [])}
+        />
+        <GoToDateCommand
+          isOpen={isGoToDateOpen}
+          onClose={() => setIsGoToDateOpen(false)}
+          onDateSelect={onDateSelect}
+        />
       </div>
     </div>
   );

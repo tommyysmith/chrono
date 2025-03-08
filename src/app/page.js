@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Calendar from '../components/Calendar';
@@ -13,6 +12,7 @@ export default function Home() {
 
   return (
     <main className="w-full h-screen overflow-hidden flex">
+      
       <div className="flex-1 overflow-auto">
         <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />
       </div>

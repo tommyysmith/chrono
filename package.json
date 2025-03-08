@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "scan": "next dev & npx react-scan@latest localhost:3000"
   },
   "dependencies": {
     "@radix-ui/react-popover": "^1.1.6",
@@ -23,6 +24,7 @@
     "react-big-calendar": "^1.17.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^19.0.0",
+    "react-scan": "^0.2.10",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7"
   },

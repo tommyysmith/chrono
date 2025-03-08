@@ -378,9 +378,15 @@ export const createRepeatEvent = (baseEvent, repeatType) => {
   };
 };
 
-export const updateRepeatEvents = (events, seriesId, updates) => {
-  // Simply update all events in the series with the changes
+export const updateRepeatEvents = (events, seriesId, updates, singleEventId = null) => {
+  // Update events in the series, with an option to exclude a single event
   return events.map(event => {
+    // If we're updating a single event and this is that event, don't update it as part of the series
+    if (singleEventId && event.id === singleEventId) {
+      return event;
+    }
+    
+    // Update all other events in the series
     if (event.seriesId === seriesId) {
       return {
         ...event,

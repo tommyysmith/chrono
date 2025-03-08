@@ -446,7 +446,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   };
 
   return (
-    <aside className="w-sidebar border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg relative">
+    <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
       
 
