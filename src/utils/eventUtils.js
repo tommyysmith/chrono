@@ -294,7 +294,7 @@ export function calculateEventPosition(event, overlappingEvents) {
     const left = position * width;
 
     return {
-      width: `calc(${width}% - 12px)`,
+      width: `calc(${width}% - 4px)`,
       left: `${left}%`,
       zIndex: position + 1
     };
@@ -306,7 +306,7 @@ export function calculateEventPosition(event, overlappingEvents) {
   const left = position * width;
 
   return {
-    width: `calc(${width}% - 12px)`,
+    width: `calc(${width}% - 4px)`,
     left: `${left}%`,
     zIndex: position + 1
   };

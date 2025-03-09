@@ -904,11 +904,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   }}
                   className="flex flex-col gap-4 min-w-[450px]"
                 >
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between -mx-4">
                     <div className="flex-1">
                       <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
                         <div className="flex flex-col">
-                          <div className="flex px-4 py-3 flex-row">
+                          <div className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
                             <Task
                               className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
                             />
@@ -937,7 +937,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                             <PopoverTrigger asChild>
                               <button 
-                                className="flex items-center gap-2 px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+                                className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -950,7 +950,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </button>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[240px] p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
+                              className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
                               align="start"
                             >
                               <div 
@@ -1011,7 +1011,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </div>
                             </PopoverContent>
                           </Popover>
-                          <div className="flex items-center group gap-2 px-4 h-[56px] hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                          <div className="flex items-center group gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                             <div className="relative flex-1">
                               <div className="flex items-center gap-1 py-1">
@@ -1103,7 +1103,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             </div>
                           </div>
                         </div>
-                          <button className="flex items-center gap-2 px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                          <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
                             <Pin className="w-4 h-4" />
                             <span>Add a location</span>
                           </button>
@@ -1379,36 +1379,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-light dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
+                          <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
                             <Calendar
-                              mode="single"
-                              selected={new Date(eventDate)}
-                              onSelect={(date) => date && setEventDate(format(date, 'yyyy-MM-dd'))}
-                              initialFocus
-                              className="text-light-text dark:text-dark-text"
-                              classNames={{
-                                months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                                month: "space-y-4",
-                                caption: "flex justify-center pt-1 relative items-center text-light-text dark:text-dark-text",
-                                caption_label: "text-sm font-medium text-light-text dark:text-dark-text",
-                                nav: "space-x-1 flex items-center",
-                                nav_button: "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100 text-light-text dark:text-dark-text",
-                                nav_button_previous: "absolute left-1",
-                                nav_button_next: "absolute right-1",
-                                table: "w-full border-collapse space-y-1",
-                                head_row: "flex",
-                                head_cell: "text-light-text/50 dark:text-dark-text/50 rounded-md w-9 font-normal text-[0.8rem]",
-                                row: "flex w-full mt-2",
-                                cell: "text-center text-sm relative p-0 hover:bg-light-border/50 dark:hover:bg-dark-border/50 rounded-md w-9 h-9 flex items-center justify-center text-light-text dark:text-dark-text",
-                                day: "h-9 w-9 p-0 font-normal",
-                                day_selected: "bg-primary text-white hover:bg-primary/90 hover:text-white focus:bg-primary/90 focus:text-white",
-                                day_today: "bg-light-border/50 dark:bg-dark-border/50 text-light-text dark:text-dark-text",
-                                day_outside: "text-light-text/50 dark:text-dark-text/50 opacity-50",
-                                day_disabled: "text-light-text/50 dark:text-dark-text/50 opacity-50",
-                                day_range_middle: "aria-selected:bg-light-border/50 dark:aria-selected:bg-dark-border/50",
-                                day_hidden: "invisible",
-                              }}
-                            />
+                                  mode="single"
+                                  selected={new Date(eventDate)}
+                                  onSelect={(date) => date && setEventDate(format(date, 'yyyy-MM-dd'))}
+                                  initialFocus
+                                />
                           </PopoverContent>
                         </Popover>
                         <div className="flex flex-col gap-1">

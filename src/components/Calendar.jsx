@@ -1435,7 +1435,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         const eventWidth = (columnWidth * 0.95) / totalEvents; // 95% of column width divided by number of events
         const offset = (eventWidth * eventIndex) + (columnWidth * 0.025); // Add 2.5% padding on each side
         
-        style.width = `calc(${eventWidth}% - 16px)`;
+        style.width = `calc(${eventWidth}% - 8px)`;
         style.left = `${baseLeft + offset}%`;
       } else {
         // No overlapping events, use full column width with small margins

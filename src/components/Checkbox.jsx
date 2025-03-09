@@ -24,8 +24,8 @@ export default function Checkbox({ checked, onChange }) {
   return (
     <button
       onClick={handleChange}
-      className={`w-[16px] h-[16px] rounded-[5px] bg-light-bg dark:bg-dark-bg-lighter border flex items-center justify-center ${
-        checked ? 'bg-primary dark:bg-primary border-primary' : 'border-dashed border-black/25 dark:border-white/20'
+      className={`w-[14px] h-[14px] rounded-[5px] bg-light-bg dark:bg-dark-bg-lighter border flex items-center justify-center ${
+        checked ? 'bg-primary dark:bg-primary border-primary' : 'border border-black/25 dark:border-white/20'
       }`}
     >
       <svg

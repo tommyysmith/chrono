@@ -20,6 +20,7 @@ import { Clipboard } from '../assets/icons/Clipboard';
 import { Inbox as InboxIcon } from '../assets/icons/Inbox';
 import AgendaView from './AgendaView';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { More } from '../assets/icons/More';
 
 export default function Sidebar({ commandBarRef, events = [], selectedDate, onDateSelect }) {
   const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'agenda'
@@ -373,7 +374,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   const sections = selectedView === 'all' ? [
     {
       id: 'all',
-      label: 'All Tasks',
+      label: 'All tasks',
       icon: LayoutGrid,
       color: '#22C55E',
       count: allTasksArray.length,
@@ -392,13 +393,15 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
         }
       ]
     },
-    ...tags.map(tag => ({
-      id: tag.id,
-      label: tag.label,
-      icon: Tag,
-      color: tag.color,
-      count: allTasksArray.filter(task => task.tag && task.tag.id === tag.id).length
-    }))
+    ...tags
+      .map(tag => ({
+        id: tag.id,
+        label: tag.label,
+        icon: Tag,
+        color: tag.color,
+        count: allTasksArray.filter(task => task.tag && task.tag.id === tag.id).length
+      }))
+      .filter(section => section.count > 0) // Only include tag sections that have tasks
   ] : [];
 
   const getTasksForView = () => {
@@ -497,7 +500,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                   sections.map((section) => (
                     <div
                       key={section.id}
-                      className="overflow-hidden flex-col gap-2 px-2"
+                      className="overflow-hidden flex-col gap-2 border-b border-light-border dark:border-dark-border last:border-none pb-2 mr-3 ml-3"
                     >
                       <button
                         onClick={() => setExpandedSections(prev => ({
@@ -519,22 +522,45 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                         style={{
                           backgroundColor: section.id !== 'all' ? `` : 'transparent'
                         }}
-                        className={`w-full font-medium flex items-center gap-2 px-2 py-1 rounded-md hover:bg-light-bg-light dark:hover:bg-white/5 ${expandedSections[section.id] ? 'bg-light-selected dark:bg-dark-selected' : ''}`}
+                        className={`w-full font-medium flex items-center gap-2 py-2 ${expandedSections[section.id] ? 'bg-light-selected dark:bg-dark-selected' : ''}`}
                       >
+                        <div className="w-3 h-3 flex items-center justify-center">
                         <Chevron
                           className={`w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform ${
                             expandedSections[section.id] ? 'rotate-90' : ''
                           }`}
                         />
+                        </div>
                         {section.id !== 'all' && (
-                          <Circle className="w-[12px] h-[12px]" style={{ color: section.color }} />
+                          <div className="w-3 h-3 items-center">
+                            <div className="w-[12px] h-[12px] rounded-[5px] " style={{ backgroundColor: section.color + 'B3', border: `2px solid ${section.color}` }} />
+                          </div>
                         )}
-                        <span className="flex-grow text-left text-sm">{section.label}</span>
+                        <span className="flex items-end justify-center text-left text-sm">{section.label}</span>
                         {section.count > 0 && (
-                          <span className="text-[10px] w-[32px] py-0.5 bg-light-bg-lighter dark:bg-white/5 border border-light-border-2 font-medium dark:border-dark-border rounded-full text-light-text dark:text-dark-text">
+                          <span className="text-[10px] py-0.5 font-medium text-light-text/50 dark:text-dark-text/50">
                             {section.count}
                           </span>
                         )}
+                        {section.id !== 'all' && (
+                          <div className="flex w-full justify-end">
+                            <button onClick={(e) => {
+                              e.stopPropagation(); // Prevent the click from reaching the parent button
+                              if (section.id !== 'all') {
+                                const rect = e.currentTarget.getBoundingClientRect();
+                                setColorMenuPosition({ 
+                                x: e.clientX, 
+                                y: e.clientY 
+                              });
+                              setSelectedTagId(section.id);
+                              setColorMenuOpen(true);
+                            }
+                          }} className="flex group px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-white/5">
+                          <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                          </button>
+                        </div>
+                      )}
+
                       </button>
                       
                       <AnimatePresence initial={false}>

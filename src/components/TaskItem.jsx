@@ -82,13 +82,13 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <div className="flex flex-col gap-1 flex-grow">
+      <div className="flex flex-col flex-grow">
         <span className={`text-sm ${task.completed ? 'line-through opacity-50' : ''}`}>
           {task.title}
         </span>
         <div className="flex items-center flex-row gap-1">
         {!hideScheduledDate && task.scheduledDate && (
-          <div className="inline-flex self-start items-center px-1 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
+          <div className="inline-flex self-start mt-1 items-center px-1 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
             <Calendar className="h-3 w-3" />
             <span className="px-1">
             {format(new Date(task.scheduledDate), 'd MMM')}
