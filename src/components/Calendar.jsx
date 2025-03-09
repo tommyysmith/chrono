@@ -1833,7 +1833,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     return (
       <div className="flex items-center justify-between p-4 border-b border-light-border dark:border-dark-border">
         <div className="flex w-full justify-between items-center gap-4">
-          <ThemeToggle/>
           <div className="flex items-baseline">
             <h1 className="text-xl font-semibold">
               {selectedDate.toLocaleString('en-US', { month: 'long' })}
@@ -1848,7 +1847,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 className="flex items-center gap-2 cursor-pointer p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md"
                 onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
               >
-                <span className="text-sm font-medium text-light-text dark:text-dark-text">
+                <span className="text-xs font-medium text-light-text dark:text-dark-text">
                   {viewType === ViewType.DAY ? 'Day' : viewType === ViewType.WEEK ? 'Week' : 'Month'}
                 </span>
                 <svg className={`w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform ${isViewDropdownOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none">
@@ -1859,7 +1858,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               {isViewDropdownOpen && (
                 <div 
                   ref={viewDropdownRef}
-                  className="absolute top-full right-0 mt-1 bg-white dark:bg-dark-bg border border-light-border dark:border-dark-border text-xs rounded-[13px] shadow-lg py-1 min-w-[120px] z-50"
+                  className="absolute flex flex-col gap-1 top-full right-0 mt-1 bg-dark-bg-lighter p-1 dark:bg-dark-bg border border-light-border-2 dark:border-dark-border text-xs rounded-[9px] shadow-lg py-1 min-w-[120px] z-50"
                 >
                   {Object.values(ViewType).map((type) => (
                     <button
@@ -1868,14 +1867,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                         setViewType(type);
                         setIsViewDropdownOpen(false);
                       }}
-                      className={`w-full text-left px-3 py-2 text-xs font-medium flex items-center justify-between ${
+                      className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
                         viewType === type 
-                          ? 'text-light-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5' 
-                          : 'text-light-text/50 text-xs dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5'
+                          ? 'text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5' 
+                          : 'text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5'
                       }`}
                     >
                       <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                      <span className="text-light-text/30 dark:text-dark-text/30 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border dark:border-dark-border">
+                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
                         {type.charAt(0).toUpperCase()}
                       </span>
                     </button>
@@ -2692,11 +2691,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     <div className="flex h-full w-full overflow-hidden">
       <Sidebar commandBarRef={commandBarRef} events={events} selectedDate={selectedDate} onDateSelect={onDateSelect} />
       <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative">
+        {/* Add header with z-index to ensure it's clickable */}
+        <div className="z-10 relative">
+          {renderHeader()}
+        </div>
         {/* Calendar views */}
-        {viewType === ViewType.WEEK && renderWeekView()}
-        {viewType === ViewType.DAY && renderDayView()}
-        {viewType === ViewType.MONTH && renderMonthView()}
-        
+        <div className="flex-1 overflow-auto">
+          {viewType === ViewType.WEEK && renderWeekView()}
+          {viewType === ViewType.DAY && renderDayView()}
+          {viewType === ViewType.MONTH && renderMonthView()}
+        </div>
         {/* Context menu */}
         {contextMenu.show && (
           <div
