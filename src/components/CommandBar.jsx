@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
@@ -96,9 +96,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     return format(date, 'EEEE, MMMM d');
   };
 
-  const [isOpen, setIsOpen] = useState(false);
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(null);
   const [taskTitle, setTaskTitle] = useState('');
@@ -172,43 +172,91 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     animationFn();
   }, []);
 
+  const [isExpandingBeforeClosing, setIsExpandingBeforeClosing] = useState(false);
+  const previousSizeRef = useRef({ width: 0, height: 0 });
+  const exitingRef = useRef(false);
+
+  useEffect(() => {
+    // Capture dimensions when component mounts or state changes
+    // This ensures we have accurate dimensions for exit animations
+    if (containerRef.current && isOpen) {
+      const { width, height } = containerRef.current.getBoundingClientRect();
+      previousSizeRef.current = { width, height };
+    }
+  }, [isOpen, isAddingEvent, isAddingTask]);
+
+  // Fix layout animation state tracking
+  useEffect(() => {
+    // Reset animation flags when component unmounts
+    return () => {
+      exitingRef.current = false;
+    };
+  }, []);
+
   const handleClose = useCallback((options = {}) => {
-    const { skipDelete = false } = options;
+    const { skipDelete = false, forceClose = false } = options;
     
     // Only delete untitled events if we're not skipping delete
     if (!skipDelete && editingEventId && !eventTitle.trim()) {
       onClose?.(editingEventId);
     }
     
-    setIsOpen(false);
-    setIsAddingEvent(false);
-    setIsAddingTask(false);
-    setTaskTitle('');
-    setTaskNotes('');
-    setSelectedTag(null);
-    setDraftTag(null);
-    setTagSearchText('');
-    setIsTagDropdownOpen(false);
-    setEventTitle('New Event');
-    setEventDescription('');
-    setEventStartTime('09:00');
-    setEventEndTime('10:00');
-    setIsAllDay(false);
-    setRepeatOption('none');
-    setEditingEventId(null);
-    setEventToEdit(null);
-    setRepeatSeriesId(null);
-    setIsRepeatDropdownOpen(false);
-    setShowColorPicker(false);
-    setEventToEdit(null);
-    setTaskToEdit(null);
-    setEditingTaskId(null);
-    setEditMode(null);
-    setScheduledDate(null);
-    setIsScheduleOpen(false);
-    setIsDatePickerOpen(false);
-    setShowRepeatEditModal(false);
+    // Capture the current size before closing
+    if (containerRef.current) {
+      const { width, height } = containerRef.current.getBoundingClientRect();
+      previousSizeRef.current = { width, height };
+    }
     
+    // Set exiting flag to true before animation starts
+    exitingRef.current = true;
+    
+    // If forceClose is true, completely close the component
+    // Otherwise just reset to default state
+    if (forceClose) {
+      // Close the component with a smooth animation
+      setIsOpen(false);
+    } else {
+      // Just return to default state
+      setIsAddingEvent(false);
+      setIsAddingTask(false);
+    }
+    
+    // Reset all other states after animation completes
+    const resetTimeout = setTimeout(() => {
+      if (!forceClose) {
+        // Don't reset these states if we're just returning to default
+        setTaskTitle('');
+        setTaskNotes('');
+        setSelectedTag(null);
+        setDraftTag(null);
+        setTagSearchText('');
+        setIsTagDropdownOpen(false);
+        setEventTitle('New Event');
+        setEventDescription('');
+        setEventStartTime('09:00');
+        setEventEndTime('10:00');
+        setIsAllDay(false);
+        setRepeatOption('none');
+        setEditingEventId(null);
+        setEventToEdit(null);
+        setRepeatSeriesId(null);
+        setIsRepeatDropdownOpen(false);
+        setShowColorPicker(false);
+        setEventToEdit(null);
+        setTaskToEdit(null);
+        setEditingTaskId(null);
+        setEditMode(null);
+        setScheduledDate(null);
+        setIsScheduleOpen(false);
+        setIsDatePickerOpen(false);
+        setShowRepeatEditModal(false);
+      }
+      
+      // Reset exiting flag after state cleanup
+      exitingRef.current = false;
+    }, 300); // Match this with animation duration
+    
+    return () => clearTimeout(resetTimeout);
   }, [editingEventId, eventTitle, onClose]);
 
   const openForEdit = useCallback((event) => {
@@ -447,40 +495,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setIsScheduleOpen(false);
   }, []);
 
-  useImperativeHandle(ref, () => ({
-    openWithDragData: (startTime, endTime, eventId) => {
-      const newEventData = {
-        title: 'New Event',
-        description: '',
-        start: startTime,
-        end: endTime,
-        isAllDay: false,
-        color: '#3B82F6',
-        repeat: 'none'
-      };
-
-      const createdEventId = eventId || onCreateEvent(newEventData).id;
-      initializeEventState(startTime, endTime, createdEventId);
-    },
-    openWithTime: (date) => {
-      const endTime = new Date(date.getTime() + 60 * 60 * 1000);
-      const newEventData = {
-        title: 'New Event',
-        description: '',
-        start: date,
-        end: endTime,
-        isAllDay: false,
-        color: '#3B82F6',
-        repeat: 'none'
-      };
-
-      const createdEvent = onCreateEvent(newEventData);
-      initializeEventState(date, endTime, createdEvent.id);
-    },
-    openForEdit,
-    openForTaskEdit,
-  }));
-
   useEffect(() => {
     function handleClickOutside(event) {
       if (repeatDropdownRef.current && !repeatDropdownRef.current.contains(event.target)) {
@@ -504,13 +518,39 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [isRepeatDropdownOpen]);
 
   useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        containerRef.current && 
+        !containerRef.current.contains(event.target) &&
+        (!datePickerRef.current || !datePickerRef.current.contains(event.target)) &&
+        !event.target.closest('.react-calendar') && 
+        !event.target.closest('.calendar-popup')
+      ) {
+        // Only reset to default state if we're in an expanded state
+        // Don't close the component completely
+        if (isAddingEvent || isAddingTask) {
+          handleClose({ skipDelete: false, forceClose: false });
+        }
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen, handleClose, isAddingEvent, isAddingTask]);
+
+  useEffect(() => {
     if (isAddingEvent && titleInputRef.current) {
       titleInputRef.current.focus();
     }
 
     const handleEscapeKey = (event) => {
       if (event.key === 'Escape' && isAddingEvent) {
-        handleClose({ skipDelete: true });
+        handleClose({ skipDelete: true, forceClose: false });
       }
     };
 
@@ -546,6 +586,40 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showColorPicker]);
+
+  useImperativeHandle(ref, () => ({
+    openWithDragData: (startTime, endTime, eventId) => {
+      const newEventData = {
+        title: 'New Event',
+        description: '',
+        start: startTime,
+        end: endTime,
+        isAllDay: false,
+        color: '#3B82F6',
+        repeat: 'none'
+      };
+
+      const createdEventId = eventId || onCreateEvent(newEventData).id;
+      initializeEventState(startTime, endTime, createdEventId);
+    },
+    openWithTime: (date) => {
+      const endTime = new Date(date.getTime() + 60 * 60 * 1000);
+      const newEventData = {
+        title: 'New Event',
+        description: '',
+        start: date,
+        end: endTime,
+        isAllDay: false,
+        color: '#3B82F6',
+        repeat: 'none'
+      };
+
+      const createdEvent = onCreateEvent(newEventData);
+      initializeEventState(date, endTime, createdEvent.id);
+    },
+    openForEdit,
+    openForTaskEdit,
+  }));
 
   const updateEventLive = useCallback(() => {
     if (!editingEventId) return;
@@ -626,28 +700,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
   }, [eventToEdit]);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        containerRef.current && 
-        !containerRef.current.contains(event.target) &&
-        (!datePickerRef.current || !datePickerRef.current.contains(event.target)) &&
-        !event.target.closest('.react-calendar') && 
-        !event.target.closest('.calendar-popup')
-      ) {
-        handleClose();
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen, handleClose]);
-
   const animationInProgressRef = useRef(false);
   
   const consistentTransition = {
@@ -658,432 +710,451 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   };
 
   return (
-    <LayoutGroup id="commandBar">
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
-        <motion.div 
-          key="commandBar-container"
-          ref={containerRef}
-          layout
-          layoutId="commandBar-container"
-          initial={{ 
-            opacity: 0,
-            scale: 0.95,
-            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
-          }}
-          animate={{
-            opacity: 1,
-            scale: 1,
-            width: 'auto',
-            height: 'auto',
-            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
-          }}
-          exit={{
-            opacity: 0,
-            scale: 0.95
-          }}
-          style={{
-            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))",
-            willChange: "transform, opacity, background-color",
-            transformOrigin: "bottom"
-          }}
-          transition={{
-            type: "spring",
-            stiffness: 300,
-            damping: 30,
-            opacity: { duration: 0.2 },
-            scale: { duration: 0.2 },
-            layout: { duration: 0.3 }
-          }}
-          className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
-        >
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
+      <AnimatePresence mode="wait">
+        {(isOpen) && (
           <motion.div 
-            key="commandBar-content"
-            layout 
-            layoutId="commandBar-content" 
-            transition={consistentTransition}
-            className="flex items-center gap-4"
+            key="commandBar-container"
+            ref={containerRef}
+            layout
+            layoutId={`commandBar-container-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+            initial={{ 
+              opacity: 0,
+              scale: 0.95,
+              y: 20,
+              width: 'auto',
+              height: 'auto',
+              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
+            }}
+            animate={{
+              opacity: 1,
+              scale: 1,
+              y: 0,
+              width: 'auto',
+              height: 'auto',
+              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
+            }}
+            exit={{
+              opacity: 0,
+              scale: 0.95,
+              y: 20,
+              width: previousSizeRef.current.width || 'auto',
+              height: previousSizeRef.current.height || 'auto'
+            }}
+            style={{
+              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))",
+              willChange: "transform, opacity, background-color",
+              transformOrigin: "bottom"
+            }}
+            transition={{
+              type: "spring",
+              stiffness: 500,
+              damping: 30,
+              mass: 1,
+              opacity: { duration: 0.15 },
+              scale: { duration: 0.15 },
+              y: { 
+                type: "spring",
+                stiffness: 500,
+                damping: 30
+              },
+              layout: { 
+                duration: 0.3, 
+                type: "spring",
+                bounce: 0.2,
+                // Only use layout animations when not exiting
+                ease: exitingRef.current ? "linear" : "easeInOut"
+              }
+            }}
+            className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
           >
-            <AnimatePresence mode="wait">
-              {!isAddingEvent && !isAddingTask && (
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <motion.button 
+            <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}>
+              <motion.div 
+                key={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                layout 
+                layoutId={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                transition={consistentTransition}
+                className="flex items-center gap-4"
+              >
+                <AnimatePresence mode="popLayout">
+                  {!isAddingEvent && !isAddingTask && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <motion.button 
+                          layout
+                        
+                          className="flex group py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
+                        >
+                          <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                          <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
+                        </motion.button>
+                      </PopoverTrigger>
+                      <PopoverContent 
+                        className="w-48 p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                        align="start"
+                      >
+                        <button
+                          onClick={() => {
+                            setIsAddingTask(true);
+                            setIsOpen(true);
+                          }}
+                          className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                        >
+                          <Task className={`w-4 h-4  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
+                          <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleAddEventClick();
+                            setIsOpen(true);
+                          }}
+                          className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                        >
+                          <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 " />
+                          <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+
+                  {!isAddingEvent && !isAddingTask && (
+                    <motion.div 
                       layout
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      className="flex group py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
+                      key="commandBar-divider"
+                      className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
+                    />
+                  )}
+
+                  {!isAddingEvent && !isAddingTask && (
+                    <motion.div 
+                      layout
+                      key="commandBar-date-buttons"
+                      className="flex items-center py-4 gap-2"
                     >
-                      <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
-                      <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
+                      <Chevron
+                        className="w-4 h-4 rotate-180 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
+                        onClick={onPrevious}
+                      />
+                      <span 
+                        className="text-light-text/50 select-none dark:text-dark-text/50 hover:text-primary dark:hover:text-primary font-semibold text-sm cursor-pointer"
+                        onClick={onToday}
+                      >
+                        Today
+                      </span>
+                      <Chevron
+                        className="w-4 h-4  text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
+                        onClick={onNext}
+                      />
+                    </motion.div>
+                  )}
+
+                  {!isAddingEvent && !isAddingTask && (
+                    <motion.div 
+                      layout
+                      key="commandBar-divider-2"
+                      className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
+                    />
+                  )}
+
+                  {!isAddingEvent && !isAddingTask && (
+                    <motion.button 
+                    key="commandBar-ask-me"
+                      layout
+                      className="flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
+                    >
+                      <Microphone className="w-4 h-4" fill="none">
+                        <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </Microphone>
+                      <span className="text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Ask me!</span>
                     </motion.button>
-                  </PopoverTrigger>
-                  <PopoverContent 
-                    className="w-48 p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
-                    align="start"
-                  >
-                    <button
-                      onClick={() => {
-                        setIsAddingTask(true);
-                        setIsOpen(true);
+                  )}
+
+                  {isAddingTask && (
+                    <motion.div
+                      layout
+                      key="commandBar-adding-task"
+                      transition={{
+                        opacity: { duration: 0.2 },
+                        filter: { duration: 0.2 },
+                        y: { duration: 0.2, ease: 'easeInOut' },
+                        layout: { duration: 0.2, ease: 'easeInOut' }
                       }}
-                      className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                      className="flex flex-col gap-4 min-w-[450px]"
                     >
-                      <Task className={`w-4 h-4  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
-                      <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleAddEventClick();
-                        setIsOpen(true);
-                      }}
-                      className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
-                    >
-                      <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 " />
-                      <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
-                    </button>
-                  </PopoverContent>
-                </Popover>
-              )}
-
-              {!isAddingEvent && !isAddingTask && (
-                <motion.div 
-                  layout
-                  key="commandBar-divider"
-                  className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
-                />
-              )}
-
-              {!isAddingEvent && !isAddingTask && (
-                <motion.div 
-                  layout
-                  key="commandBar-date-buttons"
-                  className="flex items-center py-4 gap-2"
-                >
-                  <Chevron
-                    className="w-4 h-4 rotate-180 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
-                    onClick={onPrevious}
-                  />
-                  <span 
-                    className="text-light-text/50 select-none dark:text-dark-text/50 hover:text-primary dark:hover:text-primary font-semibold text-sm cursor-pointer"
-                    onClick={onToday}
-                  >
-                    Today
-                  </span>
-                  <Chevron
-                    className="w-4 h-4  text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
-                    onClick={onNext}
-                  />
-                </motion.div>
-              )}
-
-              {!isAddingEvent && !isAddingTask && (
-                <motion.div 
-                  layout
-                  key="commandBar-divider-2"
-                  className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
-                />
-              )}
-
-              {!isAddingEvent && !isAddingTask && (
-                <motion.button 
-                key="commandBar-ask-me"
-                  layout
-                  className="flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
-                >
-                  <Microphone className="w-4 h-4" fill="none">
-                    <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </Microphone>
-                  <span className="text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Ask me!</span>
-                </motion.button>
-              )}
-
-              {isAddingTask && (
-                <motion.div
-                  layout
-                  key="commandBar-adding-task"
-                  transition={{
-                    opacity: { duration: 0.2 },
-                    filter: { duration: 0.2 },
-                    y: { duration: 0.2, ease: 'easeInOut' },
-                    layout: { duration: 0.2, ease: 'easeInOut' }
-                  }}
-                  className="flex flex-col gap-4 min-w-[450px]"
-                >
-                  <div className="flex items-start justify-between -mx-4">
-                    <div className="flex-1">
-                      <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
-                        <div className="flex flex-col">
-                          <div className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
-                            <Task
-                              className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
-                            />
-                            <div className="flex-1 flex-col gap-1 px-4">
-                              <input
-                                type="text"
-                                placeholder="Task title"
-                                value={taskTitle}
-                                onChange={(e) => {
-                                  setTaskTitle(e.target.value);
-                                }}
-                                className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
-                                autoFocus
-                              />
-                              <input
-                                type="text"
-                                placeholder="Add notes"
-                                value={taskNotes}
-                                onChange={(e) => {
-                                  setTaskNotes(e.target.value);
-                                }}
-                                className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
-                              />
-                            </div>
-                          </div>
-                          <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
-                            <PopoverTrigger asChild>
-                              <button 
-                                className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setIsScheduleOpen(!isScheduleOpen);
-                                }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                              >
-                                <CalendarIcon className="w-4 h-4" />
-                                <span>{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
-                              </button>
-                            </PopoverTrigger>
-                            <PopoverContent 
-                              className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
-                              align="start"
-                            >
-                              <div 
-                                className="flex flex-col gap-1" 
-                                onClick={(e) => e.stopPropagation()}
-                                onMouseDown={(e) => e.stopPropagation()}
-                              >
-                                {SCHEDULE_OPTIONS.map(option => (
-                                  <button
-                                    key={`schedule-option-${option.id}`}
-                                    className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
-                                    onMouseDown={(e) => e.stopPropagation()}
+                      <div className="flex items-start justify-between -mx-4">
+                        <div className="flex-1">
+                          <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
+                            <div className="flex flex-col">
+                              <div className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
+                                <Task
+                                  className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
+                                />
+                                <div className="flex-1 flex-col gap-1 px-4">
+                                  <input
+                                    type="text"
+                                    placeholder="Task title"
+                                    value={taskTitle}
+                                    onChange={(e) => {
+                                      setTaskTitle(e.target.value);
+                                    }}
+                                    className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
+                                    autoFocus
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Add notes"
+                                    value={taskNotes}
+                                    onChange={(e) => {
+                                      setTaskNotes(e.target.value);
+                                    }}
+                                    className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
+                                  />
+                                </div>
+                              </div>
+                              <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                                <PopoverTrigger asChild>
+                                  <button 
+                                    className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
                                     onClick={(e) => {
                                       e.preventDefault();
                                       e.stopPropagation();
-                                      if (option.id === 'custom') {
-                                        setIsDatePickerOpen(true);
-                                        setIsScheduleOpen(false);
-                                      } else {
-                                        const date = new Date();
-                                        if (option.id === 'tomorrow') {
-                                          date.setDate(date.getDate() + 1);
-                                        } else if (option.id === 'nextWeek') {
-                                          date.setDate(date.getDate() + 7);
-                                        }
-                                        setScheduledDate(date);
-                                        setIsScheduleOpen(false);
-                                      }
+                                      setIsScheduleOpen(!isScheduleOpen);
                                     }}
+                                    onMouseDown={(e) => e.stopPropagation()}
                                   >
-                                    {option.label}
+                                    <CalendarIcon className="w-4 h-4" />
+                                    <span>{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
                                   </button>
-                                ))}
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                          <Popover sideOffset={4} open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
-                            <PopoverTrigger asChild>
-                              <div className="absolute w-0 h-0 overflow-hidden" />
-                            </PopoverTrigger>
-                            <PopoverContent 
-                              className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
-                              align="start"
-                            >
-                              <div
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <Calendar
-                                  mode="single"
-                                  selected={scheduledDate}
-                                  onSelect={(date) => {
-                                    setScheduledDate(date);
-                                    setIsDatePickerOpen(false);
-                                  }}
-                                  initialFocus
-                                />
-                              </div>
-                            </PopoverContent>
-                          </Popover>
-                          <div className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
-                            <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                            <div className="relative flex-1">
-                              <div className="flex items-center gap-1 py-1">
-                                {draftTag ? (
-                                  <span 
-                                    className="inline-flex items-center gap-1 px-3 py-1 rounded-[5px] text-sm"
-                                    style={{ backgroundColor: `${draftTag.color}26` }}
+                                </PopoverTrigger>
+                                <PopoverContent 
+                                  className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
+                                  align="start"
+                                >
+                                  <div 
+                                    className="flex flex-col gap-1" 
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
                                   >
-                                    {draftTag.label}
-                                  </span>
-                                ) : null}
-                                <input
-                                  type="text"
-                                  placeholder={draftTag ? '' : 'Add a tag'}
-                                  className="flex-1 bg-transparent text-light-text height-[56px] dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
-                                  onFocus={() => setIsTagDropdownOpen(true)}
-                                  value={tagSearchText}
-                                  onChange={(e) => {
-                                    if (!e.target.value) {
-                                      setSelectedTag(null);
-                                    }
-                                    setTagSearchText(e.target.value);
-                                    setIsTagDropdownOpen(true);
-                                  }}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Backspace' && draftTag && !tagSearchText) {
-                                      e.preventDefault();
-                                      setDraftTag(null);
-                                      setTagSearchText('');
-                                      return;
-                                    }
-                                    if (e.key === 'Enter' && tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase())) {
-                                      const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
-                                      const newTag = {
-                                        id: tagSearchText.toLowerCase().replace(/\s+/g, '-'),
-                                        label: tagSearchText,
-                                        color: randomColor
-                                      };
-                                      setTags(prevTags => [...prevTags, newTag]);
-                                      setSelectedTag(newTag);
-                                      setTagSearchText(newTag.label);
-                                      setIsTagDropdownOpen(false);
-                                    }
-                                  }}
-                                />
-                              {isTagDropdownOpen && tagSearchText.length > 0 && (
-                                <div className="absolute left-0 z-50 right-0 max-w-[240 px] backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
-                                  {tags
-                                    .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
-                                    .map(tag => (
+                                    {SCHEDULE_OPTIONS.map(option => (
                                       <button
-                                        key={`tag-option-${tag.id}`}
-                                        className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
-                                        onClick={() => {
-                                          setDraftTag(tag);
-                                          setTagSearchText('');
-                                          setIsTagDropdownOpen(false);
+                                        key={`schedule-option-${option.id}`}
+                                        className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
+                                        onMouseDown={(e) => e.stopPropagation()}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          if (option.id === 'custom') {
+                                            setIsDatePickerOpen(true);
+                                            setIsScheduleOpen(false);
+                                          } else {
+                                            const date = new Date();
+                                            if (option.id === 'tomorrow') {
+                                              date.setDate(date.getDate() + 1);
+                                            } else if (option.id === 'nextWeek') {
+                                              date.setDate(date.getDate() + 7);
+                                            }
+                                            setScheduledDate(date);
+                                            setIsScheduleOpen(false);
+                                          }
                                         }}
                                       >
-                                        <Tag className="w-4 h-4" style={{ color: tag.color }} />
-                                        <span>{tag.label}</span>
+                                        {option.label}
                                       </button>
-                                    ))
-                                  }
-                                  {tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase()) && (
-                                    <button
-                                      key={`new-tag-${tagSearchText}`}
-                                      className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
-                                      onClick={() => {
-                                        const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
-                                        const newTag = {
-                                          id: tagSearchText.toLowerCase().replace(/\s+/g, '-'),
-                                          label: tagSearchText,
-                                          color: randomColor
-                                        };
-                                        const updatedTags = [...tags, newTag];
-                                        setTags(updatedTags);
-                                        setDraftTag(newTag);
-                                        setTagSearchText('');
-                                        setIsTagDropdownOpen(false);
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <Popover sideOffset={4} open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                                <PopoverTrigger asChild>
+                                  <div className="absolute w-0 h-0 overflow-hidden" />
+                                </PopoverTrigger>
+                                <PopoverContent 
+                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
+                                  align="start"
+                                >
+                                  <div
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Calendar
+                                      mode="single"
+                                      selected={scheduledDate}
+                                      onSelect={(date) => {
+                                        setScheduledDate(date);
+                                        setIsDatePickerOpen(false);
                                       }}
-                                    >
-                                      <Add className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                                      <span className="font-regular text-light-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-light-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
-                                    </button>
+                                      initialFocus
+                                    />
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                              <div className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                                <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                <div className="relative flex-1">
+                                  <div className="flex items-center gap-1 py-1">
+                                    {draftTag ? (
+                                      <span 
+                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-[5px] text-sm"
+                                        style={{ backgroundColor: `${draftTag.color}26` }}
+                                      >
+                                        {draftTag.label}
+                                      </span>
+                                    ) : null}
+                                    <input
+                                      type="text"
+                                      placeholder={draftTag ? '' : 'Add a tag'}
+                                      className="flex-1 bg-transparent text-light-text height-[56px] dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
+                                      onFocus={() => setIsTagDropdownOpen(true)}
+                                      value={tagSearchText}
+                                      onChange={(e) => {
+                                        if (!e.target.value) {
+                                          setSelectedTag(null);
+                                        }
+                                        setTagSearchText(e.target.value);
+                                        setIsTagDropdownOpen(true);
+                                      }}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Backspace' && draftTag && !tagSearchText) {
+                                          e.preventDefault();
+                                          setDraftTag(null);
+                                          setTagSearchText('');
+                                          return;
+                                        }
+                                        if (e.key === 'Enter' && tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase())) {
+                                          const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+                                          const newTag = {
+                                            id: tagSearchText.toLowerCase().replace(/\s+/g, '-'),
+                                            label: tagSearchText,
+                                            color: randomColor
+                                          };
+                                          setTags(prevTags => [...prevTags, newTag]);
+                                          setSelectedTag(newTag);
+                                          setTagSearchText(newTag.label);
+                                          setIsTagDropdownOpen(false);
+                                        }
+                                      }}
+                                    />
+                                  {isTagDropdownOpen && tagSearchText.length > 0 && (
+                                    <div className="absolute left-0 z-50 right-0 max-w-[240 px] backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
+                                      {tags
+                                        .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
+                                        .map(tag => (
+                                          <button
+                                            key={`tag-option-${tag.id}`}
+                                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
+                                            onClick={() => {
+                                              setDraftTag(tag);
+                                              setTagSearchText('');
+                                              setIsTagDropdownOpen(false);
+                                            }}
+                                          >
+                                            <Tag className="w-4 h-4" style={{ color: tag.color }} />
+                                            <span>{tag.label}</span>
+                                          </button>
+                                        ))
+                                      }
+                                      {tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase()) && (
+                                        <button
+                                          key={`new-tag-${tagSearchText}`}
+                                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
+                                          onClick={() => {
+                                            const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
+                                            const newTag = {
+                                              id: tagSearchText.toLowerCase().replace(/\s+/g, '-'),
+                                              label: tagSearchText,
+                                              color: randomColor
+                                            };
+                                            const updatedTags = [...tags, newTag];
+                                            setTags(updatedTags);
+                                            setDraftTag(newTag);
+                                            setTagSearchText('');
+                                            setIsTagDropdownOpen(false);
+                                          }}
+                                        >
+                                          <Add className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                          <span className="font-regular text-light-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-light-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
+                                        </button>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
-                              )}
+                              </div>
                             </div>
+                              <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                <Pin className="w-4 h-4" />
+                                <span>Add a location</span>
+                              </button>
+                              <button className="flex items-center justify-between px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <Repeat className="w-4 h-4" />
+                                  <span>Repeat</span>
+                                </div>
+                              </button>
+                              <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-light-border dark:border-dark-border">
+                          <button
+                            onClick={handleClose}
+                            className="px-3 py-1.5 text-sm text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors"
+                          >
+                            Discard
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (taskTitle.trim()) {
+                                if (editingTaskId) {
+                                  
+                                  const updatedTask = {
+                                    ...taskToEdit,
+                                    title: taskTitle.trim(),
+                                    notes: taskNotes.trim(),
+                                    tag: draftTag,
+                                    scheduledDate: scheduledDate
+                                  };
+                                  
+                                  onUpdateTask(updatedTask);
+                                } else {
+                                  const newTask = {
+                                    id: Date.now(),
+                                    title: taskTitle.trim(),
+                                    notes: taskNotes.trim(),
+                                    tag: draftTag || selectedTag,
+                                    completed: false,
+                                    createdAt: new Date().toISOString(),
+                                    scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
+                                  };
+                                  
+                                  onCreateTask(newTask);
+                                  
+                                  try {
+                                    const savedTasks = localStorage.getItem('tasks') || '{}';
+                                    const tasks = JSON.parse(savedTasks);
+                                    
+                                    const tagGroup = newTask.tag ? newTask.tag.id : 'all';
+                                    const updatedTasks = {
+                                      ...tasks,
+                                      [tagGroup]: [...(tasks[tagGroup] || []), newTask],
+                                      all: [...(tasks.all || []), newTask]
+                                    };
+                                    
+                                    localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+
+                                  } catch (e) {
+                                    console.error("Error updating localStorage:", e);
+                                  }
+                                }
+                                handleClose({ forceClose: true });
+                              }
+                            }}
+                            disabled={!taskTitle.trim()}
+                            className={`px-4 py-2 text-sm font-semibold rounded-[79px] transition-colors ${taskTitle.trim() 
+                              ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
+                              : 'bg-black/5 dark:bg-white/5 text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+                          >
+                            {editingTaskId ? 'Edit task' : 'Add task'}
+                          </button>
+                        </div>
                           </div>
                         </div>
-                          <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                            <Pin className="w-4 h-4" />
-                            <span>Add a location</span>
-                          </button>
-                          <button className="flex items-center justify-between px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                            <div className="flex items-center gap-2">
-                              <Repeat className="w-4 h-4" />
-                              <span>Repeat</span>
-                            </div>
-                          </button>
-                          <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-light-border dark:border-dark-border">
-                      <button
-                        onClick={handleClose}
-                        className="px-3 py-1.5 text-sm text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors"
-                      >
-                        Discard
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (taskTitle.trim()) {
-                            if (editingTaskId) {
-                              
-                              const updatedTask = {
-                                ...taskToEdit,
-                                title: taskTitle.trim(),
-                                notes: taskNotes.trim(),
-                                tag: draftTag,
-                                scheduledDate: scheduledDate
-                              };
-                              
-                              onUpdateTask(updatedTask);
-                            } else {
-                              const newTask = {
-                                id: Date.now(),
-                                title: taskTitle.trim(),
-                                notes: taskNotes.trim(),
-                                tag: draftTag || selectedTag,
-                                completed: false,
-                                createdAt: new Date().toISOString(),
-                                scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
-                              };
-                              
-                              onCreateTask(newTask);
-                              
-                              try {
-                                const savedTasks = localStorage.getItem('tasks') || '{}';
-                                const tasks = JSON.parse(savedTasks);
-                                
-                                const tagGroup = newTask.tag ? newTask.tag.id : 'all';
-                                const updatedTasks = {
-                                  ...tasks,
-                                  [tagGroup]: [...(tasks[tagGroup] || []), newTask],
-                                  all: [...(tasks.all || []), newTask]
-                                };
-                                
-                                localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-
-                              } catch (e) {
-                                console.error("Error updating localStorage:", e);
-                              }
-                            }
-                            handleClose();
-                          }
-                        }}
-                        disabled={!taskTitle.trim()}
-                        className={`px-4 py-2 text-sm font-semibold rounded-[79px] transition-colors ${taskTitle.trim() 
-                          ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
-                          : 'bg-black/5 dark:bg-white/5 text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
-                      >
-                        {editingTaskId ? 'Edit task' : 'Add task'}
-                      </button>
-                    </div>
-                        </div>
                       </div>
-                    </div>
                     
                   </div>
                 </motion.div>
@@ -1432,29 +1503,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               )}
             </AnimatePresence>
           </motion.div>
-        </motion.div>
-      </div>
-      
-      {/* Repeat Edit Modal */}
-      {showRepeatEditModal && (
-        <RepeatEditModal
-          key={`repeat-modal-${editingEventId}`}
-          isOpen={true}
-          eventTitle={eventTitle}
-          onClose={() => {
-            setShowRepeatEditModal(false);
-            setIsOpen(false);
-            setIsAddingEvent(false);
-            setEditMode(null);
-          }}
-          onEditConfirm={handleEditSeriesSelect}
-          originalEvent={eventToEdit}
-          draggedEvent={eventToEdit}
-          isEditOperation={true}
-        />
-      )}
-    </LayoutGroup>
-  );
-};
+        </LayoutGroup>
+      </motion.div>
+    )}
+    </AnimatePresence>
 
-export default forwardRef(CommandBar);
+    {/* Render modals outside of LayoutGroup */}
+    {showRepeatEditModal && (
+      <RepeatEditModal 
+        isOpen={showRepeatEditModal}
+        onClose={() => setShowRepeatEditModal(false)}
+        onEditSingle={() => handleEditSeriesSelect('single')}
+        onEditFuture={() => handleEditSeriesSelect('future')}
+        onEditAll={() => handleEditSeriesSelect('all')}
+      />
+    )}
+  </div>
+);
+
+}; // Add missing closing curly brace for the CommandBar component function
+
+// Use memo to prevent unnecessary re-renders of the entire component
+export default memo(forwardRef(CommandBar));
