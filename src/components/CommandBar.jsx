@@ -661,6 +661,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     <LayoutGroup id="commandBar">
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
         <motion.div 
+          key="commandBar-container"
           ref={containerRef}
           layout
           layoutId="commandBar-container"
@@ -696,6 +697,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
         >
           <motion.div 
+            key="commandBar-content"
             layout 
             layoutId="commandBar-content" 
             transition={consistentTransition}
@@ -747,7 +749,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {!isAddingEvent && !isAddingTask && (
                 <motion.div 
                   layout
-          
+                  key="commandBar-divider"
                   className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                 />
               )}
@@ -755,7 +757,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {!isAddingEvent && !isAddingTask && (
                 <motion.div 
                   layout
-                
+                  key="commandBar-date-buttons"
                   className="flex items-center py-4 gap-2"
                 >
                   <Chevron
@@ -778,13 +780,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {!isAddingEvent && !isAddingTask && (
                 <motion.div 
                   layout
-          
+                  key="commandBar-divider-2"
                   className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                 />
               )}
 
               {!isAddingEvent && !isAddingTask && (
                 <motion.button 
+                key="commandBar-ask-me"
                   layout
                   className="flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
                 >
@@ -798,7 +801,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {isAddingTask && (
                 <motion.div
                   layout
-                
+                  key="commandBar-adding-task"
                   transition={{
                     opacity: { duration: 0.2 },
                     filter: { duration: 0.2 },
@@ -1088,7 +1091,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {isAddingEvent && (
                 <motion.div
                   layout
-            
+                  key="commandBar-adding-event"
                   onAnimationStart={() => {
                     animationInProgressRef.current = true;
                   }}
