@@ -38,18 +38,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [colorMenuPosition, setColorMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedTagId, setSelectedTagId] = useState(null);
-  const [tags, setTags] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedTags = localStorage.getItem('tags');
-      return savedTags ? JSON.parse(savedTags) : [
-        { id: 'work', label: 'Work', color: '#EF4444' },
-        { id: 'family', label: 'Family', color: '#3B82F6' },
-        { id: 'personal', label: 'Personal', color: '#A855F7' },
-        { id: 'travel', label: 'Travel', color: '#22C55E' }
-      ];
-    }
-    return [];
-  });
+  const [tags, setTags] = useState([]);
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [originalTask, setOriginalTask] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -66,27 +55,37 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
   
-  const [tasks, setTasks] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedTasks = localStorage.getItem('tasks');
-      return savedTasks ? JSON.parse(savedTasks) : {
-        today: [],
-        scheduled: {},
-        work: [],
-        family: [],
-        personal: [],
-        travel: [],
-        all: []
-      };
-    }
-    return {
+  const [tasks, setTasks] = useState({
+    work: [],
+    family: [],
+    personal: [],
+    travel: [],
+    all: []
+  });
+
+  // Move localStorage initialization to useEffect
+  useEffect(() => {
+    const savedTags = localStorage.getItem('tags');
+    const initialTags = savedTags ? JSON.parse(savedTags) : [
+      { id: 'work', label: 'Work', color: '#EF4444' },
+      { id: 'family', label: 'Family', color: '#3B82F6' },
+      { id: 'personal', label: 'Personal', color: '#A855F7' },
+      { id: 'travel', label: 'Travel', color: '#22C55E' }
+    ];
+    setTags(initialTags);
+
+    const savedTasks = localStorage.getItem('tasks');
+    const initialTasks = savedTasks ? JSON.parse(savedTasks) : {
+      today: [],
+      scheduled: {},
       work: [],
       family: [],
       personal: [],
       travel: [],
       all: []
     };
-  });
+    setTasks(initialTasks);
+  }, []);
 
   // Add draft scheduling state
   const [draftSchedule, setDraftSchedule] = useState(null);
@@ -502,7 +501,8 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                       key={section.id}
                       className="overflow-hidden flex-col gap-2 border-b border-light-border dark:border-dark-border last:border-none pb-2 mr-3 ml-3"
                     >
-                      <button
+                      <div
+                      role="button"
                         onClick={() => setExpandedSections(prev => ({
                           ...prev,
                           [section.id]: !prev[section.id]
@@ -561,7 +561,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                         </div>
                       )}
 
-                      </button>
+                      </div>
                       
                       <AnimatePresence initial={false}>
                         {expandedSections[section.id] && (
