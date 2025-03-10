@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { ThemeProvider } from 'next-themes';
-import { TauriProvider } from '../components/TauriProvider';
+import { ThemeProvider } from "next-themes";
+import { TauriProvider } from "../components/TauriProvider";
 import { Geist, Geist_Mono } from "next/font/google";
-import Script from 'next/script';
-import './globals.css';
+import "./globals.css";
+import { ReactScan } from "@/components/ReactScan";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,16 +20,13 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <Script
-          id="react-scan"
-          strategy="beforeInteractive"
-          src="https://unpkg.com/react-scan@0.2.10/dist/auto.global.js"
-          crossOrigin="anonymous"
-        />
+        <ReactScan />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         <TauriProvider>
-          <ThemeProvider 
+          <ThemeProvider
             attribute="class"
             defaultTheme="system"
             enableSystem
