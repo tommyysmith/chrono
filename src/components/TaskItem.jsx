@@ -15,15 +15,8 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   const contextMenuRef = useRef(null);
 
-  // Debug logs
-  useEffect(() => {
-    console.log('TaskItem received task:', JSON.stringify(task, null, 2));
-    if (task.tag) {
-      console.log('TaskItem task.tag:', JSON.stringify(task.tag, null, 2));
-    } else {
-      console.log('TaskItem task.tag: undefined or empty');
-    }
-  }, [task]);
+ 
+
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -46,25 +39,25 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     if (e.target.closest('.checkbox') || contextMenuRef.current?.contains(e.target)) {
       return;
     }
-    console.log('TaskItem clicked:', task.id);
+
     onClick?.(e);
   };
 
   const handleContextMenu = (e) => {
     e.preventDefault();
-    console.log('Context menu opened for task:', task.id);
+
     setContextMenuPosition({ x: e.clientX, y: e.clientY });
     setShowContextMenu(true);
   };
 
   const handleEdit = () => {
-    console.log('Edit triggered for task:', task.id);
+
     onDoubleClickEdit(task);
     setShowContextMenu(false);
   };
 
   const handleDelete = () => {
-    console.log('Delete triggered for task:', task.id);
+
     onDelete(task.id);
     setShowContextMenu(false);
   };

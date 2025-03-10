@@ -171,7 +171,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const safelyRunAnimation = useCallback((animationFn, delay = 100) => {
     // If already animating, clear any existing animation timeouts
     if (isAnimating) {
-      console.log('[CommandBar] Animation already in progress, clearing previous animation');
+
       if (animationTimeoutRef.current) {
         clearTimeout(animationTimeoutRef.current);
       }
@@ -318,7 +318,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const handleAddEventClick = useCallback(() => {
     if (isAnimating) {
-      console.log('[CommandBar] Animation in progress, ignoring add event click');
+
       return;
     }
     
@@ -341,10 +341,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [onCreateEvent, initializeEventState, isAnimating]);
 
   const handleRepeatOptionChange = useCallback((option) => {
-    if (isAnimating) {
-      console.log('[CommandBar] Animation in progress, ignoring repeat option change');
-      return;
-    }
+    
     
     // Immediately update the repeat option state
     setRepeatOption(option);
@@ -390,8 +387,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           if (updatedFields._editScope === 'single') {
             // When editing a single instance, we want to detach it from the series
             // but we need to keep track of the original series ID
-            console.log('[CommandBar] Animation debug - Detaching event from series for single edit');
-            console.log('[CommandBar] Animation debug - Original series ID:', eventToEdit?.seriesId);
+
+
             
             // Keep the original series ID for reference but mark this event as detached
             updatedFields.seriesId = null;
@@ -401,7 +398,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             updatedFields._preserveSeriesEvents = true;
           }
           
-          console.log(`[CommandBar] Animation debug - Applying edit scope: ${updatedFields._editScope} for repeat option change`);
+
         }
 
         // Update the event with the new repeat option
@@ -417,10 +414,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const handleEditSeriesSelect = useCallback((editScope) => {
     if (!eventToEdit) return;
     
-    if (isAnimating) {
-      console.log('[CommandBar] Animation in progress, ignoring edit series select');
-      return;
-    }
+    
 
     safelyRunAnimation(() => {
       // First close the modal
@@ -487,7 +481,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 endDiff
               };
               
-              console.log('[CommandBar] Animation debug - Updating event with edit scope:', updatedFields);
+
               onUpdateEvent(updatedFields);
             }
           }, 50);
@@ -499,7 +493,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const openForTaskEdit = useCallback((task) => {
     if (isAnimating) {
-      console.log('[CommandBar] Animation in progress, ignoring task edit');
+
       return;
     }
     
@@ -581,7 +575,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   useImperativeHandle(ref, () => ({
     openWithDragData: (startTime, endTime, eventId) => {
       if (isAnimating) {
-        console.log('[CommandBar] Animation in progress, ignoring drag data');
+
         return;
       }
       
@@ -601,7 +595,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     },
     openWithTime: (date) => {
       if (isAnimating) {
-        console.log('[CommandBar] Animation in progress, ignoring open with time');
+
         return;
       }
       
@@ -696,7 +690,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const updateEventLive = useCallback(() => {
     if (!editingEventId || animationInProgressRef.current) return;
     
-    console.log('[CommandBar] Animation debug - updateEventLive executing');
+
 
     const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
@@ -749,22 +743,22 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   // Single consolidated effect for live updates with improved handling for repeat events
   useEffect(() => {
-    console.log('[CommandBar] Animation debug - Command bar state changed:', { isOpen, isAddingEvent, showRepeatEditModal });
+
     
     // Only update the event if we're in the CommandBar and not showing the repeat edit modal
     if (editingEventId && isAddingEvent && !showRepeatEditModal) {
       // Use a longer debounce for repeat events to prevent layout thrashing
       const debounceTime = repeatOption !== 'none' ? 400 : 200;
       
-      console.log('[CommandBar] Animation debug - Setting up debounce for event update:', { debounceTime, repeatOption });
+
       
       // Debounce to avoid too many updates
       const timer = setTimeout(() => {
-        console.log('[CommandBar] Animation debug - Debounce timer completed, running updateEventLive');
+
         updateEventLive();
       }, debounceTime);
       return () => {
-        console.log('[CommandBar] Animation debug - Clearing debounce timer');
+
         clearTimeout(timer);
       };
     }
@@ -1187,13 +1181,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         onClick={() => {
                           if (taskTitle.trim()) {
                             if (editingTaskId) {
-                              console.log('Saving task changes...', {
-                                original: taskToEdit,
-                                title: taskTitle.trim(),
-                                notes: taskNotes.trim(),
-                                tag: draftTag,
-                                scheduledDate: scheduledDate
-                              });
+                              
                               const updatedTask = {
                                 ...taskToEdit,
                                 title: taskTitle.trim(),
@@ -1207,7 +1195,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 localStorage.setItem('tags', JSON.stringify(tags));
                               }
                               
-                              console.log('Updating task with final state:', updatedTask);
+
                               onUpdateTask(updatedTask);
                             } else {
                               // Create a new task
@@ -1227,7 +1215,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               }
                               
                               // Create the task
-                              console.log("Creating new task:", newTask);
+
                               onCreateTask(newTask);
                               
                               // Force update localStorage with the new task
@@ -1245,7 +1233,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 
                                 // Save directly to localStorage
                                 localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-                                console.log("Updated tasks in localStorage:", updatedTasks);
+
                               } catch (e) {
                                 console.error("Error updating localStorage:", e);
                               }

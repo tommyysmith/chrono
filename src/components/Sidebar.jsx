@@ -327,14 +327,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
 
   const allTasksArray = Object.values(allTasks);
 
-  useEffect(() => {
-    console.log('Sidebar allTasks:', JSON.stringify(allTasksArray, null, 2));
-    if (allTasksArray.length > 0) {
-      console.log('Sidebar first task:', JSON.stringify(allTasksArray[0], null, 2));
-      console.log('Sidebar first task tag:', allTasksArray[0].tag ? 
-        JSON.stringify(allTasksArray[0].tag, null, 2) : 'undefined or empty');
-    }
-  }, [allTasksArray]);
+
 
   // Generate sections including all tags
   const sections = selectedView === 'all' ? [
@@ -704,7 +697,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                     onTaskDelete={handleDeleteTask}
                     onTaskEdit={handleEditTask}
                   />
-                  {console.log('Passing to AgendaView:', allTasksArray)}
+
                 </div>
               </motion.div>
             )}
