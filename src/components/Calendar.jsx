@@ -68,7 +68,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     isOpen: false,
     event: null,
     draggedEvent: null,
-    originalEvent: null
+    originalEvent: null,
+    isEditOperation: false
   });
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -595,7 +596,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             isOpen: true,
             event: event,
             draggedEvent: finalDraggedEvent,
-            originalEvent: dragStartOriginalEvent
+            originalEvent: dragStartOriginalEvent,
+            isEditOperation: false
           });
         }
       }
@@ -714,7 +716,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       isOpen: false,
       event: null,
       draggedEvent: null,
-      originalEvent: null
+      originalEvent: null,
+      isEditOperation: false
     });
   }, [repeatEditModalState]);
 
@@ -736,7 +739,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       isOpen: false,
       event: null,
       draggedEvent: null,
-      originalEvent: null
+      originalEvent: null,
+      isEditOperation: false
     });
   }, [repeatEditModalState]);
 
@@ -1127,13 +1131,26 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     const availableWidth = containerRect.width - timeColumnWidth;
     const dayWidth = availableWidth / 7;
 
+    // Store original event with deep copied dates to preserve original state
+    const originalEvent = { 
+      ...event, 
+      start: new Date(event.start.getTime()),
+      end: new Date(event.end.getTime())
+    };
+
+    // Reference for tracking the latest state of the event during resize
+    const resizedEventRef = {
+      current: { ...originalEvent }
+    };
+
     setDragState({
       isResizing: true,
-      eventId: null,
+      eventId: eventId,
       startTime: ['left', 'top'].includes(edge) ? event.end : event.start,
       initialHeight: eventElement.offsetHeight,
       initialWidth: eventElement.offsetWidth,
       edge,
+      originalEvent: originalEvent,
     });
 
     const getTimeFromY = (y) => {
@@ -1187,8 +1204,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         newTime = getTimeFromY(moveEvent.clientY);
       }
 
-      setEvents(prevEvents => 
-        prevEvents.map(e => {
+      setEvents(prevEvents => {
+        const updatedEvents = prevEvents.map(e => {
           if (e.id === eventId) {
             const newEvent = { ...e };
             if (edge === 'bottom') {
@@ -1218,17 +1235,66 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 newEvent.start = startOfDay;
               }
             }
+            
+            // Update our resizedEventRef with the latest state
+            resizedEventRef.current = { 
+              ...newEvent, 
+              start: new Date(newEvent.start.getTime()),
+              end: new Date(newEvent.end.getTime())
+            };
+            
             return newEvent;
           }
           return e;
-        })
-      );
+        });
+        
+        return updatedEvents;
+      });
     };
 
     const handleUp = () => {
       setTimeout(() => {
         wasResizingRef.current = false;
       }, 0);
+
+      // Use our tracked resized event from the reference
+      const resizedEvent = resizedEventRef.current;
+      
+      // Check if this is a repeating event
+      if (resizedEvent && (resizedEvent.repeat || resizedEvent.seriesId)) {
+        const isRepeatingEvent = resizedEvent.repeat !== 'none' || resizedEvent.seriesId;
+        
+        if (isRepeatingEvent) {
+          // Create deep copies to ensure we don't have reference issues
+          const draggedEvent = { 
+            ...resizedEvent,
+            start: new Date(resizedEvent.start.getTime()),
+            end: new Date(resizedEvent.end.getTime())
+          };
+          
+          // Log the time differences for debugging
+          console.log('Time comparison:');
+          console.log('Original start:', originalEvent.start.toLocaleTimeString());
+          console.log('Original end:', originalEvent.end.toLocaleTimeString());
+          console.log('Dragged start:', draggedEvent.start.toLocaleTimeString());
+          console.log('Dragged end:', draggedEvent.end.toLocaleTimeString());
+          
+          // Only open the modal if the times actually changed
+          const startChanged = originalEvent.start.getTime() !== draggedEvent.start.getTime();
+          const endChanged = originalEvent.end.getTime() !== draggedEvent.end.getTime();
+          
+          if (startChanged || endChanged) {
+            // Open the RepeatEditModal with the original and resized event
+            setRepeatEditModalState({
+              isOpen: true,
+              event: draggedEvent,
+              draggedEvent: draggedEvent,
+              originalEvent: originalEvent,
+              isEditOperation: false
+            });
+          }
+        }
+      }
 
       setDragState({
         isResizing: false,
@@ -1630,7 +1696,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             key={`${event.id}-${index}`}
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer ${
               event.isEditing || dragState.eventId === event.id ? 'bg-primary/30' : 'bg-primary/10'
-            } event-item group`}
+            } event-item`}
             style={getEventStyle(event, overlappingEvents)}
             onMouseDown={(e) => {
               if (e.button === 0) { // Left click only
@@ -1858,7 +1924,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               {isViewDropdownOpen && (
                 <div 
                   ref={viewDropdownRef}
-                  className="absolute flex flex-col gap-1 top-full right-0 mt-1 bg-dark-bg-lighter p-1 dark:bg-dark-bg border border-light-border-2 dark:border-dark-border text-xs rounded-[9px] shadow-lg py-1 min-w-[120px] z-50"
+                  className="absolute flex flex-col gap-1 top-full right-0 mt-1 bg-dark-bg-lighter p-1 dark:bg-dark-bg border border-light-border dark:border-dark-border text-xs rounded-[9px] shadow-lg py-1 min-w-[120px] z-50"
                 >
                   {Object.values(ViewType).map((type) => (
                     <button
@@ -2760,6 +2826,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           onEditConfirm={handleRepeatEditConfirm}
           originalEvent={repeatEditModalState.originalEvent}
           draggedEvent={repeatEditModalState.draggedEvent}
+          isEditOperation={repeatEditModalState.isEditOperation}
         />
         <CommandBar
           ref={commandBarRef}

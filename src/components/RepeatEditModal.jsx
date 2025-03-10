@@ -9,7 +9,8 @@ const RepeatEditModal = ({
   onClose, 
   onEditConfirm,
   originalEvent,
-  draggedEvent 
+  draggedEvent,
+  isEditOperation = false  // Flag to determine if this is a regular edit operation
 }) => {
   const [editScope, setEditScope] = useState('single');
   const hasSubmitted = useRef(false);
@@ -56,6 +57,15 @@ const RepeatEditModal = ({
 
   const originalTimeStr = formatTimeRange(originalEvent.start, originalEvent.end);
   const newTimeStr = formatTimeRange(draggedEvent.start, draggedEvent.end);
+  
+  // Determine if times are different (only for drag/resize operations)
+  const timesAreDifferent = 
+    !isEditOperation && 
+    (originalEvent.start.getTime() !== draggedEvent.start.getTime() || 
+     originalEvent.end.getTime() !== draggedEvent.end.getTime());
+  
+  // Determine the appropriate button text based on operation type
+  const continueButtonText = isEditOperation ? "Continue editing" : "Confirm edits";
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]">
@@ -154,17 +164,19 @@ const RepeatEditModal = ({
           </label>
         </div>
 
-        {/* Time preview */}
-        <div className="mb-8 px-8">
-          <div className="flex items-center gap-3 text-sm text-light-text/50 dark:text-dark-text/50">
-            <span>Time</span>
-            <div className="flex-1 flex items-center">
-              <span className="line-through">{originalTimeStr}</span>
-              <span className="mx-2">→</span>
-              <span className="text-light-text dark:text-dark-text">{newTimeStr}</span>
+        {/* Time preview - Only show for drag/resize operations when times actually changed */}
+        {!isEditOperation && timesAreDifferent && (
+          <div className="mb-8 px-8">
+            <div className="flex items-center gap-3 text-sm text-light-text/50 dark:text-dark-text/50">
+              <span>Time</span>
+              <div className="flex-1 flex items-center">
+                <span className="line-through">{originalTimeStr}</span>
+                <span className="mx-2">→</span>
+                <span className="text-light-text dark:text-dark-text">{newTimeStr}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex justify-end gap-3">
@@ -180,7 +192,7 @@ const RepeatEditModal = ({
             onClick={handleContinue}
             className="px-4 py-2 bg-primary hover:bg-primary/90 text-sm text-white rounded-[9px]"
           >
-            Continue editing
+            {continueButtonText}
           </button>
         </div>
       </div>

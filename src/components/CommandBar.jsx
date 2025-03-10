@@ -1583,6 +1583,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             setEditMode(null);
           }}
           onEditConfirm={handleEditSeriesSelect}
+          originalEvent={eventToEdit}
+          draggedEvent={eventToEdit}
+          isEditOperation={true}
         />
       )}
     </LayoutGroup>
