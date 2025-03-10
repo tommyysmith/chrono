@@ -24,11 +24,20 @@ import { More } from '../assets/icons/More';
 
 export default function Sidebar({ commandBarRef, events = [], selectedDate, onDateSelect }) {
   const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'agenda'
-  const [expandedSections, setExpandedSections] = useState({
-    today: true,
-    scheduled: false,
-    tags: false
+  const [expandedSections, setExpandedSections] = useState(() => {
+    // Initialize with default sections expanded
+    return {
+      today: true,
+      scheduled: false,
+      tags: false,
+      all: true,
+      work: true,
+      family: true,
+      personal: true,
+      travel: true
+    };
   });
+
   const [selectedView, setSelectedView] = useState('all'); // 'all', 'today', or 'upcoming'
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -38,44 +47,29 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [colorMenuPosition, setColorMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedTagId, setSelectedTagId] = useState(null);
-  const [tags, setTags] = useState([]);
-  const [editingTaskId, setEditingTaskId] = useState(null);
-  const [originalTask, setOriginalTask] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-
-  // Clear task selection when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (!e.target.closest('.task-item')) {
-        setSelectedTaskId(null);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-  
-  const [tasks, setTasks] = useState({
-    work: [],
-    family: [],
-    personal: [],
-    travel: [],
-    all: []
-  });
-
-  // Move localStorage initialization to useEffect
-  useEffect(() => {
-    const savedTags = localStorage.getItem('tags');
-    const initialTags = savedTags ? JSON.parse(savedTags) : [
+  const [tags, setTags] = useState(() => {
+    // Initialize with default tags
+    const defaultTags = [
       { id: 'work', label: 'Work', color: '#EF4444' },
       { id: 'family', label: 'Family', color: '#3B82F6' },
       { id: 'personal', label: 'Personal', color: '#A855F7' },
       { id: 'travel', label: 'Travel', color: '#22C55E' }
     ];
-    setTags(initialTags);
 
-    const savedTasks = localStorage.getItem('tasks');
-    const initialTasks = savedTasks ? JSON.parse(savedTasks) : {
+    // Try to load from localStorage
+    const savedTags = localStorage.getItem('tags');
+    if (savedTags) {
+      try {
+        return JSON.parse(savedTags);
+      } catch (e) {
+        console.error("Error parsing tags:", e);
+      }
+    }
+    return defaultTags;
+  });
+  const [tasks, setTasks] = useState(() => {
+    // Initialize with empty collections
+    const initialTasks = {
       today: [],
       scheduled: {},
       work: [],
@@ -84,10 +78,36 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
       travel: [],
       all: []
     };
-    setTasks(initialTasks);
-  }, []);
 
-  // Add draft scheduling state
+    // Try to load from localStorage
+    const savedTasks = localStorage.getItem('tasks');
+    if (savedTasks) {
+      try {
+        const parsed = JSON.parse(savedTasks);
+        return {
+          ...initialTasks,
+          ...parsed
+        };
+      } catch (e) {
+        console.error("Error parsing tasks:", e);
+      }
+    }
+    return initialTasks;
+  });
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [originalTask, setOriginalTask] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
+
+  // Save tasks to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+  }, [tasks]);
+
+  // Save tags to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('tags', JSON.stringify(tags));
+  }, [tags]);
+
   const [draftSchedule, setDraftSchedule] = useState(null);
 
   // Add isEditing state
@@ -130,107 +150,6 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
     }
   }, [draftSchedule]);
 
-  // Save data to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('tasks', JSON.stringify(tasks));
-    }
-  }, [tasks]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('tags', JSON.stringify(tags));
-    }
-  }, [tags]);
-
-  // Subscribe to localStorage changes
-  useEffect(() => {
-    // Remove the MutationObserver as it's not appropriate for watching localStorage
-    // and is causing tasks to revert to previous state
-    
-    // Instead, only load data on mount
-    const loadData = () => {
-      const savedTasks = localStorage.getItem('tasks');
-      const savedTags = localStorage.getItem('tags');
-
-      if (savedTasks) {
-        try {
-          const parsedTasks = JSON.parse(savedTasks);
-          console.log("Loading tasks from localStorage:", JSON.stringify(parsedTasks, null, 2));
-          setTasks(parsedTasks);
-        } catch (e) {
-          console.error("Error parsing tasks from localStorage:", e);
-        }
-      }
-      if (savedTags) {
-        try {
-          const parsedTags = JSON.parse(savedTags);
-          console.log("Loading tags from localStorage:", JSON.stringify(parsedTags, null, 2));
-          setTags(parsedTags);
-        } catch (e) {
-          console.error("Error parsing tags from localStorage:", e);
-        }
-      }
-    };
-
-    // Only load data on mount
-    loadData();
-    
-    // Listen for storage events from other tabs, but not from the current one
-    const handleStorageChange = (e) => {
-      if (e.key === 'tasks' || e.key === 'tags') {
-        // Only process events from other tabs/windows
-        if (e.storageArea === localStorage && e.newValue) {
-          if (e.key === 'tasks') {
-            try {
-              const parsedTasks = JSON.parse(e.newValue);
-              console.log("Storage event - updating tasks:", parsedTasks);
-              setTasks(parsedTasks);
-            } catch (e) {
-              console.error("Error parsing tasks from storage event:", e);
-            }
-          } else if (e.key === 'tags') {
-            try {
-              setTags(JSON.parse(e.newValue));
-            } catch (e) {
-              console.error("Error parsing tags from storage event:", e);
-            }
-          }
-        }
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-
-    // Add a new listener for local updates (when tasks are added from CommandBar)
-    const checkLocalStorage = () => {
-      const savedTasks = localStorage.getItem('tasks');
-      if (savedTasks) {
-        try {
-          const parsedTasks = JSON.parse(savedTasks);
-          setTasks(current => {
-            // Only update if the data is different to avoid infinite loops
-            if (JSON.stringify(current) !== savedTasks) {
-              console.log("Local storage check - updating tasks:", parsedTasks);
-              return parsedTasks;
-            }
-            return current;
-          });
-        } catch (e) {
-          console.error("Error checking localStorage:", e);
-        }
-      }
-    };
-    
-    // Check localStorage periodically for changes
-    const intervalId = setInterval(checkLocalStorage, 1000);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      clearInterval(intervalId);
-    };
-  }, []);
-
   const addTaskRef = useRef(null);
   const taskInputRef = useRef(null);
 
@@ -254,37 +173,44 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
         id: Date.now(),
         title: taskTitle.trim(),
         completed: false,
-        tag: selectedTag || null  // Use tag instead of tags array
+        tag: selectedTag || null
       };
-
-      console.log('Creating new task with structure:', newTask);
-      if (selectedTag) {
-        console.log('Selected tag for new task:', selectedTag);
-      }
-
-      if (pendingTag) {
-        setTags(prevTags => {
-          const updatedTags = [...prevTags, pendingTag];
-          localStorage.setItem('tags', JSON.stringify(updatedTags));
-          return updatedTags;
-        });
-        setPendingTag(null);
-      }
 
       setTasks(prevTasks => {
         const updatedTasks = {
           ...prevTasks,
           all: [...(prevTasks.all || []), newTask]
         };
-        
-        // Only add to tag group if a tag is selected
+
+        // Add to tag collection if tag is selected
         if (selectedTag) {
-          updatedTasks[selectedTag.id] = [...(prevTasks[selectedTag.id] || []), newTask];
+          updatedTasks[selectedTag.id] = [
+            ...(prevTasks[selectedTag.id] || []),
+            newTask
+          ];
         }
-        
-        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+
+        // Add to today if in today view
+        if (selectedView === 'today') {
+          updatedTasks.today = [...(prevTasks.today || []), newTask];
+        }
+
         return updatedTasks;
       });
+
+      if (pendingTag) {
+        const newTag = pendingTag;
+        setTags(prevTags => {
+          const updatedTags = [...prevTags, newTag];
+          // Update expandedSections for the new tag
+          setExpandedSections(prev => ({
+            ...prev,
+            [newTag.id]: true
+          }));
+          return updatedTags;
+        });
+        setPendingTag(null);
+      }
 
       setTaskTitle('');
       setSelectedTag(null);
@@ -317,25 +243,22 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   const handleDeleteTask = (taskId) => {
     setTasks(prev => {
       const newTasks = { ...prev };
+      // Remove from all collections
       Object.keys(newTasks).forEach(group => {
-        newTasks[group] = newTasks[group].filter(task => task.id !== taskId);
+        if (Array.isArray(newTasks[group])) {
+          newTasks[group] = newTasks[group].filter(task => task.id !== taskId);
+        }
       });
+      // Save to localStorage immediately
       localStorage.setItem('tasks', JSON.stringify(newTasks));
       return newTasks;
     });
   };
 
-  const handleEditTask = (task) => {
-    if (commandBarRef?.current) {
-      setEditingTaskId(task.id);
-      setOriginalTask(task);
-      commandBarRef.current.openForTaskEdit(task);
-    }
-  };
-
   const handleCompleteTask = (taskId) => {
     setTasks(prev => {
       const newTasks = { ...prev };
+      // Update in all collections
       Object.keys(newTasks).forEach(group => {
         if (Array.isArray(newTasks[group])) {
           newTasks[group] = newTasks[group].map(task =>
@@ -343,9 +266,52 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
           );
         }
       });
+      // Save to localStorage immediately
       localStorage.setItem('tasks', JSON.stringify(newTasks));
       return newTasks;
     });
+  };
+
+  // Add an effect to ensure tasks and tags stay in sync with localStorage
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'tasks') {
+        try {
+          const newTasks = JSON.parse(e.newValue);
+          setTasks(newTasks);
+        } catch (e) {
+          console.error('Error parsing tasks from storage event:', e);
+        }
+      } else if (e.key === 'tags') {
+        try {
+          const newTags = JSON.parse(e.newValue);
+          setTags(newTags);
+          // Update expandedSections for any custom tags
+          setExpandedSections(prev => {
+            const updated = { ...prev };
+            newTags.forEach(tag => {
+              if (!(tag.id in updated)) {
+                updated[tag.id] = true;
+              }
+            });
+            return updated;
+          });
+        } catch (e) {
+          console.error('Error parsing tags from storage event:', e);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const handleEditTask = (task) => {
+    if (commandBarRef?.current) {
+      setEditingTaskId(task.id);
+      setOriginalTask(task);
+      commandBarRef.current.openForTaskEdit(task);
+    }
   };
 
   // Get all unique tasks with their complete data
@@ -370,6 +336,7 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
     }
   }, [allTasksArray]);
 
+  // Generate sections including all tags
   const sections = selectedView === 'all' ? [
     {
       id: 'all',
@@ -392,16 +359,44 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
         }
       ]
     },
-    ...tags
-      .map(tag => ({
-        id: tag.id,
-        label: tag.label,
-        icon: Tag,
-        color: tag.color,
-        count: allTasksArray.filter(task => task.tag && task.tag.id === tag.id).length
-      }))
-      .filter(section => section.count > 0) // Only include tag sections that have tasks
+    // Add all tags as sections
+    ...tags.map(tag => ({
+      id: tag.id,
+      label: tag.label,
+      icon: Tag,
+      color: tag.color,
+      count: allTasksArray.filter(task => task.tag && task.tag.id === tag.id).length,
+      tasks: allTasksArray.filter(task => task.tag && task.tag.id === tag.id)
+    }))
   ] : [];
+
+  // Update expandedSections when tags change
+  useEffect(() => {
+    setExpandedSections(prev => {
+      const updated = { ...prev };
+      // Ensure all tags have an expansion state
+      tags.forEach(tag => {
+        if (!(tag.id in updated)) {
+          updated[tag.id] = true; // New tags start expanded
+        }
+      });
+      return updated;
+    });
+  }, [tags]);
+
+  const handleAddTag = (newTag) => {
+    setTags(prevTags => {
+      const updatedTags = [...prevTags, newTag];
+      localStorage.setItem('tags', JSON.stringify(updatedTags));
+      return updatedTags;
+    });
+    
+    // Ensure the new tag's section is expanded
+    setExpandedSections(prev => ({
+      ...prev,
+      [newTag.id]: true
+    }));
+  };
 
   const getTasksForView = () => {
     if (selectedView === 'all') {
@@ -426,25 +421,6 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
         return !isToday(taskDate);
       }).sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
     }
-  };
-
-
-
-  useEffect(() => {
-    // Initialize expandedSections for any new tags
-    setExpandedSections(prev => {
-      const newExpanded = { ...prev };
-      tags.forEach(tag => {
-        if (newExpanded[tag.id] === undefined) {
-          newExpanded[tag.id] = false;
-        }
-      });
-      return newExpanded;
-    });
-  }, [tags]);
-
-  const handleSelectTag = (tag) => {
-    setSelectedTag(tag);
   };
 
   return (
@@ -601,24 +577,22 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
                                   ))
                                 ) : (
                                   // Render tasks for tag groups
-                                  allTasksArray
-                                    .filter(task => task.tag && task.tag.id === section.id)
-                                    .map(task => (
-                                      <TaskItem
-                                        key={task.id}
-                                        task={{
-                                          ...task,
-                                          tag: task.tag || null
-                                        }}
-                                        onComplete={handleCompleteTask}
-                                        onDelete={handleDeleteTask}
-                                        onEdit={handleEditTask}
-                                        onDoubleClickEdit={handleEditTask}
-                                        onClick={() => setSelectedTaskId(task.id)}
-                                        isSelected={selectedTaskId === task.id}
-                                        hideTag={section.id !== 'all'}
-                                      />
-                                    ))
+                                  section.tasks.map(task => (
+                                    <TaskItem
+                                      key={task.id}
+                                      task={{
+                                        ...task,
+                                        tag: task.tag || null
+                                      }}
+                                      onComplete={handleCompleteTask}
+                                      onDelete={handleDeleteTask}
+                                      onEdit={handleEditTask}
+                                      onDoubleClickEdit={handleEditTask}
+                                      onClick={() => setSelectedTaskId(task.id)}
+                                      isSelected={selectedTaskId === task.id}
+                                      hideTag={section.id !== 'all'}
+                                    />
+                                  ))
                                 )}
                               </div>
                             </div>
