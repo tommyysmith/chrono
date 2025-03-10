@@ -89,9 +89,11 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           </div>
         )}
         {!hideTag && task.tag && (
-          <div className="flex flex-wrap gap-1">
+          <div 
+            key={`tag-${task.tag.id || 'default'}`}
+            className="flex flex-wrap gap-1"
+          >
             <div
-              key={task.tag.id}
               className="inline-flex self-start items-center px-1 py-1 text-xs rounded-[5px]"
               style={{
                 backgroundColor: `${task.tag.color}15`,

@@ -169,34 +169,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [onUpdateEvent]);
 
   const safelyRunAnimation = useCallback((animationFn, delay = 100) => {
-    // If already animating, clear any existing animation timeouts
-    if (isAnimating) {
-
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-    }
-    
-    // Set animating state to true
-    setIsAnimating(true);
-    
-    // Run the animation function after the specified delay
-    animationTimeoutRef.current = setTimeout(() => {
-      animationFn();
-      
-      // Reset animation state after a safe period
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-      }, 300); // Give animations time to complete
-    }, delay);
-    
-    // Return cleanup function
-    return () => {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
-    };
-  }, [isAnimating]);
+    animationFn();
+  }, []);
 
   const handleClose = useCallback((options = {}) => {
     const { skipDelete = false } = options;
@@ -206,126 +180,93 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onClose?.(editingEventId);
     }
     
-    safelyRunAnimation(() => {
-      setIsOpen(false);
-      setIsAddingEvent(false);
-      setIsAddingTask(false);
-      setTaskTitle('');
-      setTaskNotes('');
-      setSelectedTag(null);
-      setDraftTag(null);
-      setTagSearchText('');
-      setIsTagDropdownOpen(false);
-      setEventTitle('New Event');
-      setEventDescription('');
-      setEventStartTime('09:00');
-      setEventEndTime('10:00');
-      setIsAllDay(false);
-      setRepeatOption('none');
-      setEditingEventId(null);
-      setEventToEdit(null);
-      setRepeatSeriesId(null);
-      setIsRepeatDropdownOpen(false);
-      setShowColorPicker(false);
-      setEventToEdit(null);
-      setTaskToEdit(null);
-      setEditingTaskId(null);
-      setEditMode(null);
-      setScheduledDate(null);
-      setIsScheduleOpen(false);
-      setIsDatePickerOpen(false);
-      setShowRepeatEditModal(false);
-    }, 0);
-  }, [editingEventId, eventTitle, onClose, safelyRunAnimation]);
+    setIsOpen(false);
+    setIsAddingEvent(false);
+    setIsAddingTask(false);
+    setTaskTitle('');
+    setTaskNotes('');
+    setSelectedTag(null);
+    setDraftTag(null);
+    setTagSearchText('');
+    setIsTagDropdownOpen(false);
+    setEventTitle('New Event');
+    setEventDescription('');
+    setEventStartTime('09:00');
+    setEventEndTime('10:00');
+    setIsAllDay(false);
+    setRepeatOption('none');
+    setEditingEventId(null);
+    setEventToEdit(null);
+    setRepeatSeriesId(null);
+    setIsRepeatDropdownOpen(false);
+    setShowColorPicker(false);
+    setEventToEdit(null);
+    setTaskToEdit(null);
+    setEditingTaskId(null);
+    setEditMode(null);
+    setScheduledDate(null);
+    setIsScheduleOpen(false);
+    setIsDatePickerOpen(false);
+    setShowRepeatEditModal(false);
+    
+  }, [editingEventId, eventTitle, onClose]);
 
   const openForEdit = useCallback((event) => {
-    safelyRunAnimation(() => {
-      // First close any open UI
-      setIsOpen(false);
-      setIsAddingEvent(false);
-      setShowRepeatEditModal(false);
-      
-      // Use a single timeout for smoother animation
-      setTimeout(() => {
-        // Prepare all the event data in a single batch
-        setEventToEdit(event);
-        setEditingEventId(event.id);
-        
-        // Check if this is a repeat event
-        if (event.seriesId || (event.repeat && event.repeat !== 'none')) {
-          // For repeat events, show the modal
-          setShowRepeatEditModal(true);
-        } else {
-          // For regular non-repeat events, open the CommandBar
-          // Use requestAnimationFrame for smoother animation
-          requestAnimationFrame(() => {
-            setIsOpen(true);
-            setIsAddingEvent(true);
-          });
-        }
-      }, 100);
-    });
-  }, [safelyRunAnimation]);
+    setIsOpen(false);
+    setIsAddingEvent(false);
+    setShowRepeatEditModal(false);
+    
+    setEventToEdit(event);
+    setEditingEventId(event.id);
+    
+    if (event.seriesId || (event.repeat && event.repeat !== 'none')) {
+      setShowRepeatEditModal(true);
+    } else {
+      setIsOpen(true);
+      setIsAddingEvent(true);
+    }
+    
+  }, []);
 
   const initializeEventState = useCallback((startTime, endTime, eventId = null, skipAnimation = false) => {
     const now = startTime || new Date();
     const end = endTime || new Date(now.getTime() + 60 * 60 * 1000);
 
-    safelyRunAnimation(() => {
-      // First close any open UI
-      setIsOpen(false);
-      setIsAddingEvent(false);
-      setShowRepeatEditModal(false);
-
-      const updateState = () => {
-        setEventDate(format(now, 'yyyy-MM-dd'));
-        setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
-        setEventEndTime(roundToNearest15Min(format(end, 'HH:mm')));
-        setEventTitle('New Event');
-        setEventDescription('');
-        setIsAllDay(false);
-        setSelectedColor('#3B82F6');
-        setRepeatOption('none');
-        setEventToEdit(null);
-        setRepeatSeriesId(null);
-        setIsRepeatDropdownOpen(false);
-        setShowColorPicker(false);
-        setEditingEventId(eventId);
-      };
-
-      if (skipAnimation) {
-        updateState();
-        setIsOpen(true);
-        setIsAddingEvent(true);
-        requestAnimationFrame(() => {
-          titleInputRef.current?.focus();
-        });
-      } else {
-        // Use a single timeout for smoother animation
-        setTimeout(() => {
-          updateState();
-          requestAnimationFrame(() => {
-            setIsOpen(true);
-            setIsAddingEvent(true);
-            setTimeout(() => {
-              titleInputRef.current?.focus();
-            }, 100);
-          });
-        }, 100);
-      }
-    }, skipAnimation ? 0 : 100);
-  }, [safelyRunAnimation]);
+    // Initialize all state at once to prevent flashing
+    setEventDate(format(now, 'yyyy-MM-dd'));
+    setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
+    setEventEndTime(roundToNearest15Min(format(end, 'HH:mm')));
+    setEventTitle('New Event');
+    setEventDescription('');
+    setIsAllDay(false);
+    setSelectedColor('#3B82F6');
+    setRepeatOption('none');
+    setEventToEdit(null);
+    setRepeatSeriesId(null);
+    setIsRepeatDropdownOpen(false);
+    setShowColorPicker(false);
+    setEditingEventId(eventId);
+    
+    // Use requestAnimationFrame to ensure state updates are batched
+    requestAnimationFrame(() => {
+      setIsOpen(true);
+      setIsAddingEvent(true);
+      
+      // Focus after animation completes
+      const focusTimeout = setTimeout(() => {
+        if (titleInputRef.current) {
+          titleInputRef.current.focus();
+        }
+      }, 300); // Match this with animation duration
+      
+      return () => clearTimeout(focusTimeout);
+    });
+  }, []);
 
   const handleAddEventClick = useCallback(() => {
-    if (isAnimating) {
-
-      return;
-    }
-    
     const now = new Date();
     const endTime = new Date(now.getTime() + 60 * 60 * 1000);
     
-    // Create the event immediately and get its ID
     const newEventData = {
       title: 'New Event',
       description: '',
@@ -337,202 +278,136 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
 
     const createdEvent = onCreateEvent(newEventData);
-    initializeEventState(now, endTime, createdEvent.id, true);
-  }, [onCreateEvent, initializeEventState, isAnimating]);
+    initializeEventState(now, endTime, createdEvent.id);
+  }, [onCreateEvent, initializeEventState]);
 
   const handleRepeatOptionChange = useCallback((option) => {
-    
-    
-    // Immediately update the repeat option state
     setRepeatOption(option);
-    
-    // Close the dropdown immediately
     setIsRepeatDropdownOpen(false);
     
-    // If editing an existing event, update it with the new repeat option
     if (editingEventId) {
-      safelyRunAnimation(() => {
-        const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-        const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-        const updatedFields = {
-          id: editingEventId,
-          title: eventTitle.trim(),
-          description: eventDescription.trim(),
-          start: startDateTime,
-          end: endDateTime,
-          isAllDay,
-          color: selectedColor,
-          repeat: option,
-          // Add a flag to indicate that repeat option has changed directly
-          // This will trigger proper regeneration of the repeating events
-          _repeatChanged: true
-        };
+      const updatedFields = {
+        id: editingEventId,
+        title: eventTitle.trim(),
+        description: eventDescription.trim(),
+        start: startDateTime,
+        end: endDateTime,
+        isAllDay,
+        color: selectedColor,
+        repeat: option,
+        _repeatChanged: true
+      };
 
-        // Keep the series ID if it exists
-        if (eventToEdit?.seriesId) {
-          updatedFields.seriesId = eventToEdit.seriesId;
+      if (eventToEdit?.seriesId) {
+        updatedFields.seriesId = eventToEdit.seriesId;
+      }
+
+      if (eventToEdit?.seriesId || (eventToEdit?.repeat && eventToEdit.repeat !== 'none')) {
+        updatedFields._editScope = editMode || 'single';
+        
+        if (updatedFields._editScope === 'single') {
+          updatedFields._originalSeriesId = eventToEdit.seriesId;
+          updatedFields.seriesId = null;
+          updatedFields.repeat = 'none';
+          updatedFields.isRepeat = false;
+          updatedFields._preserveSeriesEvents = true;
         }
+      }
 
-        // For recurring events, always include the edit scope
-        // If no explicit editMode is set but we're editing a recurring event, default to 'single'
-        if (eventToEdit?.seriesId || (eventToEdit?.repeat && eventToEdit.repeat !== 'none')) {
-          // If editMode is explicitly set, use it, otherwise default to 'single' (this event only)
-          updatedFields._editScope = editMode || 'single';
-          
-          // Store the original seriesId for reference (needed to preserve other events)
-          updatedFields._originalSeriesId = eventToEdit?.seriesId;
-          
-          // If we're editing a single instance, ensure it's properly detached from the series
-          if (updatedFields._editScope === 'single') {
-            // When editing a single instance, we want to detach it from the series
-            // but we need to keep track of the original series ID
-
-
-            
-            // Keep the original series ID for reference but mark this event as detached
-            updatedFields.seriesId = null;
-            updatedFields.repeat = 'none';
-            updatedFields.isRepeat = false;
-            // Important: Add flag to preserve other events in the series
-            updatedFields._preserveSeriesEvents = true;
-          }
-          
-
-        }
-
-        // Update the event with the new repeat option
-        // Use requestAnimationFrame to ensure UI updates properly
-        requestAnimationFrame(() => {
-          onUpdateEvent(updatedFields);
-        });
-      }, 0);
+      onUpdateEvent(updatedFields);
     }
   }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
-      isAllDay, selectedColor, eventToEdit, onUpdateEvent, editMode, safelyRunAnimation, isAnimating]);
+      isAllDay, selectedColor, eventToEdit, onUpdateEvent, editMode]);
 
   const handleEditSeriesSelect = useCallback((editScope) => {
     if (!eventToEdit) return;
     
+    setShowRepeatEditModal(false);
     
-
-    safelyRunAnimation(() => {
-      // First close the modal
-      setShowRepeatEditModal(false);
+    setTimeout(() => {
+      if (editScope === 'single') {
+        setRepeatOption('none');
+      }
       
-      // Wait for the modal to close completely
+      setEditMode(editScope);
+      
       setTimeout(() => {
-        // If selecting 'single' (this event only), reset the repeat option to 'none'
-        if (editScope === 'single') {
-          setRepeatOption('none');
-        }
+        setIsOpen(true);
+        setIsAddingEvent(true);
         
-        // Set edit mode
-        setEditMode(editScope);
-        
-        // Wait for state to be fully updated
         setTimeout(() => {
-          // Open the command bar
-          setIsOpen(true);
-          setIsAddingEvent(true);
-          
-          // Wait for the command bar to open
-          setTimeout(() => {
-            // If we're in edit mode already, trigger an immediate update with the selected scope
-            if (editingEventId) {
-              const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-              const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
-              
-              const updatedFields = {
-                id: editingEventId,
-                title: eventTitle.trim(),
-                description: eventDescription.trim(),
-                start: startDateTime,
-                end: endDateTime,
-                isAllDay,
-                color: selectedColor,
-                repeat: repeatOption,
-                _editScope: editScope
-              };
-              
-              // If this is part of a series, include the series ID
-              if (eventToEdit?.seriesId) {
-                // Store the original seriesId for reference (needed to preserve other events)
-                updatedFields._originalSeriesId = eventToEdit.seriesId;
-                
-                // If we're editing a single instance, detach it from the series
-                if (editScope === 'single') {
-                  updatedFields.seriesId = null;
-                  updatedFields.repeat = 'none';
-                  updatedFields.isRepeat = false;
-                  // Important: Add flag to preserve other events in the series
-                  updatedFields._preserveSeriesEvents = true;
-                } else {
-                  updatedFields.seriesId = eventToEdit.seriesId;
-                }
-              }
-              
-              // Calculate time differences for series updates
-              const startDiff = startDateTime - eventToEdit.start;
-              const endDiff = endDateTime - eventToEdit.end;
-              
-              updatedFields._timeChange = {
-                startDiff,
-                endDiff
-              };
-              
+          if (editingEventId) {
+            const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+            const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
 
-              onUpdateEvent(updatedFields);
+            const updatedFields = {
+              id: editingEventId,
+              title: eventTitle.trim(),
+              description: eventDescription.trim(),
+              start: startDateTime,
+              end: endDateTime,
+              isAllDay,
+              color: selectedColor,
+              repeat: repeatOption,
+              _editScope: editScope
+            };
+            
+            if (eventToEdit?.seriesId) {
+              updatedFields._originalSeriesId = eventToEdit.seriesId;
+              if (editScope === 'single') {
+                updatedFields.seriesId = null;
+                updatedFields.repeat = 'none';
+                updatedFields.isRepeat = false;
+                updatedFields._preserveSeriesEvents = true;
+              } else {
+                updatedFields.seriesId = eventToEdit.seriesId;
+              }
             }
-          }, 50);
+            
+            const startDiff = startDateTime - eventToEdit.start;
+            const endDiff = endDateTime - eventToEdit.end;
+            
+            updatedFields._timeChange = {
+              startDiff,
+              endDiff
+            };
+            
+
+            onUpdateEvent(updatedFields);
+          }
         }, 50);
       }, 50);
-    });
+    }, 50);
   }, [eventToEdit, editingEventId, eventDate, eventStartTime, eventEndTime, eventTitle, 
-      eventDescription, isAllDay, selectedColor, repeatOption, onUpdateEvent, safelyRunAnimation, isAnimating]);
+      eventDescription, isAllDay, selectedColor, repeatOption, onUpdateEvent, editMode]);
 
   const openForTaskEdit = useCallback((task) => {
-    if (isAnimating) {
-
-      return;
-    }
-    
-    safelyRunAnimation(() => {
-      // Store a deep copy of the original task
-      const originalTask = JSON.parse(JSON.stringify(task));
-      
-      setIsOpen(true);
-      setIsAddingTask(true);
-      setTaskTitle(task.title || '');
-      setTaskNotes(task.notes || '');
-      setSelectedTag(task.tag || null);
-      setDraftTag(task.tag || null);
-      setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
-      setEditingTaskId(task.id);
-      setTaskToEdit(originalTask);
-    });
-  }, [safelyRunAnimation, isAnimating]);
+    setIsOpen(true);
+    setIsAddingTask(true);
+    setTaskTitle(task.title || '');
+    setTaskNotes(task.notes || '');
+    setSelectedTag(task.tag || null);
+    setDraftTag(task.tag || null);
+    setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
+    setEditingTaskId(task.id);
+    setTaskToEdit(task);
+  }, []);
 
   // Memoize state transition handlers
   const handleOpenAddEvent = useCallback(() => {
-    if (isAnimating) return;
-    
-    safelyRunAnimation(() => {
-      setIsOpen(true);
-      setIsAddingEvent(true);
-      setIsAddingTask(false);
-    });
-  }, [safelyRunAnimation, isAnimating]);
+    setIsOpen(true);
+    setIsAddingEvent(true);
+    setIsAddingTask(false);
+  }, []);
 
   const handleOpenAddTask = useCallback(() => {
-    if (isAnimating) return;
-    
-    safelyRunAnimation(() => {
-      setIsOpen(true);
-      setIsAddingEvent(false);
-      setIsAddingTask(true);
-    });
-  }, [safelyRunAnimation, isAnimating]);
+    setIsOpen(true);
+    setIsAddingEvent(false);
+    setIsAddingTask(true);
+  }, []);
 
   const handleScheduleOptionSelect = useCallback((option) => {
     setScheduleOption(option);
@@ -574,11 +449,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   useImperativeHandle(ref, () => ({
     openWithDragData: (startTime, endTime, eventId) => {
-      if (isAnimating) {
-
-        return;
-      }
-      
       const newEventData = {
         title: 'New Event',
         description: '',
@@ -589,16 +459,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         repeat: 'none'
       };
 
-      // Create the event immediately if it doesn't exist
       const createdEventId = eventId || onCreateEvent(newEventData).id;
       initializeEventState(startTime, endTime, createdEventId);
     },
     openWithTime: (date) => {
-      if (isAnimating) {
-
-        return;
-      }
-      
       const endTime = new Date(date.getTime() + 60 * 60 * 1000);
       const newEventData = {
         title: 'New Event',
@@ -624,7 +488,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       }
     }
 
-    // Only add the event listener when the dropdown is open
     if (isRepeatDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', (e) => {
@@ -647,7 +510,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
     const handleEscapeKey = (event) => {
       if (event.key === 'Escape' && isAddingEvent) {
-        // When closing with escape, don't delete the event
         handleClose({ skipDelete: true });
       }
     };
@@ -662,7 +524,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
-        // handleSubmit();
       }
     };
 
@@ -686,12 +547,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [showColorPicker]);
 
-  // Define updateEventLive first - before it's referenced in useEffect
   const updateEventLive = useCallback(() => {
-    if (!editingEventId || animationInProgressRef.current) return;
+    if (!editingEventId) return;
     
-
-
     const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
     const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
     
@@ -706,61 +564,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       repeat: repeatOption
     };
     
-    // Preserve series information if we're editing a recurring event
     if (eventToEdit) {
-      // Handle editing recurring events
       if (eventToEdit.seriesId || (eventToEdit.repeat && eventToEdit.repeat !== 'none')) {
-        // For a recurring event, we need to specify the edit scope
         updatedFields._editScope = editMode || 'single';
         
-        // If editing a single instance of a recurring event
         if (updatedFields._editScope === 'single') {
-          // Keep the original series ID for reference
           updatedFields._originalSeriesId = eventToEdit.seriesId;
-          
-          // Detach from series for single-instance edit
           updatedFields.seriesId = null;
-          
-          // Calculate time differences for series updates
-          const startDiff = startDateTime - eventToEdit.start;
-          const endDiff = endDateTime - eventToEdit.end;
-          
-          updatedFields._timeChange = {
-            startDiff,
-            endDiff
-          };
+          updatedFields.repeat = 'none';
+          updatedFields.isRepeat = false;
+          updatedFields._preserveSeriesEvents = true;
         }
       }
     }
 
-    // Use requestAnimationFrame to ensure updates happen in the next frame
-    // This helps prevent layout thrashing when multiple updates happen in sequence
-    requestAnimationFrame(() => {
-      onUpdateEvent(updatedFields);
-    });
+    onUpdateEvent(updatedFields);
   }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
       isAllDay, selectedColor, repeatOption, eventToEdit, onUpdateEvent, editMode]);
 
-  // Single consolidated effect for live updates with improved handling for repeat events
   useEffect(() => {
-
-    
-    // Only update the event if we're in the CommandBar and not showing the repeat edit modal
     if (editingEventId && isAddingEvent && !showRepeatEditModal) {
-      // Use a longer debounce for repeat events to prevent layout thrashing
       const debounceTime = repeatOption !== 'none' ? 400 : 200;
       
-
-      
-      // Debounce to avoid too many updates
       const timer = setTimeout(() => {
-
         updateEventLive();
       }, debounceTime);
-      return () => {
-
-        clearTimeout(timer);
-      };
+      return () => clearTimeout(timer);
     }
   }, [
     editingEventId,
@@ -774,7 +603,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     updateEventLive,
     isAddingEvent,
     showRepeatEditModal,
-    repeatOption // Add repeatOption to dependencies to ensure proper updates
+    repeatOption
   ]);
 
   useEffect(() => {
@@ -794,19 +623,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setEditingEventId(eventToEdit.id);
     } else {
       originalEventId.current = null;
-      // ... reset other state
     }
   }, [eventToEdit]);
 
-  // Handle clicking outside of the command bar
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
         containerRef.current && 
         !containerRef.current.contains(event.target) &&
         (!datePickerRef.current || !datePickerRef.current.contains(event.target)) &&
-        !event.target.closest('.react-calendar') && // Don't close when clicking on calendar
-        !event.target.closest('.calendar-popup') // Don't close when clicking on calendar popup
+        !event.target.closest('.react-calendar') && 
+        !event.target.closest('.calendar-popup')
       ) {
         handleClose();
       }
@@ -821,44 +648,60 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [isOpen, handleClose]);
 
-  // Use a ref to track the animation state
   const animationInProgressRef = useRef(false);
   
+  const consistentTransition = {
+    type: "spring",
+    stiffness: 300,
+    damping: 30,
+    duration: 0.3
+  };
+
   return (
-    <LayoutGroup>
+    <LayoutGroup id="commandBar">
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
         <motion.div 
           ref={containerRef}
           layout
+          layoutId="commandBar-container"
+          initial={{ 
+            opacity: 0,
+            scale: 0.95,
+            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
+          }}
           animate={{
+            opacity: 1,
+            scale: 1,
             width: 'auto',
-            height: 'auto'
+            height: 'auto',
+            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
           }}
-          onAnimationStart={() => {
-            animationInProgressRef.current = true;
+          exit={{
+            opacity: 0,
+            scale: 0.95
           }}
-          onAnimationComplete={() => {
-            // Mark animation as complete and allow state updates again
-            animationInProgressRef.current = false;
+          style={{
+            backgroundColor: "var(--background-color, var(--bg-light, #ffffff))",
+            willChange: "transform, opacity, background-color",
+            transformOrigin: "bottom"
           }}
           transition={{
-            layout: {
-              duration: 0.3, // Increase duration slightly for smoother animation
-              ease: [0.1, 0, 0.3, 1]  // Adjusted ease curve for smoother animation
-            },
-            width: {
-              duration: 0.3,
-              ease: [0.1, 0, 0.3, 1]
-            },
-            height: {
-              duration: 0.3,
-              ease: [0.1, 0, 0.3, 1]
-            }
+            type: "spring",
+            stiffness: 300,
+            damping: 30,
+            opacity: { duration: 0.2 },
+            scale: { duration: 0.2 },
+            layout: { duration: 0.3 }
           }}
           className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
         >
-          <motion.div layout className="flex items-center gap-4">
-            <AnimatePresence mode="popLayout">
+          <motion.div 
+            layout 
+            layoutId="commandBar-content" 
+            transition={consistentTransition}
+            className="flex items-center gap-4"
+          >
+            <AnimatePresence mode="wait">
               {!isAddingEvent && !isAddingTask && (
                 <Popover>
                   <PopoverTrigger asChild>
@@ -873,7 +716,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
                     </motion.button>
                   </PopoverTrigger>
-                  <PopoverContent align="start" className="w-48 p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+                  <PopoverContent 
+                    className="w-48 p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                    align="start"
+                  >
                     <button
                       onClick={() => {
                         setIsAddingTask(true);
@@ -1017,7 +863,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               >
                                 {SCHEDULE_OPTIONS.map(option => (
                                   <button
-                                    key={option.id}
+                                    key={`schedule-option-${option.id}`}
                                     className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
@@ -1068,7 +914,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </div>
                             </PopoverContent>
                           </Popover>
-                          <div className="flex items-center group gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
+                          <div className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
                             <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                             <div className="relative flex-1">
                               <div className="flex items-center gap-1 py-1">
@@ -1120,7 +966,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
                                     .map(tag => (
                                       <button
-                                        key={tag.id}
+                                        key={`tag-option-${tag.id}`}
                                         className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
                                         onClick={() => {
                                           setDraftTag(tag);
@@ -1135,6 +981,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   }
                                   {tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase()) && (
                                     <button
+                                      key={`new-tag-${tagSearchText}`}
                                       className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
                                       onClick={() => {
                                         const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
@@ -1143,7 +990,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           label: tagSearchText,
                                           color: randomColor
                                         };
-                                        // Store tag locally without saving to localStorage
                                         const updatedTags = [...tags, newTag];
                                         setTags(updatedTags);
                                         setDraftTag(newTag);
@@ -1190,15 +1036,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 scheduledDate: scheduledDate
                               };
                               
-                              // Update tags in localStorage
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem('tags', JSON.stringify(tags));
-                              }
-                              
-
                               onUpdateTask(updatedTask);
                             } else {
-                              // Create a new task
                               const newTask = {
                                 id: Date.now(),
                                 title: taskTitle.trim(),
@@ -1209,21 +1048,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
                               };
                               
-                              // Update tags in localStorage
-                              if (typeof window !== 'undefined') {
-                                localStorage.setItem('tags', JSON.stringify(tags));
-                              }
-                              
-                              // Create the task
-
                               onCreateTask(newTask);
                               
-                              // Force update localStorage with the new task
                               try {
                                 const savedTasks = localStorage.getItem('tasks') || '{}';
                                 const tasks = JSON.parse(savedTasks);
                                 
-                                // Add task to its tag group and the 'all' group
                                 const tagGroup = newTask.tag ? newTask.tag.id : 'all';
                                 const updatedTasks = {
                                   ...tasks,
@@ -1231,7 +1061,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   all: [...(tasks.all || []), newTask]
                                 };
                                 
-                                // Save directly to localStorage
                                 localStorage.setItem('tasks', JSON.stringify(updatedTasks));
 
                               } catch (e) {
@@ -1266,26 +1095,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   onAnimationComplete={() => {
                     animationInProgressRef.current = false;
                   }}
-                  transition={{
-                    opacity: { duration: 0.25 },
-                    filter: { duration: 0.25 },
-                    y: { duration: 0.25, ease: [0.2, 0.1, 0.3, 1] },
-                    layout: { duration: 0.3, ease: [0.1, 0, 0.3, 1] }
-                  }}
+                  transition={consistentTransition}
                   className="flex flex-col gap-4 min-w-[450px]"
                 >
                   <motion.div layout 
-                    transition={{
-                      layout: { duration: 0.3, ease: [0.1, 0, 0.3, 1] }
-                    }}
+                    transition={consistentTransition}
                     className="flex flex-col -mx-4">
                     {/* Title Section with Color */}
                     <div 
                     className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
                       <div 
-                      className="w-4 h-4 rounded-[5px] mt-[5px]"
-                      style={{ backgroundColor: selectedColor + 'B3', border: `2px solid ${selectedColor}` }}></div>
-
+                      className="w-4 h-4 rounded-md cursor-pointer hover:ring-2 hover:ring-offset-2 hover:ring-light-border dark:hover:ring-dark-border transition-all"
+                      style={{ backgroundColor: selectedColor }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowColorPicker(!showColorPicker);
+                      }}
+                    />
                     <div 
                       className="flex flex-col gap-1 px-4"
                     >
@@ -1411,7 +1237,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 type="checkbox"
                                 className="sr-only peer"
                                 checked={isAllDay}
-                                onChange={(e) => handleAllDayToggle(e.target.checked)}
+                                onChange={(e) => setIsAllDay(e.target.checked)}
                               />
                               <div className="w-9 h-5 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
                             </label>
@@ -1503,15 +1329,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <div className="flex flex-wrap gap-2 p-3">
                                 {TAG_COLORS.map((color) => (
                                   <div
-                                    key={color}
+                                    key={`color-${color.replace('#', '')}`}
                                     className={`w-6 h-6 rounded-md cursor-pointer hover:ring-2 hover:ring-offset-2 hover:ring-light-border dark:hover:ring-dark-border transition-all ${selectedColor === color ? 'ring-2 ring-offset-2 ring-light-border dark:ring-dark-border' : ''}`}
                                     style={{ backgroundColor: color }}
                                     onClick={() => {
                                       setSelectedColor(color);
-                                      // Save the selected color to localStorage for drag preview consistency
-                                      if (typeof window !== 'undefined') {
-                                        localStorage.setItem('lastSelectedEventColor', color);
-                                      }
                                       setShowColorPicker(false);
                                     }}
                                   />
@@ -1529,7 +1351,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           onClick={(e) => {
                             e.stopPropagation();
                             e.preventDefault();
-                            // Force the dropdown to open regardless of previous state
                             setIsRepeatDropdownOpen(true);
                           }}
                           aria-expanded={isRepeatDropdownOpen}
@@ -1549,21 +1370,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             tabIndex={-1}
                           >
                             {REPEAT_OPTIONS.map((option) => {
-                              // Dynamically generate sublabels based on the current event date
                               let sublabel = option.sublabel;
                               
                               if (option.id === 'weekly' || option.id === 'biweekly') {
-                                // Format: "on Mon" (based on event day of week)
                                 const date = parse(eventDate, 'yyyy-MM-dd', new Date());
                                 const dayOfWeek = format(date, 'EEE');
                                 sublabel = `on ${dayOfWeek}`;
                               } else if (option.id === 'monthly') {
-                                // Format: "on the 15th" (based on day of month)
                                 const date = parse(eventDate, 'yyyy-MM-dd', new Date());
                                 const dayOfMonth = format(date, 'do');
                                 sublabel = `on the ${dayOfMonth}`;
                               } else if (option.id === 'monthlyWeekday') {
-                                // Format: "on the 2nd Mon" 
                                 const date = parse(eventDate, 'yyyy-MM-dd', new Date());
                                 const dayOfMonth = getDate(date);
                                 const weekNum = Math.ceil(dayOfMonth / 7);
@@ -1571,12 +1388,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 const ordinal = weekNum === 1 ? '1st' : weekNum === 2 ? '2nd' : weekNum === 3 ? '3rd' : `${weekNum}th`;
                                 sublabel = `on the ${ordinal} ${dayOfWeek}`;
                               } else if (option.id === 'monthlyLastWeekday') {
-                                // Format: "on the last Mon"
                                 const date = parse(eventDate, 'yyyy-MM-dd', new Date());
                                 const dayOfWeek = format(date, 'EEE');
                                 sublabel = `on the last ${dayOfWeek}`;
                               } else if (option.id === 'yearly') {
-                                // Format: "on Dec 30"
                                 const date = parse(eventDate, 'yyyy-MM-dd', new Date());
                                 const monthDay = format(date, 'MMM d');
                                 sublabel = `on ${monthDay}`;
@@ -1585,7 +1400,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               return (
                                 <button
                                   type="button"
-                                  key={option.id}
+
                                   className={`w-full text-left px-2 py-2 hover:bg-white/15 dark:hover:bg-dark-bg-lighter rounded-[5px] cursor-pointer ${repeatOption === option.id ? '' : ''}`}
                                   onClick={(e) => {
                                     e.stopPropagation();
@@ -1624,8 +1439,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           isOpen={true}
           eventTitle={eventTitle}
           onClose={() => {
-            // When closing the modal through the close button or backdrop,
-            // make sure we reset all states
             setShowRepeatEditModal(false);
             setIsOpen(false);
             setIsAddingEvent(false);
