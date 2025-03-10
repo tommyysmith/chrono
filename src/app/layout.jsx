@@ -1,6 +1,7 @@
 'use client';
 
 import { ThemeProvider } from 'next-themes';
+import { TauriProvider } from '../components/TauriProvider';
 import './globals.css';
 
 export default function RootLayout({ children }) {
@@ -13,16 +14,18 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className="antialiased">
-        <ThemeProvider 
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
-            {children}
-          </div>
-        </ThemeProvider>
+        <TauriProvider>
+          <ThemeProvider 
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
+              {children}
+            </div>
+          </ThemeProvider>
+        </TauriProvider>
       </body>
     </html>
   );

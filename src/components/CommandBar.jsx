@@ -242,10 +242,57 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }, 100); // Increase the duration slightly for smoother transitions
   }, []);
 
+  const initializeEventState = useCallback((startTime, endTime, eventId = null, skipAnimation = false) => {
+    const now = startTime || new Date();
+    const end = endTime || new Date(now.getTime() + 60 * 60 * 1000);
+
+    // Batch state updates for better performance
+    const updateState = () => {
+      setEventDate(format(now, 'yyyy-MM-dd'));
+      setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
+      setEventEndTime(roundToNearest15Min(format(end, 'HH:mm')));
+      setEventTitle('New Event');
+      setEventDescription('');
+      setIsAllDay(false);
+      setSelectedColor('#3B82F6');
+      setRepeatOption('none');
+      setEventToEdit(null);
+      setRepeatSeriesId(null);
+      setIsRepeatDropdownOpen(false);
+      setShowColorPicker(false);
+      setEditingEventId(eventId);
+    };
+
+    // First close any open UI
+    setIsOpen(false);
+    setIsAddingEvent(false);
+    setShowRepeatEditModal(false);
+
+    if (skipAnimation) {
+      updateState();
+      setIsOpen(true);
+      setIsAddingEvent(true);
+      requestAnimationFrame(() => {
+        titleInputRef.current?.focus();
+      });
+    } else {
+      // Use a single timeout for smoother animation
+      setTimeout(() => {
+        updateState();
+        requestAnimationFrame(() => {
+          setIsOpen(true);
+          setIsAddingEvent(true);
+          setTimeout(() => {
+            titleInputRef.current?.focus();
+          }, 100);
+        });
+      }, 100);
+    }
+  }, []);
+
   const handleAddEventClick = useCallback(() => {
-    // Batch these operations to prevent multiple re-renders
     const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour duration
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000);
     
     // Create the event immediately and get its ID
     const newEventData = {
@@ -254,40 +301,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       start: now,
       end: endTime,
       isAllDay: false,
-      color: selectedColor,
+      color: '#3B82F6',
       repeat: 'none'
     };
 
-    // First reset UI state
-    setIsOpen(true);
-    
-    // Reset event fields to defaults in a batch
-    setEventTitle('New Event');
-    setEventDescription('');
-    setEventDate(format(now, 'yyyy-MM-dd'));
-    setEventStartTime(roundToNearest15Min(format(now, 'HH:mm')));
-    setEventEndTime(roundToNearest15Min(format(endTime, 'HH:mm')));
-    setIsAllDay(false);
-    setSelectedColor('#3B82F6');
-    setRepeatOption('none');
-    setEventToEdit(null);
-    setRepeatSeriesId(null);
-    
-    // Create event after initial form setup
-    // This approach creates a smoother transition since we already have form values ready
     const createdEvent = onCreateEvent(newEventData);
-    setEditingEventId(createdEvent.id);
-    
-    // Defer the UI change to the next animation frame for smoother animation
-    requestAnimationFrame(() => {
-      setIsAddingEvent(true);
-      
-      // Focus the title input after animation completes
-      setTimeout(() => {
-        titleInputRef.current?.focus();
-      }, 200);
-    });
-  }, [onCreateEvent, selectedColor]);
+    initializeEventState(now, endTime, createdEvent.id, true);
+  }, [onCreateEvent, initializeEventState]);
 
   const handleRepeatOptionChange = useCallback((option) => {
     // Immediately update the repeat option state
@@ -481,6 +501,62 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskToEdit(originalTask);
   }, []);
 
+  // Memoize state transition handlers
+  const handleOpenAddEvent = useCallback(() => {
+    setIsOpen(true);
+    setIsAddingEvent(true);
+    setIsAddingTask(false);
+  }, []);
+
+  const handleOpenAddTask = useCallback(() => {
+    setIsOpen(true);
+    setIsAddingEvent(false);
+    setIsAddingTask(true);
+  }, []);
+
+  const handleScheduleOptionSelect = useCallback((option) => {
+    setScheduleOption(option);
+    if (option === 'custom') {
+      setIsDatePickerOpen(true);
+    } else {
+      setIsDatePickerOpen(false);
+    }
+  }, []);
+
+  const handleTagSelect = useCallback((tag) => {
+    setSelectedTag(tag);
+    setIsTagDropdownOpen(false);
+    setTagSearchText('');
+  }, []);
+
+  const toggleAllDay = useCallback(() => {
+    setIsAllDay(prev => !prev);
+  }, []);
+
+  const toggleRepeatDropdown = useCallback(() => {
+    setIsRepeatDropdownOpen(prev => !prev);
+  }, []);
+
+  const handleRepeatOptionSelect = useCallback((option) => {
+    setRepeatOption(option);
+    setIsRepeatDropdownOpen(false);
+  }, []);
+
+  const toggleColorPicker = useCallback(() => {
+    setShowColorPicker(prev => !prev);
+  }, []);
+
+  const handleColorSelect = useCallback((color) => {
+    setSelectedColor(color);
+    setShowColorPicker(false);
+  }, []);
+
+  const handleDateSelect = useCallback((date) => {
+    setSelectedDate(date);
+    setIsDatePickerOpen(false);
+    setIsScheduleOpen(false);
+  }, []);
+
   useImperativeHandle(ref, () => ({
     openWithDragData: (startTime, endTime, eventId) => {
       const newEventData = {
@@ -489,61 +565,28 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         start: startTime,
         end: endTime,
         isAllDay: false,
-        color: selectedColor,
+        color: '#3B82F6',
         repeat: 'none'
       };
 
       // Create the event immediately if it doesn't exist
-      if (!eventId) {
-        onCreateEvent(newEventData);
-      }
-
-      setEventDate(format(startTime, 'yyyy-MM-dd'));
-      setEventStartTime(roundToNearest15Min(format(startTime, 'HH:mm')));
-      setEventEndTime(roundToNearest15Min(format(endTime, 'HH:mm')));
-      setEventTitle('New Event');
-      setEventDescription('');
-      setIsAllDay(false);
-      setRepeatOption('none');
-      setEditingEventId(eventId);
-      setIsAddingEvent(true);  
-      setIsOpen(true); // Make sure the command bar is open
-      setIsRepeatDropdownOpen(false);
-      setShowColorPicker(false);
-      // Focus the title input after a short delay to ensure the component is mounted
-      setTimeout(() => {
-        titleInputRef.current?.focus();
-      }, 100);
+      const createdEventId = eventId || onCreateEvent(newEventData).id;
+      initializeEventState(startTime, endTime, createdEventId);
     },
     openWithTime: (date) => {
-      const endTime = new Date(date.getTime() + 60 * 60 * 1000); // 1 hour duration
+      const endTime = new Date(date.getTime() + 60 * 60 * 1000);
       const newEventData = {
         title: 'New Event',
         description: '',
         start: date,
         end: endTime,
         isAllDay: false,
-        color: selectedColor,
+        color: '#3B82F6',
         repeat: 'none'
       };
 
-      // Create the event immediately
-      onCreateEvent(newEventData);
-
-      setEventDate(format(date, 'yyyy-MM-dd'));
-      setEventStartTime(roundToNearest15Min(format(date, 'HH:mm')));
-      setEventEndTime(roundToNearest15Min(format(endTime, 'HH:mm')));
-      setEventTitle('New Event');
-      setEventDescription('');
-      setIsAllDay(false);
-      setRepeatOption('none');
-      setEditingEventId(null);
-      setIsAddingEvent(true);
-      setIsRepeatDropdownOpen(false);
-      setShowColorPicker(false);
-      setTimeout(() => {
-        titleInputRef.current?.focus();
-      }, 100);
+      const createdEvent = onCreateEvent(newEventData);
+      initializeEventState(date, endTime, createdEvent.id);
     },
     openForEdit,
     openForTaskEdit,
@@ -1208,9 +1251,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               {isAddingEvent && (
                 <motion.div
                   layout
-                  initial={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
-                  animate={{ opacity: 1, filter: 'blur(0px)', y: 0 }}
-                  exit={{ opacity: 0, filter: 'blur(4px)', y: 10 }}
+            
                   onAnimationStart={() => {
                     animationInProgressRef.current = true;
                   }}

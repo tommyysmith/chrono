@@ -172,7 +172,7 @@ const RepeatEditModal = ({
               <div className="flex-1 flex items-center">
                 <span className="line-through">{originalTimeStr}</span>
                 <span className="mx-2">→</span>
-                <span className="text-light-text dark:text-dark-text">{newTimeStr}</span>
+                <span className="text-light-text font-medium dark:text-dark-text">{newTimeStr}</span>
               </div>
             </div>
           </div>
@@ -183,14 +183,14 @@ const RepeatEditModal = ({
           <button
             type="button"
             onClick={handleDiscard}
-            className="px-4 py-2 text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[9px]"
+            className="px-4 py-2 text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text hover:font-medium dark:hover:text-dark-text rounded-[9px]"
           >
             Discard change
           </button>
           <button
             type="button"
             onClick={handleContinue}
-            className="px-4 py-2 bg-primary hover:bg-primary/90 text-sm text-white rounded-[9px]"
+            className="px-3 py-2 bg-primary hover:bg-primary/90 text-sm font-semibold text-white rounded-[5px]"
           >
             {continueButtonText}
           </button>

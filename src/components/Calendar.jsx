@@ -859,8 +859,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       start: initialTime,
       end: new Date(initialTime.getTime() + 30 * 60 * 1000), // Start with 30 min duration
       color: getLastSelectedColor(),
-      repeat: 'none',
-      isEditing: true
+      repeat: 'none'
     };
 
     const handleMove = (moveEvent) => {
@@ -1467,7 +1466,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       if (event.end) {
         const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
         const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
-        style.height = `${(endMinutes - startMinutes) * (64 / 60) - 8}px`;
+        style.height = `${(endMinutes - startMinutes) * (64 / 60) - 2}px`;
       }
     }
 
@@ -1619,7 +1618,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     );
 
     return (
-      <div
+      <motion.div
         className="absolute z-[5] backdrop-blur-sm rounded-[9px] overflow-hidden pointer-events-none overflow-hidden"
         style={getEventStyle(previewEvent, overlappingEvents)}
       >
@@ -1633,7 +1632,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             {format(snappedStart, 'h:mm a')} - {format(snappedEnd, 'h:mm a')}
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -1692,8 +1691,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         const overlappingEvents = findOverlappingGroup(event, filteredEvents);
 
         return (
-          <div
+          <motion.div
             key={`${event.id}-${index}`}
+
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer ${
               event.isEditing || dragState.eventId === event.id ? 'bg-primary/30' : 'bg-primary/10'
             } event-item`}
@@ -1747,7 +1747,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         );
       });
     } else {
@@ -1761,8 +1761,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         const overlappingEvents = findOverlappingGroup(event, dayEvents);
 
         return (
-          <div
+          <motion.div
             key={`${event.id}-${index}`}
+            whileTap={{ scale: 0.95 }}
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${dragState.eventId === event.id ? 'bg-primary/30' : 'bg-primary/10'}`}
             style={getEventStyle(event, overlappingEvents)}
             onMouseDown={(e) => {
@@ -1791,7 +1792,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 </div>
               )}
             </div>
-          </div>
+          </motion.div>
         );
       });
     }
@@ -1910,10 +1911,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           <div className="flex items-center justify-center gap-1">
             <div className="relative">
               <div 
-                className="flex items-center gap-2 cursor-pointer p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-md"
+                className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
                 onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
               >
-                <span className="text-xs font-medium text-light-text dark:text-dark-text">
+                <span className="text-xs px-0.5  font-medium text-light-text dark:text-dark-text">
                   {viewType === ViewType.DAY ? 'Day' : viewType === ViewType.WEEK ? 'Week' : 'Month'}
                 </span>
                 <svg className={`w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform ${isViewDropdownOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none">
@@ -1940,7 +1941,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                       }`}
                     >
                       <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
-                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[10px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
+                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
                         {type.charAt(0).toUpperCase()}
                       </span>
                     </button>
@@ -2780,7 +2781,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 {colors.map(color => (
                   <motion.button
                     key={color}
-                    whileHover={{ scale: 1.05 }}
+                    whileHover={{ scale: 1.02 }}
                     className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
                     style={{ backgroundColor: color }}
                     onClick={(e) => handleColorSelect(e, color)}

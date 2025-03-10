@@ -1,4 +1,4 @@
-// Event utilities based on react-big-calendar logic
+// Custom event utilities for calendar functionality
 export const localizer = {
   startOf: (date, unit) => {
     const d = new Date(date);
