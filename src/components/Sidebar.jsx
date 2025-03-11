@@ -25,7 +25,17 @@ import { More } from '../assets/icons/More';
 export default function Sidebar({ commandBarRef, events = [], selectedDate, onDateSelect }) {
   const [activeTab, setActiveTab] = useState('tasks'); // 'tasks' or 'agenda'
   const [expandedSections, setExpandedSections] = useState(() => {
-    // Initialize with default sections expanded
+    // Try to load from localStorage first
+    const savedState = localStorage.getItem('expandedSections');
+    if (savedState) {
+      try {
+        return JSON.parse(savedState);
+      } catch (e) {
+        console.error("Error parsing expandedSections:", e);
+      }
+    }
+    
+    // Initialize with default sections expanded if no saved state
     return {
       today: true,
       scheduled: false,
@@ -37,6 +47,11 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
       travel: true
     };
   });
+
+  // Save expandedSections to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('expandedSections', JSON.stringify(expandedSections));
+  }, [expandedSections]);
 
   const [selectedView, setSelectedView] = useState('all'); // 'all', 'today', or 'upcoming'
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -107,6 +122,51 @@ export default function Sidebar({ commandBarRef, events = [], selectedDate, onDa
   useEffect(() => {
     localStorage.setItem('tags', JSON.stringify(tags));
   }, [tags]);
+
+  // Listen for tags-updated event from CommandBar
+  useEffect(() => {
+    const handleTagsUpdated = (event) => {
+      // Update tags state when event is received
+      setTags(event.detail);
+      
+      // Ensure all tags have an expansion state and persist it
+      setExpandedSections(prev => {
+        const updated = { ...prev };
+        event.detail.forEach(tag => {
+          if (!(tag.id in updated)) {
+            updated[tag.id] = true; // New tags start expanded
+          }
+        });
+        // Save to localStorage immediately to ensure persistence
+        localStorage.setItem('expandedSections', JSON.stringify(updated));
+        return updated;
+      });
+    };
+
+    // Add event listener
+    window.addEventListener('tags-updated', handleTagsUpdated);
+    
+    // Clean up event listener on component unmount
+    return () => {
+      window.removeEventListener('tags-updated', handleTagsUpdated);
+    };
+  }, []);
+
+  // Listen for tasks-updated event from CommandBar
+  useEffect(() => {
+    const handleTasksUpdated = (event) => {
+      // Update tasks state when event is received
+      setTasks(event.detail);
+    };
+
+    // Add event listener
+    window.addEventListener('tasks-updated', handleTasksUpdated);
+    
+    // Clean up event listener on component unmount
+    return () => {
+      window.removeEventListener('tasks-updated', handleTasksUpdated);
+    };
+  }, []);
 
   const [draftSchedule, setDraftSchedule] = useState(null);
 

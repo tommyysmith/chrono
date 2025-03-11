@@ -210,70 +210,67 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     // Set exiting flag to true before animation starts
     exitingRef.current = true;
     
-    // If forceClose is true, completely close the component
-    // Otherwise just reset to default state
-    if (forceClose) {
-      // Close the component with a smooth animation
-      setIsOpen(false);
-    } else {
-      // Just return to default state
-      setIsAddingEvent(false);
-      setIsAddingTask(false);
-    }
+    // Reset to default state rather than closing completely
+    setIsAddingEvent(false);
+    setIsAddingTask(false);
     
     // Reset all other states after animation completes
     const resetTimeout = setTimeout(() => {
-      if (!forceClose) {
-        // Don't reset these states if we're just returning to default
-        setTaskTitle('');
-        setTaskNotes('');
-        setSelectedTag(null);
-        setDraftTag(null);
-        setTagSearchText('');
-        setIsTagDropdownOpen(false);
-        setEventTitle('New Event');
-        setEventDescription('');
-        setEventStartTime('09:00');
-        setEventEndTime('10:00');
-        setIsAllDay(false);
-        setRepeatOption('none');
-        setEditingEventId(null);
-        setEventToEdit(null);
-        setRepeatSeriesId(null);
-        setIsRepeatDropdownOpen(false);
-        setShowColorPicker(false);
-        setEventToEdit(null);
-        setTaskToEdit(null);
-        setEditingTaskId(null);
-        setEditMode(null);
-        setScheduledDate(null);
-        setIsScheduleOpen(false);
-        setIsDatePickerOpen(false);
-        setShowRepeatEditModal(false);
-      }
+      // Reset these states regardless of forceClose
+      setTaskTitle('');
+      setTaskNotes('');
+      setSelectedTag(null);
+      setDraftTag(null);
+      setTagSearchText('');
+      setIsTagDropdownOpen(false);
+      setEventTitle('New Event');
+      setEventDescription('');
+      setEventStartTime('09:00');
+      setEventEndTime('10:00');
+      setIsAllDay(false);
+      setRepeatOption('none');
+      setEditingEventId(null);
+      setEventToEdit(null);
+      setRepeatSeriesId(null);
+      setIsRepeatDropdownOpen(false);
+      setShowColorPicker(false);
+      setEventToEdit(null);
+      setTaskToEdit(null);
+      setEditingTaskId(null);
+      setEditMode(null);
+      setScheduledDate(null);
+      setIsScheduleOpen(false);
       
-      // Reset exiting flag after state cleanup
       exitingRef.current = false;
-    }, 300); // Match this with animation duration
-    
+    }, 300); // Match this with your animation duration
+
     return () => clearTimeout(resetTimeout);
-  }, [editingEventId, eventTitle, onClose]);
+  }, [onClose, editingEventId, eventTitle]);
 
   const openForEdit = useCallback((event) => {
-    setIsOpen(false);
-    setIsAddingEvent(false);
-    setShowRepeatEditModal(false);
-    
+    // Set all event data first
     setEventToEdit(event);
     setEditingEventId(event.id);
+    setEventTitle(event.title || 'New Event');
+    setEventDescription(event.description || '');
+    setEventDate(format(event.start, 'yyyy-MM-dd'));
+    setEventStartTime(format(event.start, 'HH:mm'));
+    setEventEndTime(format(event.end, 'HH:mm'));
+    setIsAllDay(event.isAllDay || false);
+    setSelectedColor(event.color || '#3B82F6');
+    setRepeatOption(event.repeatOption || 'none');
     
+    // For repeat events, show the modal first
     if (event.seriesId || (event.repeat && event.repeat !== 'none')) {
       setShowRepeatEditModal(true);
-    } else {
-      setIsOpen(true);
+      // Ensure we're in edit mode but not visible yet
       setIsAddingEvent(true);
+      setIsOpen(true);
+    } else {
+      // For non-repeat events, go straight to edit mode
+      setIsAddingEvent(true);
+      setIsOpen(true);
     }
-    
   }, []);
 
   const initializeEventState = useCallback((startTime, endTime, eventId = null, skipAnimation = false) => {
@@ -373,64 +370,65 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const handleEditSeriesSelect = useCallback((editScope) => {
     if (!eventToEdit) return;
     
-    setShowRepeatEditModal(false);
+    console.log('%c[CommandBar] Edit series selection:', 'background: #17a2b8; color: white', editScope);
     
-    setTimeout(() => {
-      if (editScope === 'single') {
-        setRepeatOption('none');
-      }
+    // Just hide the modal and keep CommandBar open
+    setShowRepeatEditModal(false);
+    setEditMode(editScope);
+    
+    // If it's a single event edit, update repeat option
+    if (editScope === 'single') {
+      setRepeatOption('none');
+    }
+    
+    // Update the event immediately
+    if (editingEventId) {
+      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+
+      const updatedFields = {
+        id: editingEventId,
+        title: eventTitle.trim(),
+        description: eventDescription.trim(),
+        start: startDateTime,
+        end: endDateTime,
+        isAllDay,
+        color: selectedColor,
+        repeat: editScope === 'single' ? 'none' : (repeatOption || eventToEdit.repeat),
+        _editScope: editScope
+      };
       
-      setEditMode(editScope);
-      
-      setTimeout(() => {
-        setIsOpen(true);
-        setIsAddingEvent(true);
+      if (eventToEdit?.seriesId) {
+        updatedFields._originalSeriesId = eventToEdit.seriesId;
         
-        setTimeout(() => {
-          if (editingEventId) {
-            const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-            const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
-
-            const updatedFields = {
-              id: editingEventId,
-              title: eventTitle.trim(),
-              description: eventDescription.trim(),
-              start: startDateTime,
-              end: endDateTime,
-              isAllDay,
-              color: selectedColor,
-              repeat: repeatOption,
-              _editScope: editScope
-            };
-            
-            if (eventToEdit?.seriesId) {
-              updatedFields._originalSeriesId = eventToEdit.seriesId;
-              if (editScope === 'single') {
-                updatedFields.seriesId = null;
-                updatedFields.repeat = 'none';
-                updatedFields.isRepeat = false;
-                updatedFields._preserveSeriesEvents = true;
-              } else {
-                updatedFields.seriesId = eventToEdit.seriesId;
-              }
-            }
-            
-            const startDiff = startDateTime - eventToEdit.start;
-            const endDiff = endDateTime - eventToEdit.end;
-            
-            updatedFields._timeChange = {
-              startDiff,
-              endDiff
-            };
-            
-
-            onUpdateEvent(updatedFields);
+        if (editScope === 'single') {
+          updatedFields.seriesId = null;
+          updatedFields.repeat = 'none';
+          updatedFields.isRepeat = false;
+          updatedFields._preserveSeriesEvents = true;
+        } 
+        else if (editScope === 'future') {
+          // Keep the series ID for 'future' edits - the Calendar component will create a new series ID
+          updatedFields.seriesId = eventToEdit.seriesId;
+          // Check if repeat option has changed
+          if (repeatOption !== eventToEdit.repeat) {
+            updatedFields._repeatChanged = true;
           }
-        }, 50);
-      }, 50);
-    }, 50);
-  }, [eventToEdit, editingEventId, eventDate, eventStartTime, eventEndTime, eventTitle, 
-      eventDescription, isAllDay, selectedColor, repeatOption, onUpdateEvent, editMode]);
+        }
+        else if (editScope === 'all') {
+          updatedFields.seriesId = eventToEdit.seriesId;
+          // Check if repeat option has changed
+          if (repeatOption !== eventToEdit.repeat) {
+            updatedFields._repeatChanged = true;
+          }
+        }
+      }
+
+      console.log('%c[CommandBar] Initial update with scope:', 'background: #17a2b8; color: white', updatedFields);
+      onUpdateEvent(updatedFields);
+    }
+  }, [eventToEdit, editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, 
+      eventEndTime, isAllDay, selectedColor, repeatOption, onUpdateEvent]);
 
   const openForTaskEdit = useCallback((task) => {
     setIsOpen(true);
@@ -624,35 +622,60 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const updateEventLive = useCallback(() => {
     if (!editingEventId) return;
     
-    const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
-    
-    const updatedFields = {
-      id: editingEventId,
-      title: eventTitle.trim(),
-      description: eventDescription.trim(),
-      start: startDateTime,
-      end: endDateTime,
-      isAllDay,
-      color: selectedColor,
-      repeat: repeatOption
-    };
-    
-    if (eventToEdit) {
-      if (eventToEdit.seriesId || (eventToEdit.repeat && eventToEdit.repeat !== 'none')) {
-        updatedFields._editScope = editMode || 'single';
+    try {
+      const startDateTime = parse(`${eventDate} ${eventStartTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      const endDateTime = parse(`${eventDate} ${eventEndTime}`, 'yyyy-MM-dd HH:mm', new Date());
+      
+      console.log('%c[CommandBar] Updating with edit scope:', 'background: #28a745; color: white', editMode || 'single');
+      
+      const updatedFields = {
+        id: editingEventId,
+        title: eventTitle.trim(),
+        description: eventDescription.trim(),
+        start: startDateTime,
+        end: endDateTime,
+        isAllDay,
+        color: selectedColor,
+        repeat: repeatOption,
+        _editScope: editMode || 'single' // Always set edit scope
+      };
+      
+      // If this is a recurring event, add necessary metadata
+      if (eventToEdit && (eventToEdit.seriesId || (eventToEdit.repeat && eventToEdit.repeat !== 'none'))) {
+        // Store the original series ID
+        updatedFields._originalSeriesId = eventToEdit.seriesId;
         
         if (updatedFields._editScope === 'single') {
-          updatedFields._originalSeriesId = eventToEdit.seriesId;
+          // For single event edits, we'll detach from the series
           updatedFields.seriesId = null;
           updatedFields.repeat = 'none';
           updatedFields.isRepeat = false;
           updatedFields._preserveSeriesEvents = true;
+        } else {
+          // For 'future' or 'all' edits, keep the series ID
+          updatedFields.seriesId = eventToEdit.seriesId;
+          
+          // Check for time changes
+          if (eventToEdit.start && eventToEdit.end) {
+            const startDiff = startDateTime.getTime() - eventToEdit.start.getTime();
+            const endDiff = endDateTime.getTime() - eventToEdit.end.getTime();
+            if (startDiff !== 0 || endDiff !== 0) {
+              updatedFields._timeChange = true;
+            }
+          }
+          
+          // Check for repeat option changes
+          if (eventToEdit.repeat !== repeatOption) {
+            updatedFields._repeatChanged = true;
+          }
         }
       }
+      
+      console.log('%c[CommandBar] Sending update:', 'background: #28a745; color: white', updatedFields);
+      onUpdateEvent(updatedFields);
+    } catch (error) {
+      console.error('Error updating event:', error);
     }
-
-    onUpdateEvent(updatedFields);
   }, [editingEventId, eventTitle, eventDescription, eventDate, eventStartTime, eventEndTime, 
       isAllDay, selectedColor, repeatOption, eventToEdit, onUpdateEvent, editMode]);
 
@@ -709,6 +732,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     duration: 0.3
   };
 
+  const layoutKey = useMemo(() => 
+    `commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`,
+    [isAddingEvent, isAddingTask]
+  );
+
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
@@ -717,7 +745,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             key="commandBar-container"
             ref={containerRef}
             layout
-            layoutId={`commandBar-container-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+            layoutId={`commandBar-container-${layoutKey}`}
             initial={{ 
               opacity: 0,
               scale: 0.95,
@@ -744,7 +772,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             style={{
               backgroundColor: "var(--background-color, var(--bg-light, #ffffff))",
               willChange: "transform, opacity, background-color",
-              transformOrigin: "bottom"
+              transformOrigin: "bottom",
+              visibility: animationInProgressRef.current ? "hidden" : "visible"
+            }}
+            onLayoutAnimationStart={() => {
+              animationInProgressRef.current = true;
+              setTimeout(() => {
+                animationInProgressRef.current = false;
+              }, 50);
+            }}
+            onLayoutAnimationComplete={() => {
+              animationInProgressRef.current = false;
             }}
             transition={{
               type: "spring",
@@ -762,17 +800,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 duration: 0.3, 
                 type: "spring",
                 bounce: 0.2,
-                // Only use layout animations when not exiting
                 ease: exitingRef.current ? "linear" : "easeInOut"
               }
             }}
             className="bg-light-bg dark:bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
           >
-            <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}>
+            <LayoutGroup id={layoutKey}>
               <motion.div 
-                key={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                key={`commandBar-content-${layoutKey}`}
                 layout 
-                layoutId={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                layoutId={`commandBar-content-${layoutKey}`}
                 transition={consistentTransition}
                 className="flex items-center gap-4"
               >
@@ -1027,7 +1064,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                             label: tagSearchText,
                                             color: randomColor
                                           };
-                                          setTags(prevTags => [...prevTags, newTag]);
+                                          const updatedTags = [...tags, newTag];
+                                          setTags(updatedTags);
+                                          localStorage.setItem('tags', JSON.stringify(updatedTags));
+                                          window.dispatchEvent(new CustomEvent('tags-updated', { detail: updatedTags }));
                                           setSelectedTag(newTag);
                                           setTagSearchText(newTag.label);
                                           setIsTagDropdownOpen(false);
@@ -1066,6 +1106,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                             };
                                             const updatedTags = [...tags, newTag];
                                             setTags(updatedTags);
+                                            localStorage.setItem('tags', JSON.stringify(updatedTags));
+                                            window.dispatchEvent(new CustomEvent('tags-updated', { detail: updatedTags }));
                                             setDraftTag(newTag);
                                             setTagSearchText('');
                                             setIsTagDropdownOpen(false);
@@ -1136,6 +1178,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     };
                                     
                                     localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                                    window.dispatchEvent(new CustomEvent('tasks-updated', { detail: updatedTasks }));
 
                                   } catch (e) {
                                     console.error("Error updating localStorage:", e);
