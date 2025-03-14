@@ -5,12 +5,14 @@ import { format } from 'date-fns';
 
 const RepeatEditModal = ({ 
   isOpen, 
+  event,
   eventTitle, 
   onClose, 
   onEditConfirm,
   originalEvent,
   draggedEvent,
-  isEditOperation = false  // Flag to determine if this is a regular edit operation
+  isEditOperation = false,
+  commandBarRef
 }) => {
   const [editScope, setEditScope] = useState('single');
   const hasSubmitted = useRef(false);
@@ -35,17 +37,29 @@ const RepeatEditModal = ({
   
   // Handle the Continue editing button click
   const handleContinue = useCallback(() => {
-    // Prevent double-clicks and race conditions
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
     
-    // Store the current scope value and trigger edit confirmation
-    // Use queueMicrotask to ensure state updates happen in the correct order
-    const scope = editScope;
-    queueMicrotask(() => {
-      onEditConfirm(scope);
-    });
-  }, [editScope, onEditConfirm]);
+    // First call onEditConfirm to update the event with the selected scope
+    onEditConfirm(editScope);
+    
+    // Close the modal
+    onClose();
+    
+    // Then open the CommandBar with the updated event data
+    if (commandBarRef?.current && draggedEvent) {
+      // Use setTimeout to ensure state updates are processed
+      setTimeout(() => {
+        commandBarRef.current.openForEdit({
+          ...draggedEvent,
+          repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
+          seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
+          isRepeat: editScope !== 'single',
+          _editScope: editScope // Pass the edit scope to CommandBar
+        });
+      }, 50);
+    }
+  }, [editScope, onEditConfirm, onClose, commandBarRef, draggedEvent]);
 
   // Don't render anything if not open or if we don't have the events
   if (!isOpen || !originalEvent || !draggedEvent) return null;

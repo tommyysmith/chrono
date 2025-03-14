@@ -209,9 +209,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   const handleUpdateEvent = useCallback((eventData) => {
     console.log('%c[DEBUG] Handling event update', 'background: #222; color: #bada55', eventData);
-    console.log('%c[DEBUG] Edit scope from eventData', 'background: #222; color: #bada55', eventData._editScope);
-    console.log('%c[DEBUG] Event repeat property', 'background: #222; color: #bada55', eventData.repeat);
-    console.log('%c[DEBUG] Event seriesId', 'background: #222; color: #bada55', eventData.seriesId);
+    console.log('%c[DEBUG] Edit scope', 'background: #222; color: #bada55', eventData._editScope);
     
     // Create a clean copy of the event data without internal properties
     const cleanEventData = { ...eventData };
@@ -220,12 +218,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     const editScope = eventData._editScope;
     const originalSeriesId = eventData._originalSeriesId || eventData.seriesId;
     const repeatChanged = eventData._repeatChanged;
-    const timeChanged = eventData._timeChange;
     
     console.log('%c[DEBUG] Edit scope:', 'background: #222; color: #bada55', editScope);
     console.log('%c[DEBUG] Original series ID:', 'background: #222; color: #bada55', originalSeriesId);
     console.log('%c[DEBUG] Repeat changed:', 'background: #222; color: #bada55', repeatChanged);
-    console.log('%c[DEBUG] Time changed:', 'background: #222; color: #bada55', timeChanged);
     console.log('%c[DEBUG] Preserve series events flag:', 'background: #222; color: #bada55', eventData._preserveSeriesEvents);
     
     // Remove internal properties that shouldn't be stored
@@ -243,80 +239,80 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     setEvents(prev => {
       // Find the existing event to determine if it's part of a series
       const existingEvent = prev.find(e => e.id === eventData.id);
-      console.log('%c[DEBUG] Existing event:', 'background: #222; color: #bada55', existingEvent);
       
       // Track if this is the first update for this event
       const isFirstUpdate = !prev.some(e => e.id === eventData.id && e._lastUpdated);
       
       // If converting from repeat to non-repeat
       if (existingEvent?.seriesId && (!eventData.repeat || eventData.repeat === 'none')) {
-        console.log('%c[DEBUG] Converting from repeat to non-repeat', 'background: #222; color: #bada55');
+        console.log('%c[DEBUG] Converting from repeat to non-repeat', 'background: #222; color: #bada55', {
+          existingEvent,
+          seriesId: existingEvent.seriesId,
+          preserveSeriesEvents: eventData._preserveSeriesEvents
+        });
         
-        // If this is a one-off edit to a recurring event
-        if (editScope === 'single') {
-          console.log('%c[DEBUG] Single event edit for recurring event', 'background: #222; color: #bada55');
+        // This condition might be removing all series events!
+        // If preserve flag is set, only update this event and don't remove others
+        if (preserveSeriesEvents || eventData._editScope === 'single') {
+          console.log('%c[DEBUG] Preserving other events in series', 'background: #222; color: #bada55');
           
-          // For single edits, just update this event and preserve the series
-          const updatedEvent = {
-            ...cleanEventData,
-            id: existingEvent.id,
-            seriesId: null, // Detach from series
-            repeat: 'none',
-            isRepeat: false,
-            _lastUpdated: new Date().getTime()
-          };
-          
+          // Update only this event without affecting others
           const newEvents = prev.map(event => {
             if (event.id === existingEvent.id) {
-              // Return the updated event
-              return updatedEvent;
+              return {
+                ...eventData,
+                id: existingEvent.id,
+                seriesId: null,
+                repeat: 'none',
+                isRepeat: false
+              };
             }
-            // Keep all other events unchanged
             return event;
           });
           
-          // Count events in this series after update
-          const seriesEventsAfter = newEvents.filter(e => e.seriesId === originalSeriesId);
-          console.log('%c[DEBUG] Found events in series after update:', 'background: #222; color: #bada55', seriesEventsAfter.length);
-          console.log('%c[DEBUG] All events after update:', 'background: #222; color: #bada55', newEvents.length);
-          console.log('%c[DEBUG] Updated event:', 'background: #222; color: #bada55', updatedEvent);
+          console.log('%c[DEBUG] Events after preserve update:', 'background: #222; color: #bada55', 
+            newEvents.filter(e => e.seriesId === existingEvent.seriesId).length);
           
-          // Save and return the new events
+          localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
+          return newEvents;
+        } else {
+          // Original behavior - Keep only this event and remove the series
+          console.log('%c[DEBUG] Removing all events in series', 'background: #222; color: #bada55');
+          const otherEvents = prev.filter(e => e.seriesId !== existingEvent.seriesId);
+          const singleEvent = {
+            ...eventData,
+            id: existingEvent.id,
+            seriesId: null,
+            repeat: 'none',
+            isRepeat: false
+          };
+          const newEvents = [...otherEvents, singleEvent];
           localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
           return newEvents;
         }
-        // If editing this and all future events
-        else if (editScope === 'future') {
-          console.log('%c[DEBUG] Editing this and future events', 'background: #222; color: #bada55');
+      }
+      
+      // If updating a series event
+      if (existingEvent?.seriesId) {
+        console.log('%c[DEBUG] Updating a series event', 'background: #222; color: #ff9900');
+        console.log('%c[DEBUG] Applying edit scope:', 'background: #222; color: #ff9900', editScope, 'for event with seriesId:', existingEvent.seriesId);
+        
+        // If editing only this event, detach it from the series while preserving other events
+        if (editScope === 'single') {
+          const updatedEvent = {
+            ...cleanEventData,
+            id: existingEvent.id,
+            seriesId: null,  // Detach from series
+            repeat: 'none',  // No longer repeating
+            isRepeat: false,
+            _preserveSeriesEvents: true // Add flag to preserve other events
+          };
           
-          // Get the current event's date to determine which events are "future" events
-          const currentEventDate = new Date(existingEvent.start);
-          console.log('%c[DEBUG] Current event date:', 'background: #222; color: #bada55', currentEventDate);
+          // Simply update this event while keeping all others unchanged
+          const newEvents = prev.map(event => 
+            event.id === existingEvent.id ? updatedEvent : event
+          );
           
-          // Update the events accordingly
-          const newEvents = prev.map(event => {
-            // If this is the current event we're editing
-            if (event.id === existingEvent.id) {
-              return {
-                ...cleanEventData,
-                id: existingEvent.id,
-                seriesId: null, // Detach from series
-                repeat: 'none',
-                isRepeat: false,
-                _lastUpdated: new Date().getTime()
-              };
-            }
-            // If this is a future event in the same series
-            else if (event.seriesId === existingEvent.seriesId && new Date(event.start) >= currentEventDate) {
-              console.log('%c[DEBUG] Removing future event:', 'background: #222; color: #bada55', event.id);
-              // Remove future events
-              return null;
-            }
-            // Keep past events unchanged
-            return event;
-          }).filter(Boolean); // Remove null entries (deleted future events)
-          
-          console.log('%c[DEBUG] Events after future update:', 'background: #222; color: #bada55', newEvents.length);
           localStorage.setItem('calendarEvents', JSON.stringify(newEvents));
           return newEvents;
         }
@@ -339,7 +335,65 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           return newEvents;
         }
         
-        // For "all" scope (default), update all events in the series
+        // Handle future-only edits specifically
+        if (editScope === 'future') {
+          console.log('%c[DEBUG] Editing future events only', 'background: #222; color: #ff9900');
+          
+          // Get the current event's start time as the cutoff point
+          const cutoffDate = new Date(existingEvent.start);
+          
+          // Calculate time differences if provided
+          let startDiff = 0;
+          let endDiff = 0;
+          
+          if (eventData._timeChange) {
+            startDiff = eventData._timeChange.startDiff;
+            endDiff = eventData._timeChange.endDiff;
+          } else {
+            startDiff = eventData.start - existingEvent.start;
+            endDiff = eventData.end - existingEvent.end;
+          }
+          
+          // Update only this and future events
+          return prev.map(e => {
+            // If this event is part of the same series
+            if (e.seriesId === existingEvent.seriesId) {
+              // Only update events on or after the cutoff date
+              if (e.start >= cutoffDate) {
+                // If this is the specific event being edited
+                if (e.id === existingEvent.id) {
+                  return {
+                    ...cleanEventData,
+                    id: e.id,
+                    seriesId: existingEvent.seriesId,
+                    isRepeat: true,
+                    _lastUpdated: new Date().getTime() // Add timestamp to track updates
+                  };
+                }
+                
+                // For other future events, apply the same properties and time shift
+                const newStart = new Date(e.start.getTime() + startDiff);
+                const newEnd = new Date(e.end.getTime() + endDiff);
+                
+                return {
+                  ...e,
+                  title: eventData.title,
+                  description: eventData.description,
+                  color: eventData.color,
+                  isAllDay: eventData.isAllDay,
+                  repeat: eventData.repeat,
+                  start: newStart,
+                  end: newEnd,
+                  _lastUpdated: new Date().getTime()
+                };
+              }
+            }
+            // Keep all other events unchanged
+            return e;
+          });
+        }
+        
+        // Otherwise, update all events in the series normally
         // Get all events in the series
         const seriesEvents = prev.filter(e => e.seriesId === existingEvent.seriesId);
         
@@ -613,7 +667,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         isOpen: false,
         event: null,
         draggedEvent: null,
-        originalEvent: null
+        originalEvent: null,
+        isEditOperation: false
       });
       return;
     }
@@ -631,17 +686,18 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       
       if (editScope === 'single') {
         // Only update this specific event instance and detach it from the series
-        updatedEvents = prev.map(e => {
-          if (e.id === event.id) {
+        updatedEvents = prev.map(event => {
+          if (event.id === draggedEvent.id) {
             editTargetEvent = {
               ...draggedEvent,
               seriesId: null, // Remove from series
               repeat: 'none', // No longer repeating
-              isRepeat: false
+              isRepeat: false,
+              _preserveSeriesEvents: true // Add flag to preserve other events
             };
             return editTargetEvent;
           }
-          return e;
+          return event;
         });
       } 
       else if (editScope === 'future') {
@@ -650,7 +706,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           if (e.seriesId === event.seriesId && e.start >= originalEvent.start) {
             // For the dragged event itself, keep it as is without applying the shift again
             if (e.id === event.id) {
-              editTargetEvent = draggedEvent;
+              editTargetEvent = {
+                ...draggedEvent,
+                seriesId: event.seriesId,
+                repeat: event.repeat,
+                isRepeat: true
+              };
               return editTargetEvent;
             }
             
@@ -661,7 +722,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             return {
               ...e,
               start: newStart,
-              end: newEnd
+              end: newEnd,
+              seriesId: event.seriesId,
+              repeat: event.repeat,
+              isRepeat: true
             };
           }
           return e;
@@ -671,9 +735,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         // Update all events in the series
         updatedEvents = prev.map(e => {
           if (e.seriesId === event.seriesId) {
-            // For the dragged event itself, keep it as is without applying the shift again
+            // For the dragged event itself
             if (e.id === event.id) {
-              editTargetEvent = draggedEvent;
+              editTargetEvent = {
+                ...draggedEvent,
+                seriesId: event.seriesId,
+                repeat: event.repeat,
+                isRepeat: true
+              };
               return editTargetEvent;
             }
             
@@ -684,7 +753,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             return {
               ...e,
               start: newStart,
-              end: newEnd
+              end: newEnd,
+              seriesId: event.seriesId,
+              repeat: event.repeat,
+              isRepeat: true
             };
           }
           return e;
@@ -701,7 +773,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       queueMicrotask(() => {
         commandBarRef.current?.openForEdit({
           ...editTargetEvent,
-          repeatOption: editScope === 'single' ? 'none' : event.repeat
+          repeat: editScope === 'single' ? 'none' : event.repeat,
+          seriesId: editScope === 'single' ? null : event.seriesId,
+          isRepeat: editScope !== 'single'
         });
       });
     }
@@ -1466,11 +1540,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       const baseLeft = startDayIndex * (100 / 7);
       
       // Find all transitively overlapping events
-      const overlappingEventsInTime = findOverlappingGroup(event, overlappingEvents);
+      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
 
-      if (overlappingEventsInTime.length > 0) {
+      if (overlappingInTime.length > 0) {
         // Sort overlapping events by start time, then by duration
-        const sortedEvents = [event, ...overlappingEventsInTime].sort((a, b) => {
+        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
           const startDiff = a.start.getTime() - b.start.getTime();
           if (startDiff !== 0) return startDiff;
           
@@ -1484,7 +1558,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         });
 
         const eventIndex = sortedEvents.findIndex(e => e.id === event.id);
-        const totalEvents = overlappingEventsInTime.length + 1;
+        const totalEvents = overlappingInTime.length + 1;
         
         // Calculate width and offset
         const columnWidth = 100 / 7; // Width of one day column
@@ -1500,11 +1574,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       }
     } else {
       // Find all transitively overlapping events
-      const overlappingEventsInTime = findOverlappingGroup(event, overlappingEvents);
+      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
 
-      if (overlappingEventsInTime.length > 0) {
+      if (overlappingInTime.length > 0) {
         // Sort overlapping events by start time, then by duration
-        const sortedEvents = [event, ...overlappingEventsInTime].sort((a, b) => {
+        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
           const startDiff = a.start.getTime() - b.start.getTime();
           if (startDiff !== 0) return startDiff;
           
@@ -1518,7 +1592,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         });
 
         const eventIndex = sortedEvents.findIndex(e => e.id === event.id);
-        const totalEvents = overlappingEventsInTime.length + 1;
+        const totalEvents = overlappingInTime.length + 1;
         
         // Calculate width and offset for day view
         const eventWidth = 95 / totalEvents; // 95% of total width divided by number of events
@@ -1684,8 +1758,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         return (
           <motion.div
             key={`${event.id}-${index}`}
-            whileTap={{ scale: 0.95 }}
-            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${dragState.eventId === event.id ? 'bg-primary/30' : 'bg-primary/10'}`}
+
+            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer ${
+              event.isEditing || dragState.eventId === event.id ? 'bg-primary/30' : 'bg-primary/10'
+            } event-item`}
             style={getEventStyle(event, overlappingEvents)}
             onMouseDown={(e) => {
               if (e.button === 0) { // Left click only
@@ -2817,15 +2893,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           originalEvent={repeatEditModalState.originalEvent}
           draggedEvent={repeatEditModalState.draggedEvent}
           isEditOperation={repeatEditModalState.isEditOperation}
+          commandBarRef={commandBarRef}
         />
         <CommandBar
           ref={commandBarRef}
-          onCreateEvent={handleCreateEvent}
-          onUpdateEvent={handleUpdateEvent}
-          onPrevious={handlePrevious}
-          onNext={handleNext}
-          onToday={handleToday}
-          onClose={handleCommandBarClose}
+          onCreateEvent={useCallback(handleCreateEvent, [])}
+          onUpdateEvent={useCallback(handleUpdateEvent, [])}
+          onPrevious={useCallback(handlePrevious, [onDateSelect, currentDate, viewType])}
+          onNext={useCallback(handleNext, [onDateSelect, currentDate, viewType])}
+          onToday={useCallback(handleToday, [onDateSelect])}
+          onClose={useCallback(handleCommandBarClose, [])}
           onCreateTask={useCallback((task) => {
             // Store the task in localStorage
             const savedTasks = localStorage.getItem('tasks') || '{}';
