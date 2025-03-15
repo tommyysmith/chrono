@@ -22,6 +22,12 @@ import {
   handleToday,
 } from "@/hooks/navHandlers.js";
 
+// Replace the commented import with an actual import
+import {
+  getTimeFromMousePosition,
+  getColumnFromMousePosition,
+} from "@/utils/positionUtils";
+
 const ViewType = {
   DAY: "day",
   WEEK: "week",
@@ -95,45 +101,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     lastClickPosition: null,
     clickCount: 0,
   });
-
-  const getTimeFromMousePosition = (mouseY, containerRect) => {
-    const hourHeight = 64;
-    const scrollTop = window.scrollY || document.documentElement.scrollTop;
-    const relativeY = mouseY + scrollTop - containerRect.top;
-    const totalHours = relativeY / hourHeight;
-
-    // Calculate minutes, allowing selection past 23:00
-    const totalMinutes = Math.min(totalHours * 60, 24 * 60);
-    const roundedMinutes = Math.round(totalMinutes / 15) * 15;
-
-    const hours = Math.floor(roundedMinutes / 60);
-    const minutes = roundedMinutes % 60;
-
-    // Create date at the exact time
-    const time = new Date(currentDate);
-    if (hours === 24) {
-      // Handle midnight case
-      const nextDay = new Date(currentDate);
-      nextDay.setDate(nextDay.getDate() + 1);
-      nextDay.setHours(0, 0, 0, 0);
-      return nextDay;
-    } else {
-      time.setHours(hours);
-      time.setMinutes(minutes);
-      time.setSeconds(0);
-      time.setMilliseconds(0);
-      return time;
-    }
-  };
-
-  const getColumnFromMousePosition = (mouseX, containerRect) => {
-    const timeColumnWidth = 60;
-    const availableWidth = containerRect.width - timeColumnWidth;
-    const dayWidth = availableWidth / 7;
-    const relativeX = mouseX - containerRect.left - timeColumnWidth;
-    const column = Math.floor(relativeX / dayWidth);
-    return Math.max(0, Math.min(6, column));
-  };
 
   const handleCreateEvent = useCallback((eventData) => {
     const newEvent = {
@@ -501,7 +468,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
         const currentTime = getTimeFromMousePosition(
           moveEvent.clientY,
-          containerRect
+          containerRect,
+          currentDate
         );
 
         // Adjust current time based on column in week view
@@ -518,11 +486,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           adjustedCurrentTime.setHours(
             getTimeFromMousePosition(
               moveEvent.clientY,
-              containerRect
+              containerRect,
+              currentDate
             ).getHours(),
             getTimeFromMousePosition(
               moveEvent.clientY,
-              containerRect
+              containerRect,
+              currentDate
             ).getMinutes(),
             0,
             0
@@ -600,12 +570,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       window.addEventListener("mousemove", handleMove);
       window.addEventListener("mouseup", handleUp);
     },
-    [
-      selectedDate,
-      viewType,
-      getTimeFromMousePosition,
-      getColumnFromMousePosition,
-    ]
+    [selectedDate, viewType, currentDate]
   );
 
   const handleRepeatEditConfirm = useCallback(
@@ -846,7 +811,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       const containerRect = container.getBoundingClientRect();
 
       // Get initial time and day
-      let initialTime = getTimeFromMousePosition(e.clientY, containerRect);
+      let initialTime = getTimeFromMousePosition(
+        e.clientY,
+        containerRect,
+        currentDate
+      );
       if (viewType === ViewType.WEEK) {
         const weekStart = new Date(selectedDate);
         weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -859,8 +828,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         // Transfer the time to the correct day
         initialTime = new Date(dayDate);
         initialTime.setHours(
-          getTimeFromMousePosition(e.clientY, containerRect).getHours(),
-          getTimeFromMousePosition(e.clientY, containerRect).getMinutes(),
+          getTimeFromMousePosition(
+            e.clientY,
+            containerRect,
+            currentDate
+          ).getHours(),
+          getTimeFromMousePosition(
+            e.clientY,
+            containerRect,
+            currentDate
+          ).getMinutes(),
           0,
           0
         );
@@ -937,11 +914,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           adjustedCurrentTime.setHours(
             getTimeFromMousePosition(
               moveEvent.clientY,
-              containerRect
+              containerRect,
+              currentDate
             ).getHours(),
             getTimeFromMousePosition(
               moveEvent.clientY,
-              containerRect
+              containerRect,
+              currentDate
             ).getMinutes(),
             0,
             0
@@ -1046,13 +1025,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       window.addEventListener("mousemove", handleMove);
       window.addEventListener("mouseup", handleUp);
     },
-    [
-      selectedDate,
-      viewType,
-      getTimeFromMousePosition,
-      getColumnFromMousePosition,
-      colors,
-    ]
+    [selectedDate, viewType, currentDate, colors, contextMenu.show]
   );
 
   const handleEventContextMenu = useCallback((e, eventId) => {
@@ -2136,6 +2109,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               selectedDate={selectedDate}
               events={events}
               dragState={dragState}
+              setPendingEventCell={setPendingEventCell}
               pendingEventCell={pendingEventCell}
               handleEventClick={handleEventClick}
               handleEventContextMenu={handleEventContextMenu}
@@ -2156,6 +2130,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               events={events}
               dragState={dragState}
               pendingEventCell={pendingEventCell}
+              setPendingEventCell={setPendingEventCell}
               handleEventClick={handleEventClick}
               handleEventContextMenu={handleEventContextMenu}
               handleCellDragStart={handleCellDragStart}

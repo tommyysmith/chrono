@@ -9,6 +9,7 @@ export default function Week({
   selectedDate,
   dragState,
   pendingEventCell,
+  setPendingEventCell,
   handleCellDragStart,
   handleCellClick,
   handleDragOver,

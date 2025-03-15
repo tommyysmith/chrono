@@ -9,6 +9,7 @@ export default function Day({
   events,
   dragState,
   pendingEventCell,
+  setPendingEventCell,
   handleEventClick,
   handleEventContextMenu,
   handleCellDragStart,
