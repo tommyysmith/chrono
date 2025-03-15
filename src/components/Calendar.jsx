@@ -1,32 +1,40 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { format, addDays, subDays, isSameDay, addMonths } from "date-fns";
+import { format, addDays, isSameDay } from "date-fns";
+import { motion } from "framer-motion";
+import Sidebar from "./Sidebar";
 import DeleteEventModal from "./DeleteEventModal";
 import RepeatEditModal from "./RepeatEditModal";
-import { motion } from "framer-motion";
 import CommandBar from "./CommandBar";
 import GoToDateCommand from "./GoToDateCommand";
 import Day from "./views/Day";
 import Week from "./views/Week";
 import Month from "./views/Month";
-import { generateRepeatedEvents, generateEventId } from "../utils/eventUtils";
-import { TAG_COLORS } from "../constants/colors";
-import { Repeat } from "@/assets/icons/Repeat";
-import { Trash } from "@/assets/icons/Trash";
-import { Copy } from "@/assets/icons/Copy";
-import Sidebar from "./Sidebar";
+import {
+  generateRepeatedEvents,
+  generateEventId,
+  findOverlappingGroup,
+  getEventStyle,
+} from "../utils/eventUtils";
 import {
   handlePrevious,
   handleNext,
   handleToday,
 } from "@/hooks/navHandlers.js";
 
-// Replace the commented import with an actual import
 import {
   getTimeFromMousePosition,
   getColumnFromMousePosition,
-} from "@/utils/positionUtils";
+} from "@/utils/positionUtils.js";
+import { TAG_COLORS } from "../constants/colors";
+import { Repeat } from "@/assets/icons/Repeat";
+import { Trash } from "@/assets/icons/Trash";
+import { Copy } from "@/assets/icons/Copy";
+
+// import {
+
+// }
 
 const ViewType = {
   DAY: "day",
@@ -1384,164 +1392,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
   }, []);
 
-  const eventsOverlap = (event1, event2) => {
-    if (!isSameDay(event1.start, event2.start)) return false;
-    const start1 = event1.start.getTime();
-    const end1 = event1.end.getTime();
-    const start2 = event2.start.getTime();
-    const end2 = event2.end.getTime();
-    return start1 < end2 && end1 > start2;
-  };
-
-  const findOverlappingGroup = (targetEvent, allEvents) => {
-    // First, find all events that overlap with any other event
-    const overlapGraph = new Map();
-    const allEventsList = [targetEvent, ...allEvents];
-
-    // Build a graph of overlapping events
-    allEventsList.forEach((event1) => {
-      if (!overlapGraph.has(event1.id)) {
-        overlapGraph.set(event1.id, new Set());
-      }
-      allEventsList.forEach((event2) => {
-        if (event1.id !== event2.id && eventsOverlap(event1, event2)) {
-          overlapGraph.get(event1.id).add(event2.id);
-        }
-      });
-    });
-
-    // Find all connected events using DFS
-    const visited = new Set();
-    const group = new Set();
-
-    const dfs = (eventId) => {
-      if (visited.has(eventId)) return;
-      visited.add(eventId);
-
-      // Add all events that are connected through overlaps
-      overlapGraph.get(eventId).forEach((connectedId) => {
-        const connectedEvent = allEventsList.find((e) => e.id === connectedId);
-        if (connectedEvent && connectedEvent.id !== targetEvent.id) {
-          group.add(connectedEvent);
-        }
-        dfs(connectedId);
-      });
-    };
-
-    dfs(targetEvent.id);
-    return Array.from(group);
-  };
-
-  const getEventStyle = (event, overlappingEvents = []) => {
-    const style = {
-      position: "absolute",
-      backgroundColor: event.color ? `${event.color}20` : "#80808020",
-      zIndex: 10,
-      borderRadius: "4px",
-      margin: "0",
-      padding: "2px 4px",
-      fontSize: "12px",
-      overflow: "hidden",
-      cursor: "pointer",
-    };
-
-    // Add lower opacity for past events
-    const now = new Date("2025-01-27T14:44:40Z");
-    if (event.end < now) {
-      style.opacity = 0.5;
-    }
-
-    if (event.isAllDay) {
-      style.top = "8px"; // Fixed position at the top
-    } else {
-      if (event.start) {
-        const minutes = event.start.getHours() * 60 + event.start.getMinutes();
-        style.top = `${minutes * (64 / 60)}px`;
-      }
-
-      if (event.end) {
-        const startMinutes =
-          event.start.getHours() * 60 + event.start.getMinutes();
-        const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
-        style.height = `${(endMinutes - startMinutes) * (64 / 60) - 2}px`;
-      }
-    }
-
-    if (viewType === ViewType.WEEK) {
-      const startDayIndex = event.start.getDay();
-      const baseLeft = startDayIndex * (100 / 7);
-
-      // Find all transitively overlapping events
-      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
-
-      if (overlappingInTime.length > 0) {
-        // Sort overlapping events by start time, then by duration
-        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
-          const startDiff = a.start.getTime() - b.start.getTime();
-          if (startDiff !== 0) return startDiff;
-
-          // If start times are equal, sort by duration (longer events first)
-          const aDuration = a.end.getTime() - a.start.getTime();
-          const bDuration = b.end.getTime() - b.start.getTime();
-          if (aDuration !== bDuration) return bDuration - aDuration;
-
-          // If durations are equal, sort by ID for consistency
-          return (a.id || "").localeCompare(b.id || "");
-        });
-
-        const eventIndex = sortedEvents.findIndex((e) => e.id === event.id);
-        const totalEvents = overlappingInTime.length + 1;
-
-        // Calculate width and offset
-        const columnWidth = 100 / 7; // Width of one day column
-        const eventWidth = (columnWidth * 0.95) / totalEvents; // 95% of column width divided by number of events
-        const offset = eventWidth * eventIndex + columnWidth * 0.025; // Add 2.5% padding on each side
-
-        style.width = `calc(${eventWidth}% - 8px)`;
-        style.left = `${baseLeft + offset}%`;
-      } else {
-        // No overlapping events, use full column width with small margins
-        style.width = `calc(${100 / 7}% - 20px)`;
-        style.left = `calc(${baseLeft}% + 2px)`;
-      }
-    } else {
-      // Find all transitively overlapping events
-      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
-
-      if (overlappingInTime.length > 0) {
-        // Sort overlapping events by start time, then by duration
-        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
-          const startDiff = a.start.getTime() - b.start.getTime();
-          if (startDiff !== 0) return startDiff;
-
-          // If start times are equal, sort by duration (longer events first)
-          const aDuration = a.end.getTime() - a.start.getTime();
-          const bDuration = b.end.getTime() - b.start.getTime();
-          if (aDuration !== bDuration) return bDuration - aDuration;
-
-          // If durations are equal, sort by ID for consistency
-          return (a.id || "").localeCompare(b.id || "");
-        });
-
-        const eventIndex = sortedEvents.findIndex((e) => e.id === event.id);
-        const totalEvents = overlappingInTime.length + 1;
-
-        // Calculate width and offset for day view
-        const eventWidth = 95 / totalEvents; // 95% of total width divided by number of events
-        const offset = eventWidth * eventIndex + 2.5; // Add 2.5% padding on each side
-
-        style.width = `calc(${eventWidth}% - 16px)`;
-        style.left = `${offset}%`;
-      } else {
-        // No overlapping events in day view, use 95% width with centered position
-        style.width = "calc(95% - 16px)";
-        style.left = "2.5%";
-      }
-    }
-
-    return style;
-  };
-
   const renderEvents = useCallback(() => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
@@ -1568,7 +1418,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 ? "bg-primary/30"
                 : "bg-primary/10"
             } event-item`}
-            style={getEventStyle(event, overlappingEvents)}
+            style={getEventStyle(event, overlappingEvents, viewType)}
             onMouseDown={(e) => {
               if (e.button === 0) {
                 // Left click only
@@ -1639,7 +1489,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
               dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
             }`}
-            style={getEventStyle(event, overlappingEvents)}
+            style={getEventStyle(event, overlappingEvents, viewType)}
             onMouseDown={(e) => {
               if (e.button === 0) {
                 // Left click only
