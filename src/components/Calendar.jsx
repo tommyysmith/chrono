@@ -16,6 +16,11 @@ import { Repeat } from "@/assets/icons/Repeat";
 import { Trash } from "@/assets/icons/Trash";
 import { Copy } from "@/assets/icons/Copy";
 import Sidebar from "./Sidebar";
+import {
+  handlePrevious,
+  handleNext,
+  handleToday,
+} from "@/hooks/navHandlers.js";
 
 const ViewType = {
   DAY: "day",
@@ -90,38 +95,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     lastClickPosition: null,
     clickCount: 0,
   });
-
-  // Navigation handlers
-  const handlePrevious = () => {
-    if (viewType === ViewType.WEEK) {
-      onDateSelect?.(subDays(currentDate, 7));
-    } else if (viewType === ViewType.DAY) {
-      onDateSelect?.(subDays(currentDate, 1));
-    } else if (viewType === ViewType.MONTH) {
-      onDateSelect?.(addMonths(currentDate, -1));
-    }
-  };
-
-  const handleNext = () => {
-    if (viewType === ViewType.WEEK) {
-      onDateSelect?.(addDays(currentDate, 7));
-    } else if (viewType === ViewType.DAY) {
-      onDateSelect?.(addDays(currentDate, 1));
-    } else if (viewType === ViewType.MONTH) {
-      onDateSelect?.(addMonths(currentDate, 1));
-    }
-  };
-
-  const handleToday = () => {
-    const today = new Date();
-    // Create date using local time
-    const todayDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate()
-    );
-    onDateSelect?.(todayDate);
-  };
 
   const getTimeFromMousePosition = (mouseY, containerRect) => {
     const hourHeight = 64;
@@ -2268,17 +2241,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           ref={commandBarRef}
           onCreateEvent={useCallback(handleCreateEvent, [])}
           onUpdateEvent={useCallback(handleUpdateEvent, [])}
-          onPrevious={useCallback(handlePrevious, [
-            onDateSelect,
-            currentDate,
-            viewType,
-          ])}
-          onNext={useCallback(handleNext, [
-            onDateSelect,
-            currentDate,
-            viewType,
-          ])}
-          onToday={useCallback(handleToday, [onDateSelect])}
+          onPrevious={useCallback(
+            () => handlePrevious(viewType, currentDate, onDateSelect),
+            [viewType, currentDate, onDateSelect]
+          )}
+          onNext={useCallback(
+            () => handleNext(viewType, currentDate, onDateSelect),
+            [viewType, currentDate, onDateSelect]
+          )}
+          onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
           onClose={useCallback(handleCommandBarClose, [])}
           onCreateTask={useCallback((task) => {
             // Store the task in localStorage
