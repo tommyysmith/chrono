@@ -47,7 +47,9 @@ const RepeatEditModal = ({
         ...draggedEvent,
         repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
         seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
-        isRepeat: editScope !== 'single'
+        isRepeat: editScope !== 'single',
+        _editScope: editScope, // Add internal property for scope
+        _seriesUpdate: editScope === 'all' // Add internal property for series update
       }
     });
     
@@ -84,9 +86,9 @@ const RepeatEditModal = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[13px] shadow-md w-full max-w-md p-6">
-        <h2 className="text-md text-light-text dark:text-dark-text mb-6">
-          Edit repeat event "{eventTitle || 'Untitled'}"
+      <div className="relative bg-dark-bg-lighter dark:bg-dark-bg border border-dark-border dark:border-dark-border rounded-[9px] shadow-md w-full max-w-md p-6">
+        <h2 className="text-md text-dark-text dark:text-dark-text mb-6">
+          Edit repeat event <span className="!font-semibold">"{eventTitle || 'Untitled'}"</span>
         </h2>
 
         <div className="space-y-4 mb-6">
@@ -101,7 +103,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
                 ${editScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -112,7 +114,7 @@ const RepeatEditModal = ({
                 <div className="w-2 h-2 rounded-full bg-white" />
               )}
             </div>
-            <span className="text-light-text dark:text-dark-text text-sm">
+            <span className="text-dark-text dark:text-dark-text text-sm">
               This event
             </span>
           </label>
@@ -128,7 +130,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
                 ${editScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -139,7 +141,7 @@ const RepeatEditModal = ({
                 <div className="w-2 h-2 rounded-full bg-white" />
               )}
             </div>
-            <span className="text-light-text dark:text-dark-text text-sm">
+            <span className="text-dark-text dark:text-dark-text text-sm">
               This and following events
             </span>
           </label>
@@ -155,7 +157,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
                 ${editScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -166,7 +168,7 @@ const RepeatEditModal = ({
                 <div className="w-2 h-2 rounded-full bg-white" />
               )}
             </div>
-            <span className="text-light-text dark:text-dark-text text-sm">
+            <span className="text-dark-text dark:text-dark-text text-sm">
               All events
             </span>
           </label>
@@ -191,7 +193,7 @@ const RepeatEditModal = ({
           <button
             type="button"
             onClick={handleDiscard}
-            className="px-4 py-2 text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text hover:font-medium dark:hover:text-dark-text rounded-[9px]"
+            className="px-4 py-2 text-dark-text/50 text-sm dark:text-dark-text/50 hover:text-dark-text hover:font-medium dark:hover:text-dark-text rounded-[9px]"
           >
             Discard change
           </button>

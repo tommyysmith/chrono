@@ -16,7 +16,7 @@ import 'react-day-picker/dist/style.css';
 const dayPickerStyles = {
   day_today: "!bg-primary !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
   day: "!h-7 !w-7 !p-0 !font-normal !text-light-text dark:!text-dark-text [&:not(.rdp-day_today)]:hover:!bg-black/10 [&:not(.rdp-day_today)]:dark:hover:!bg-white/5 !rounded-[5px]",
-  day_selected: "!bg-black/5 hover:!bg-black/5 !font-bold dark:!bg-dark-bg-lighter dark:hover:!bg-dark-bg-lighter !text-dark-text !rounded-[5px] !border !border-light-border dark:!border-dark-border !h-7 !w-7",
+  day_selected: "!bg-dark-bg-lighter dark:bg-dark-bg !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text hover:bg-primary rounded-[5px]",
 };
 
 const EventItem = memo(({ event }) => {

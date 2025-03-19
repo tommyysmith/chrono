@@ -24,6 +24,11 @@ import { useDragAndDrop } from "@/hooks/useDragAndDrop.js";
 import { useEventRendering } from "@/hooks/useEventRendering.js";
 import { useModalManagement } from "@/hooks/useModalManagement.js";
 import { useTaskManagement } from "@/hooks/useTaskManagement.js";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import {
   getTimeFromMousePosition,
@@ -168,62 +173,58 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </div>
           <div className="flex items-center justify-center gap-1">
             <div className="relative">
-              <div
-                className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
-                onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-              >
-                <span className="text-xs px-0.5  font-medium text-light-text dark:text-dark-text">
-                  {viewType === ViewType.DAY
-                    ? "Day"
-                    : viewType === ViewType.WEEK
-                    ? "Week"
-                    : "Month"}
-                </span>
-                <svg
-                  className={`w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform ${
-                    isViewDropdownOpen ? "rotate-180" : ""
-                  }`}
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <path
-                    d="M19 9l-7 7-7-7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-
-              {isViewDropdownOpen && (
-                <div
-                  ref={viewDropdownRef}
-                  className="absolute flex flex-col gap-1 top-full right-0 mt-1 bg-dark-bg-lighter p-1 dark:bg-dark-bg border border-light-border dark:border-dark-border text-xs rounded-[9px] shadow-lg py-1 min-w-[120px] z-50"
-                >
-                  {Object.values(ViewType).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => {
-                        setViewType(type);
-                        setIsViewDropdownOpen(false);
-                      }}
-                      className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
-                        viewType === type
-                          ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
-                          : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
-                      }`}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <div
+                    className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
+                  >
+                    <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
+                      {viewType === ViewType.DAY
+                        ? "Day"
+                        : viewType === ViewType.WEEK
+                        ? "Week"
+                        : "Month"}
+                    </span>
+                    <svg
+                      className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform"
+                      viewBox="0 0 24 24"
+                      fill="none"
                     >
-                      <span>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
-                      </span>
-                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
-                        {type.charAt(0).toUpperCase()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      <path
+                        d="M19 9l-7 7-7-7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+                  <div className="flex flex-col gap-1">
+                    {Object.values(ViewType).map((type) => (
+                      <button
+                        key={type}
+                        onClick={() => {
+                          setViewType(type);
+                        }}
+                        className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
+                          viewType === type
+                            ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
+                            : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
+                        }`}
+                      >
+                        <span>
+                          {type.charAt(0).toUpperCase() + type.slice(1)}
+                        </span>
+                        <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
+                          {type.charAt(0).toUpperCase()}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
         </div>

@@ -246,6 +246,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
     setOriginalEventState(event);
     setEventState(eventData);
+    setSelectedColor(event.color || '#808080'); // Add this line to sync the selectedColor state
     setIsAddingEvent(true);
     setHasChanges(false);
     // Set preview event
@@ -279,7 +280,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       allDay: eventState.isAllDay,
       repeat: eventState.repeat,
       seriesId: eventState.seriesId,
-      color: eventState.color
+      color: eventState.color,
+      _editScope: originalEventState?._editScope, // Pass through the edit scope
+      _seriesUpdate: originalEventState?._seriesUpdate // Pass through the series update flag
     };
 
     if (originalEventState?.id) {
@@ -418,6 +421,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setIsAddingTask(false);
     setHasChanges(false);
   }, []);
+
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
@@ -687,7 +692,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   <div className="absolute w-0 h-0 overflow-hidden" />
                                 </PopoverTrigger>
                                 <PopoverContent 
-                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border shadow-lg"
+                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border shadow-lg"
                                   align="start"
                                 >
                                   <div
@@ -906,34 +911,52 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     {/* Title Section with Color */}
                     <div 
                     className="flex px-4 py-4 flex-row border-b border-light-border dark:border-dark-border">
+                      <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
+                        <PopoverTrigger asChild>
+                          <motion.div 
+                            
+                            className="w-4 h-4 mt-1.5 rounded-md cursor-pointer hover:ring-1 hover:ring-offset-2 hover:ring-offset-light-border hover:dark:ring-offset-white/30 hover:ring-border-light-border dark:hover:ring-border-dark-border transition-all"
+                            style={{ backgroundColor: selectedColor }}
+                          />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto rounded-[9px] bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border p-3">
+                          <div className="grid grid-cols-5 gap-2">
+                            {TAG_COLORS.map((color) => (
+                              <motion.div
+                              whileHover={{ scale: 1.02 }}
+                                key={color}
+                                className="w-5 h-5 rounded-[5px] cursor-pointer hover:ring-1 hover:ring-offset-1 hover:ring-light-border dark:hover:ring-dark-border transition-all"
+                                style={{ backgroundColor: color }}
+                                onClick={() => {
+                                  handleEventChange('color', color);
+                                  setSelectedColor(color);
+                                  setColorPickerOpen(false);
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                       <div 
-                      className="w-4 h-4 mt-1.5 rounded-md cursor-pointer hover:ring-2 hover:ring-offset-2 hover:ring-light-border dark:hover:ring-dark-border transition-all"
-                      style={{ backgroundColor: selectedColor }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowColorPicker(!showColorPicker);
-                      }}
-                    />
-                    <div 
-                      className="flex flex-col gap-1 px-4"
-                    >
-                      {/* Title Input */}
-                      <input
-                        ref={titleInputRef}
-                        type="text"
-                        placeholder="Event title"
-                        value={eventState.title}
-                        onChange={(e) => handleEventChange('title', e.target.value)}
-                        className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Add description"
-                        value={eventState.description}
-                        onChange={(e) => handleEventChange('description', e.target.value)}
-                        className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
-                      />
-                    </div>
+                        className="flex flex-col gap-1 px-4"
+                      >
+                        {/* Title Input */}
+                        <input
+                          ref={titleInputRef}
+                          type="text"
+                          placeholder="Event title"
+                          value={eventState.title}
+                          onChange={(e) => handleEventChange('title', e.target.value)}
+                          className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Add description"
+                          value={eventState.description}
+                          onChange={(e) => handleEventChange('description', e.target.value)}
+                          className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
+                        />
+                      </div>
                     </div>
 
                     {/* Time and Date Group - No Divider Between */}
