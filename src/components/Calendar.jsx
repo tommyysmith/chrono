@@ -69,7 +69,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDeleteModalClose,
     handleRepeatEditConfirm,
     handleRepeatEditDiscard,
-  } = useModalManagement(setEvents);
+  } = useModalManagement(setEvents, commandBarRef);
 
   const {
     setClickState,
@@ -78,7 +78,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleCellClick,
     handleEventClick,
     handleCommandBarClose,
-  } = useCalendarInteractions(commandBarRef);
+  } = useCalendarInteractions(commandBarRef, setRepeatEditModalState);
 
   const {
     contextMenu,
@@ -108,6 +108,28 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     colors,
   });
 
+  const eventStyleGetter = useCallback((event, start, end, isSelected) => {
+    const style = {
+      backgroundColor: event.color || '#808080',
+      borderRadius: '4px',
+      opacity: 1,
+      color: '#fff',
+      border: 'none',
+      display: 'block'
+    };
+
+    // Add preview styling
+    if (event._isPreview) {
+      style.border = '2px dashed #fff';
+      style.opacity = 0.8;
+      style.boxShadow = '0 0 8px rgba(0,0,0,0.2)';
+    }
+
+    return {
+      style
+    };
+  }, []);
+
   const { renderEvents, renderAllDayEvents } = useEventRendering(
     events,
     selectedDate,
@@ -116,7 +138,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDragStart,
     handleEventClick,
     handleEventContextMenu,
-    handleResizeStart
+    handleResizeStart,
+    eventStyleGetter
   );
 
   const { handleCreateTask, handleUpdateTask } = useTaskManagement();
@@ -438,54 +461,56 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         {/* Add header with z-index to ensure it's clickable */}
         <div className="z-10 relative">{renderHeader()}</div>
         {/* Calendar views */}
-        <div className="flex-1 overflow-auto">
-          {viewType === ViewType.WEEK && (
-            <Week
-              selectedDate={selectedDate}
-              events={events}
-              dragState={dragState}
-              setPendingEventCell={setPendingEventCell}
-              pendingEventCell={pendingEventCell}
-              handleEventClick={handleEventClick}
-              handleEventContextMenu={handleEventContextMenu}
-              handleCellDragStart={handleCellDragStart}
-              handleCellClick={handleCellClick}
-              handleDragOver={handleDragOver}
-              handleDrop={handleDrop}
-              getTimeFromMousePosition={getTimeFromMousePosition}
-              getColumnFromMousePosition={getColumnFromMousePosition}
-              renderEvents={renderEvents}
-              renderAllDayEvents={renderAllDayEvents}
-              timeGridRef={timeGridRef}
-            />
-          )}
-          {viewType === ViewType.DAY && (
-            <Day
-              selectedDate={selectedDate}
-              events={events}
-              dragState={dragState}
-              pendingEventCell={pendingEventCell}
-              setPendingEventCell={setPendingEventCell}
-              handleEventClick={handleEventClick}
-              handleEventContextMenu={handleEventContextMenu}
-              handleCellDragStart={handleCellDragStart}
-              handleCellClick={handleCellClick}
-              handleDragOver={handleDragOver}
-              handleDrop={handleDrop}
-              getTimeFromMousePosition={getTimeFromMousePosition}
-              getColumnFromMousePosition={getColumnFromMousePosition}
-              renderEvents={renderEvents}
-              timeGridRef={timeGridRef}
-            />
-          )}
-          {viewType === ViewType.MONTH && (
-            <Month
-              selectedDate={selectedDate}
-              events={events}
-              handleEventClick={handleEventClick}
-              handleEventContextMenu={handleEventContextMenu}
-            />
-          )}
+        <div className="flex-1 overflow-hidden flex flex-col relative">
+          <div className="absolute inset-0 flex flex-col">
+            {viewType === ViewType.WEEK && (
+              <Week
+                selectedDate={selectedDate}
+                events={events}
+                dragState={dragState}
+                setPendingEventCell={setPendingEventCell}
+                pendingEventCell={pendingEventCell}
+                handleEventClick={handleEventClick}
+                handleEventContextMenu={handleEventContextMenu}
+                handleCellDragStart={handleCellDragStart}
+                handleCellClick={handleCellClick}
+                handleDragOver={handleDragOver}
+                handleDrop={handleDrop}
+                getTimeFromMousePosition={getTimeFromMousePosition}
+                getColumnFromMousePosition={getColumnFromMousePosition}
+                renderEvents={renderEvents}
+                renderAllDayEvents={renderAllDayEvents}
+                timeGridRef={timeGridRef}
+              />
+            )}
+            {viewType === ViewType.DAY && (
+              <Day
+                selectedDate={selectedDate}
+                events={events}
+                dragState={dragState}
+                pendingEventCell={pendingEventCell}
+                setPendingEventCell={setPendingEventCell}
+                handleEventClick={handleEventClick}
+                handleEventContextMenu={handleEventContextMenu}
+                handleCellDragStart={handleCellDragStart}
+                handleCellClick={handleCellClick}
+                handleDragOver={handleDragOver}
+                handleDrop={handleDrop}
+                getTimeFromMousePosition={getTimeFromMousePosition}
+                getColumnFromMousePosition={getColumnFromMousePosition}
+                renderEvents={renderEvents}
+                timeGridRef={timeGridRef}
+              />
+            )}
+            {viewType === ViewType.MONTH && (
+              <Month
+                selectedDate={selectedDate}
+                events={events}
+                handleEventClick={handleEventClick}
+                handleEventContextMenu={handleEventContextMenu}
+              />
+            )}
+          </div>
         </div>
         {/* Context menu */}
         {contextMenu.show && (

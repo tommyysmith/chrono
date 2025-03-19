@@ -24,9 +24,9 @@ export default function Week({
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
   return (
-    <div className="flex-1 overflow-hidden flex flex-col">
-      {/* Headers */}
-      <div className="flex-none">
+    <div className="flex-1 flex flex-col h-full">
+      {/* Fixed Headers */}
+      <div className="flex-none bg-light-bg-light dark:bg-dark-bg-light z-10">
         {/* Days header */}
         <div className="grid grid-cols-[60px_1fr]">
           {/* Time column header */}
@@ -36,15 +36,6 @@ export default function Week({
 
           {/* Main grid area */}
           <div className="grid grid-cols-7">
-            {/* Background grid lines */}
-            <div className="absolute inset-0">
-              <div className="absolute inset-0 grid grid-cols-7">
-                {Array.from({ length: 7 }).map((_, i) => (
-                  <div key={i} className=" h-full relative" />
-                ))}
-              </div>
-            </div>
-
             {/* Days */}
             {Array.from({ length: 7 }).map((_, i) => {
               const date = addDays(weekStart, i);
@@ -82,7 +73,7 @@ export default function Week({
       {/* Time grid */}
       <div
         ref={timeGridRef}
-        className="flex-1 overflow-y-auto scrollbar-hide relative"
+        className="flex-1 overflow-y-scroll scrollbar-hide relative"
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}

@@ -40,26 +40,20 @@ const RepeatEditModal = ({
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
     
-    // First call onEditConfirm to update the event with the selected scope
-    onEditConfirm(editScope);
+    // Call onEditConfirm with the selected scope and event data
+    onEditConfirm({
+      scope: editScope,
+      event: {
+        ...draggedEvent,
+        repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
+        seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
+        isRepeat: editScope !== 'single'
+      }
+    });
     
     // Close the modal
     onClose();
-    
-    // Then open the CommandBar with the updated event data
-    if (commandBarRef?.current && draggedEvent) {
-      // Use setTimeout to ensure state updates are processed
-      setTimeout(() => {
-        commandBarRef.current.openForEdit({
-          ...draggedEvent,
-          repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
-          seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
-          isRepeat: editScope !== 'single',
-          _editScope: editScope // Pass the edit scope to CommandBar
-        });
-      }, 50);
-    }
-  }, [editScope, onEditConfirm, onClose, commandBarRef, draggedEvent]);
+  }, [editScope, draggedEvent, onEditConfirm, onClose]);
 
   // Don't render anything if not open or if we don't have the events
   if (!isOpen || !originalEvent || !draggedEvent) return null;

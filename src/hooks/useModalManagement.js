@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export function useModalManagement(setEvents) {
+export function useModalManagement(setEvents, commandBarRef) {
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
     event: null,
@@ -60,10 +60,8 @@ export function useModalManagement(setEvents) {
   }, []);
 
   const handleRepeatEditConfirm = useCallback(
-    (editScope) => {
-      const { event, draggedEvent, originalEvent } = repeatEditModalState;
-
-      if (!event || !draggedEvent || !originalEvent) {
+    ({ scope, event }) => {
+      if (!event) {
         setRepeatEditModalState({
           isOpen: false,
           event: null,
@@ -74,95 +72,17 @@ export function useModalManagement(setEvents) {
         return;
       }
 
-      // Calculate the time difference for the drag
-      const startDiff =
-        draggedEvent.start.getTime() - originalEvent.start.getTime();
-      const endDiff = draggedEvent.end.getTime() - originalEvent.end.getTime();
-
-      // Store the target event outside of setEvents to avoid closure issues
-      let editTargetEvent = null;
-
-      // Update events based on the selected scope
-      setEvents((prev) => {
-        let updatedEvents = [...prev];
-
-        if (editScope === "single") {
-          // Only update this specific event instance and detach it from the series
-          updatedEvents = prev.map((event) => {
-            if (event.id === draggedEvent.id) {
-              editTargetEvent = {
-                ...draggedEvent,
-                seriesId: null, // Remove from series
-                repeat: "none", // No longer repeating
-                isRepeat: false,
-                _preserveSeriesEvents: true, // Add flag to preserve other events
-              };
-              return editTargetEvent;
-            }
-            return event;
+      // Open the CommandBar for editing with the event data
+      if (commandBarRef?.current) {
+        setTimeout(() => {
+          commandBarRef.current.openForEdit({
+            ...event,
+            _editScope: scope,
+            _preserveSeriesEvents: true,
+            _originalSeriesId: event.seriesId
           });
-        } else if (editScope === "future") {
-          // Update this event and all future events in the series
-          updatedEvents = prev.map((e) => {
-            if (
-              e.seriesId === event.seriesId &&
-              e.start >= originalEvent.start
-            ) {
-              // For the dragged event itself, keep it as is without applying the shift again
-              if (e.id === event.id) {
-                editTargetEvent = {
-                  ...draggedEvent,
-                  seriesId: event.seriesId,
-                  repeat: event.repeat,
-                  isRepeat: true,
-                };
-                return editTargetEvent;
-              }
-
-              // For other events in the series, apply the time shift
-              const newStart = new Date(e.start.getTime() + startDiff);
-              const newEnd = new Date(e.end.getTime() + endDiff);
-
-              return {
-                ...e,
-                start: newStart,
-                end: newEnd,
-              };
-            }
-            return e;
-          });
-        } else {
-          // Update all events in the series
-          updatedEvents = prev.map((e) => {
-            if (e.seriesId === event.seriesId) {
-              // For the dragged event itself, keep it as is without applying the shift again
-              if (e.id === event.id) {
-                editTargetEvent = {
-                  ...draggedEvent,
-                  seriesId: event.seriesId,
-                  repeat: event.repeat,
-                  isRepeat: true,
-                };
-                return editTargetEvent;
-              }
-
-              // For other events in the series, apply the time shift
-              const newStart = new Date(e.start.getTime() + startDiff);
-              const newEnd = new Date(e.end.getTime() + endDiff);
-
-              return {
-                ...e,
-                start: newStart,
-                end: newEnd,
-              };
-            }
-            return e;
-          });
-        }
-
-        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
-        return updatedEvents;
-      });
+        }, 10);
+      }
 
       // Close the modal
       setRepeatEditModalState({
@@ -173,7 +93,7 @@ export function useModalManagement(setEvents) {
         isEditOperation: false,
       });
     },
-    [repeatEditModalState, setEvents]
+    [commandBarRef]
   );
 
   const handleRepeatEditDiscard = useCallback(() => {

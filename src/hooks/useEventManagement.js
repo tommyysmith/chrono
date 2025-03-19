@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { generateRepeatedEvents, generateEventId } from "../utils/eventUtils";
 
 export function useEventManagement(commandBarRef) {
   const [events, setEvents] = useState([]);
+  const [editingEventId, setEditingEventId] = useState(null);
 
   // Load events from localStorage when component mounts
   useEffect(() => {
@@ -19,9 +20,15 @@ export function useEventManagement(commandBarRef) {
 
   const handleCreateEvent = useCallback(
     (eventData) => {
+      // Ensure we have valid start/end times
+      const start = eventData.start instanceof Date ? eventData.start : new Date(eventData.start);
+      const end = eventData.end instanceof Date ? eventData.end : new Date(eventData.end);
+      
       const newEvent = {
         ...eventData,
         id: generateEventId(),
+        start,
+        end,
         seriesId: null,
       };
 
@@ -47,228 +54,152 @@ export function useEventManagement(commandBarRef) {
 
     // Store important metadata before we remove it
     const editScope = eventData._editScope;
+    const preserveSeriesEvents = eventData._preserveSeriesEvents;
+    const timeChange = eventData._timeChange;
+    const originalSeriesId = eventData._originalSeriesId;
+    const repeatChanged = eventData._repeatChanged;
+    const isSeriesUpdate = eventData._seriesUpdate;
 
     // Remove internal properties that shouldn't be stored
-    const preserveSeriesEvents = eventData._preserveSeriesEvents;
     delete cleanEventData._editScope;
     delete cleanEventData._repeatChanged;
     delete cleanEventData._timeChange;
     delete cleanEventData._originalSeriesId;
     delete cleanEventData._preserveSeriesEvents;
+    delete cleanEventData._seriesUpdate;
+
+    // Ensure we have valid start/end times
+    cleanEventData.start = cleanEventData.start instanceof Date ? cleanEventData.start : new Date(cleanEventData.start);
+    cleanEventData.end = cleanEventData.end instanceof Date ? cleanEventData.end : new Date(cleanEventData.end);
+
+    setEditingEventId(null);
 
     setEvents((prev) => {
-      // Find the existing event to determine if it's part of a series
       const existingEvent = prev.find((e) => e.id === eventData.id);
+      if (!existingEvent) return prev;
+      
+      // Determine if we're dealing with a repeat event
+      const isRepeatEvent = existingEvent.seriesId || originalSeriesId;
+      const seriesId = originalSeriesId || existingEvent?.seriesId;
+      const startDiff = timeChange?.startDiff || cleanEventData.start.getTime() - existingEvent.start.getTime();
+      const endDiff = timeChange?.endDiff || cleanEventData.end.getTime() - existingEvent.end.getTime();
+      const hasRepeatChanged = existingEvent.repeat !== cleanEventData.repeat;
 
-      // If converting from repeat to non-repeat
-      if (
-        existingEvent?.seriesId &&
-        (!eventData.repeat || eventData.repeat === "none")
-      ) {
-        // This condition might be removing all series events!
-        // If preserve flag is set, only update this event and don't remove others
-        if (preserveSeriesEvents || eventData._editScope === "single") {
-          // Update only this event without affecting others
-          const newEvents = prev.map((event) => {
-            if (event.id === existingEvent.id) {
-              return {
-                ...eventData,
-                id: existingEvent.id,
-                seriesId: null,
-                repeat: "none",
-                isRepeat: false,
-              };
-            }
-            return event;
-          });
-
-          localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
-          return newEvents;
-        } else {
-          // Original behavior - Keep only this event and remove the series
-          const otherEvents = prev.filter(
-            (e) => e.seriesId !== existingEvent.seriesId
-          );
-          const singleEvent = {
-            ...eventData,
-            id: existingEvent.id,
-            seriesId: null,
-            repeat: "none",
-            isRepeat: false,
-          };
-          const newEvents = [...otherEvents, singleEvent];
-          localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
-          return newEvents;
-        }
-      }
-
-      // If updating a series event
-      if (existingEvent?.seriesId) {
-        // If editing only this event, detach it from the series while preserving other events
-        if (editScope === "single") {
-          const updatedEvent = {
-            ...cleanEventData,
-            id: existingEvent.id,
-            seriesId: null, // Detach from series
-            repeat: "none", // No longer repeating
-            isRepeat: false,
-            _preserveSeriesEvents: true, // Add flag to preserve other events
-          };
-
-          // Simply update this event while keeping all others unchanged
-          const newEvents = prev.map((event) =>
-            event.id === existingEvent.id ? updatedEvent : event
-          );
-
-          localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
-          return newEvents;
-        }
-
-        // If the repeat option changed (indicated by _repeatChanged flag)
-        // or if the event is changing from one repeat type to another
-        if (
-          eventData._repeatChanged ||
-          (existingEvent.repeat !== eventData.repeat &&
-            eventData.repeat !== "none")
-        ) {
-          // Remove all events in the current series
-          const otherEvents = prev.filter(
-            (e) => e.seriesId !== existingEvent.seriesId
-          );
-
-          // Generate a new series with the updated repeat option
-          const repeatedEvents = generateRepeatedEvents(
-            {
-              ...eventData,
-              id: existingEvent.id, // Keep the original ID for the first event
-            },
-            eventData.repeat
-          );
-
-          const newEvents = [...otherEvents, ...repeatedEvents];
-          localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
-          return newEvents;
-        }
-
-        // Handle future-only edits specifically
-        if (editScope === "future") {
-          // Get the current event's start time as the cutoff point
-          const cutoffDate = new Date(existingEvent.start);
-
-          // Calculate time differences if provided
-          let startDiff = 0;
-          let endDiff = 0;
-
-          if (eventData._timeChange) {
-            startDiff = eventData._timeChange.startDiff;
-            endDiff = eventData._timeChange.endDiff;
-          } else {
-            startDiff = eventData.start - existingEvent.start;
-            endDiff = eventData.end - existingEvent.end;
-          }
-
-          // Update only this and future events
-          return prev.map((e) => {
-            // If this event is part of the same series
-            if (e.seriesId === existingEvent.seriesId) {
-              // Only update events on or after the cutoff date
-              if (e.start >= cutoffDate) {
-                // If this is the specific event being edited
-                if (e.id === existingEvent.id) {
-                  return {
-                    ...cleanEventData,
-                    id: e.id,
-                    seriesId: existingEvent.seriesId,
-                    isRepeat: true,
-                    _lastUpdated: new Date().getTime(), // Add timestamp to track updates
-                  };
-                }
-
-                // For other future events, apply the same properties and time shift
-                const newStart = new Date(e.start.getTime() + startDiff);
-                const newEnd = new Date(e.end.getTime() + endDiff);
-
-                return {
-                  ...e,
-                  title: eventData.title,
-                  description: eventData.description,
-                  color: eventData.color,
-                  isAllDay: eventData.isAllDay,
-                  repeat: eventData.repeat,
-                  start: newStart,
-                  end: newEnd,
-                  _lastUpdated: new Date().getTime(),
-                };
-              }
-            }
-            // Keep all other events unchanged
-            return e;
-          });
-        }
-
-        // Calculate the time difference if start/end times changed
-        const startDiff = eventData.start - existingEvent.start;
-        const endDiff = eventData.end - existingEvent.end;
-        const timeChanged = startDiff !== 0 || endDiff !== 0;
-
-        return prev.map((event) => {
-          if (event.seriesId === existingEvent.seriesId) {
-            const updatedEvent = {
-              ...event,
-              title: eventData.title,
-              description: eventData.description,
-              color: eventData.color,
-              isAllDay: eventData.isAllDay,
-              repeat: eventData.repeat,
+      // For single event edits, just detach from the series
+      if (editScope === 'single') {
+        const updatedEvents = prev.map((event) => {
+          if (event.id === existingEvent.id) {
+            return {
+              ...cleanEventData,
+              id: existingEvent.id,
+              seriesId: null,
+              repeat: "none",
+              isRepeat: false
             };
-
-            // If time changed, adjust all events in the series by the same amount
-            if (timeChanged) {
-              updatedEvent.start = new Date(event.start.getTime() + startDiff);
-              updatedEvent.end = new Date(event.end.getTime() + endDiff);
-            }
-
-            return updatedEvent;
           }
           return event;
         });
+        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+        return updatedEvents;
       }
 
-      // If converting a single event to a repeat series
-      if (
-        !existingEvent?.seriesId &&
-        eventData.repeat &&
-        eventData.repeat !== "none"
-      ) {
+      // If editing a repeat event with the "all" scope
+      if (isRepeatEvent && editScope === 'all') {
+        // First, remove all events in the series
+        const nonSeriesEvents = prev.filter(e => e.seriesId !== seriesId);
+        
+        // If the repeat option changed or this is a series-wide update, regenerate the series
+        if (hasRepeatChanged || isSeriesUpdate) {
+          // Generate new series events with the updated repeat pattern
+          const repeatedEvents = generateRepeatedEvents(
+            {
+              ...cleanEventData,
+              id: existingEvent.id,
+              seriesId: seriesId || generateEventId(),
+              isRepeat: true,
+              repeat: cleanEventData.repeat
+            },
+            cleanEventData.repeat
+          );
+          
+          // Ensure unique IDs for all events except the first one
+          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
+            ...event,
+            id: index === 0 ? existingEvent.id : generateEventId()
+          }));
+          
+          const updatedEvents = [...nonSeriesEvents, ...uniqueRepeatedEvents];
+          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+          return updatedEvents;
+        }
+        
+        // For modifications without changing the repeat pattern,
+        // update all events in the series while preserving their IDs
+        const updatedEvents = prev.map(event => {
+          if (event.seriesId === seriesId) {
+            return {
+              ...event,
+              title: cleanEventData.title,
+              description: cleanEventData.description,
+              color: cleanEventData.color,
+              isAllDay: cleanEventData.isAllDay,
+              repeat: cleanEventData.repeat,
+              start: new Date(event.start.getTime() + startDiff),
+              end: new Date(event.end.getTime() + endDiff)
+            };
+          }
+          return event;
+        });
+        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+        return updatedEvents;
+      }
+
+      // If editing future events in a series
+      if (isRepeatEvent && editScope === 'future') {
+        const cutoffDate = new Date(existingEvent.start);
+        
+        const updatedEvents = prev.map((e) => {
+          if (e.seriesId === seriesId && e.start >= cutoffDate) {
+            return {
+              ...e,
+              title: cleanEventData.title,
+              description: cleanEventData.description,
+              color: cleanEventData.color,
+              isAllDay: cleanEventData.isAllDay,
+              repeat: cleanEventData.repeat,
+              start: new Date(e.start.getTime() + startDiff),
+              end: new Date(e.end.getTime() + endDiff)
+            };
+          }
+          return e;
+        });
+        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+        return updatedEvents;
+      }
+
+      // If converting a non-repeat event to a repeat series
+      if (!isRepeatEvent && cleanEventData.repeat && cleanEventData.repeat !== "none") {
         // Remove the original event since it will be included in the series
         const otherEvents = prev.filter((e) => e.id !== eventData.id);
-
-        // Generate the series events, keeping the original event's ID for the first one
+        
+        // Generate new series
         const repeatedEvents = generateRepeatedEvents(
           {
-            ...eventData,
-            id: eventData.id, // This ensures the first event keeps its ID
+            ...cleanEventData,
+            id: eventData.id
           },
-          eventData.repeat
+          cleanEventData.repeat
         );
-
-        const newEvents = [...otherEvents, ...repeatedEvents];
-        localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
-        return newEvents;
+        
+        const updatedEvents = [...otherEvents, ...repeatedEvents];
+        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+        return updatedEvents;
       }
 
-      // Otherwise, update a single event
-      const updatedEvents = prev.map((event) => {
-        if (event.id === eventData.id) {
-          return {
-            ...event,
-            ...cleanEventData,
-            id: event.id, // Preserve the original ID
-            _lastUpdated: new Date().getTime(), // Add timestamp to track updates
-          };
-        }
-        return event;
-      });
+      // For non-repeat events or other cases, just update normally
+      const updatedEvents = prev.map((event) =>
+        event.id === eventData.id ? { ...cleanEventData, id: event.id } : event
+      );
       localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
       return updatedEvents;
     });
@@ -299,5 +230,7 @@ export function useEventManagement(commandBarRef) {
     handleCreateEvent,
     handleUpdateEvent,
     handleDeleteEvent,
+    editingEventId,
+    setEditingEventId
   };
 }

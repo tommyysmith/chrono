@@ -18,6 +18,18 @@
   }
 }
 
+/* Hide scrollbar for elements with scrollbar-hide class */
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Chrome, Safari and Opera */
+  }
+}
+
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
   width: 8px;
@@ -43,4 +55,3 @@ input[type="checkbox"] {
   @apply rounded border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg;
   @apply focus:ring-light-accent dark:focus:ring-dark-accent;
 }
-

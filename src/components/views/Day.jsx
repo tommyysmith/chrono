@@ -22,9 +22,9 @@ export default function Day({
   timeGridRef,
 }) {
   return (
-    <div className="flex-1 overflow-hidden flex flex-col">
-      {/* Headers */}
-      <div className="flex-none">
+    <div className="flex-1 flex flex-col h-full">
+      {/* Fixed Headers */}
+      <div className="flex-none bg-light-bg-light dark:bg-dark-bg-light z-10">
         {/* Empty header space */}
         <div className="grid grid-cols-[60px_1fr]">
           <div className="flex flex-col pointer-events-none">
@@ -95,7 +95,7 @@ export default function Day({
       {/* Time grid */}
       <div
         ref={timeGridRef}
-        className="flex-1 overflow-y-auto scrollbar-hide relative"
+        className="flex-1 overflow-y-scroll scrollbar-hide relative"
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}

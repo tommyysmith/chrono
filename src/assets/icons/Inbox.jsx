@@ -2,20 +2,22 @@ export const Inbox = ({ className, ...props }) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="16"
-      height="16"
+      width="24"
+      height="24"
       fill="none"
-      viewBox="0 0 16 16"
+      viewBox="0 0 24 24"
       className={className}
-
       {...props}
     >
-      <path
-        fill="currentColor"
-        d="M1.333 4.667a3.333 3.333 0 0 1 3.334-3.334h6.666a3.333 3.333 0 0 1 3.334 3.334v6.666a3.333 3.333 0 0 1-3.334 3.334H4.667a3.333 3.333 0 0 1-3.334-3.334zm3.334-2a2 2 0 0 0-2 2v5.906c1.259-.772 3.016-.442 3.847.944h3.01c.814-1.382 2.56-1.715 3.81-.95v-5.9a2 2 0 0 0-2-2z"
-        clipRule="evenodd"
-        fillRule="evenodd"
-      />
+      <g fill="currentColor">
+        <path
+          d="M2 8a6 6 0 0 1 6-6h8a6 6 0 0 1 6 6v8a6 6 0 0 1-6 6H8a6 6 0 0 1-6-6zm2 2v6a4 4 0 0 0 4 4h8a4 4 0 0 0 4-4v-6a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4"
+          clipRule="evenodd"
+          fillRule="evenodd"
+        />
+        <rect width="10" height="2" x="7" y="9.5" rx="1" />
+        <rect width="7" height="2" x="7" y="14.5" rx="1" />
+      </g>
     </svg>
   );
 };

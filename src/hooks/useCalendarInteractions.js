@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 
-export function useCalendarInteractions(commandBarRef) {
+export function useCalendarInteractions(commandBarRef, setRepeatEditModalState) {
   const [clickState, setClickState] = useState({
     lastClickTime: 0,
     lastClickPosition: null,
@@ -47,12 +47,24 @@ export function useCalendarInteractions(commandBarRef) {
 
   const handleEventClick = useCallback(
     (event) => {
-      // Open command bar for editing the clicked event
-      if (commandBarRef.current) {
-        commandBarRef.current.openForEdit(event);
+      // Check if this is a repeat event that needs to show the RepeatEditModal first
+      if ((event.seriesId || (event.repeat && event.repeat !== 'none')) && setRepeatEditModalState) {
+        // For repeat events, show the RepeatEditModal first
+        setRepeatEditModalState({
+          isOpen: true,
+          event: event,
+          draggedEvent: event, // Use the event as both original and dragged
+          originalEvent: event,
+          isEditOperation: true, // Flag as an edit operation, not a drag/resize
+        });
+      } else {
+        // For non-repeat events, open the CommandBar directly
+        if (commandBarRef.current) {
+          commandBarRef.current.openForEdit(event);
+        }
       }
     },
-    [commandBarRef]
+    [commandBarRef, setRepeatEditModalState]
   );
 
   const handleCommandBarClose = useCallback(() => {

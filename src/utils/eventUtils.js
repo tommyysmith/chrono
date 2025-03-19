@@ -173,6 +173,7 @@ export const generateRepeatedEvents = (baseEvent, repeatType, count = 52) => {
   }
 
   // Create the base repeat event with the series ID
+  // Use the existing seriesId if provided, otherwise generate a new one
   const seriesId = baseEvent.seriesId || generateSeriesId();
   const events = [];
 
@@ -180,7 +181,7 @@ export const generateRepeatedEvents = (baseEvent, repeatType, count = 52) => {
   const firstEvent = {
     ...baseEvent,
     id: baseEvent.id || generateEventId(), // Keep original ID if it exists
-    seriesId,
+    seriesId, // Always use the seriesId (existing or generated)
     repeat: repeatType,
     isRepeat: true,
   };
