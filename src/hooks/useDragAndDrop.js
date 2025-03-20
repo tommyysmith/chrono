@@ -15,6 +15,7 @@ export function useDragAndDrop({
   setRepeatEditModalState,
   setClickState,
   colors,
+  handleUpdateEvent,
 }) {
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -164,6 +165,9 @@ export function useDragAndDrop({
               originalEvent: dragStartOriginalEvent,
               isEditOperation: false,
             });
+          } else if (finalDraggedEvent) {
+            // For non-repeated events, update directly
+            handleUpdateEvent(finalDraggedEvent);
           }
         }
 
@@ -197,6 +201,7 @@ export function useDragAndDrop({
       setEvents,
       setRepeatEditModalState,
       setClickState,
+      handleUpdateEvent,
     ]
   );
 

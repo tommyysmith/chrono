@@ -122,6 +122,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     return [];
   });
 
+  const dispatchTagsUpdated = useCallback((updatedTags) => {
+    const event = new CustomEvent('tags-updated', { detail: updatedTags });
+    window.dispatchEvent(event);
+  }, []);
+
+  const dispatchTasksUpdated = useCallback((updatedTasks) => {
+    const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+    window.dispatchEvent(event);
+  }, []);
+
   // Don't automatically save tags to localStorage
   // Tags will be saved when a task is created or updated
   const [taskNotes, setTaskNotes] = useState('');
@@ -224,6 +234,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setIsAddingTask(false);
     setTaskTitle("");
     setSelectedTag(null);
+    setPendingNewTag(null);
+    setDraftTag(null);
+    setTagSearchText('');
     setIsTagDropdownOpen(false);
     setIsRepeatDropdownOpen(false); // Reset repeat dropdown state
     
@@ -301,7 +314,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskTitle(task.title || '');
     setTaskNotes(task.notes || '');
     setSelectedTag(task.tag || null);
+    setDraftTag(task.tag || null);
+    setTagSearchText(''); // Don't set the tag search text when editing
     setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
+    setEditingTaskId(task.id);
+    setTaskToEdit(task);
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -394,6 +411,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [isRepeatDropdownOpen]);
 
+  const [pendingNewTag, setPendingNewTag] = useState(null);
+
   const handleRepeatOptionSelect = useCallback((option) => {
     handleEventChange('repeat', option);
     setIsRepeatDropdownOpen(false);
@@ -423,6 +442,139 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, []);
 
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
+
+  const handleSaveTask = useCallback(() => {
+    if (!taskTitle.trim()) return;
+
+    // If there's a pending new tag, save it first
+    let finalTag = selectedTag;
+    if (pendingNewTag) {
+      const updatedTags = [...tags, pendingNewTag];
+      setTags(updatedTags);
+      dispatchTagsUpdated(updatedTags);
+      finalTag = pendingNewTag;
+    }
+
+    try {
+      // Get current tasks from localStorage and ensure basic structure
+      const currentTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+      const updatedTasks = {
+        all: Array.isArray(currentTasks.all) ? [...currentTasks.all] : [],
+        today: Array.isArray(currentTasks.today) ? [...currentTasks.today] : [],
+        ...currentTasks
+      };
+      
+      if (editingTaskId) {
+        // Update existing task
+        const updatedTask = {
+          ...taskToEdit,
+          id: editingTaskId,
+          title: taskTitle.trim(),
+          notes: taskNotes.trim(),
+          tag: finalTag,
+          scheduledDate: scheduledDate?.toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        // Update in all tasks
+        updatedTasks.all = updatedTasks.all.map(t => 
+          t.id === editingTaskId ? updatedTask : t
+        );
+
+        // Handle today's tasks
+        if (scheduledDate && isToday(scheduledDate)) {
+          const taskInToday = updatedTasks.today.some(t => t.id === editingTaskId);
+          if (taskInToday) {
+            updatedTasks.today = updatedTasks.today.map(t => 
+              t.id === editingTaskId ? updatedTask : t
+            );
+          } else {
+            updatedTasks.today.push(updatedTask);
+          }
+        } else {
+          updatedTasks.today = updatedTasks.today.filter(t => 
+            t.id !== editingTaskId
+          );
+        }
+
+        // Handle tag collections
+        const tagCollections = Object.keys(updatedTasks).filter(key => 
+          key !== 'all' && key !== 'today'
+        );
+
+        // Remove task from all tag collections first
+        tagCollections.forEach(key => {
+          if (!Array.isArray(updatedTasks[key])) {
+            updatedTasks[key] = [];
+          }
+          updatedTasks[key] = updatedTasks[key].filter(t => t.id !== editingTaskId);
+        });
+
+        // Add task to new tag collection if it exists
+        if (finalTag) {
+          const tagId = finalTag.id;
+          if (!Array.isArray(updatedTasks[tagId])) {
+            updatedTasks[tagId] = [];
+          }
+          // Only add if not already in the collection
+          if (!updatedTasks[tagId].some(t => t.id === editingTaskId)) {
+            updatedTasks[tagId].push(updatedTask);
+          }
+        }
+
+        onUpdateTask(updatedTask);
+      } else {
+        // Create new task
+        const newTask = {
+          id: Date.now().toString(),
+          title: taskTitle.trim(),
+          notes: taskNotes.trim(),
+          tag: finalTag,
+          scheduledDate: scheduledDate?.toISOString(),
+          completed: false,
+          createdAt: new Date().toISOString()
+        };
+
+        // Add to all tasks
+        updatedTasks.all.push(newTask);
+
+        // Add to today if scheduled for today
+        if (scheduledDate && isToday(scheduledDate)) {
+          updatedTasks.today.push(newTask);
+        }
+
+        // Add to tag collection if it exists
+        if (finalTag) {
+          if (!Array.isArray(updatedTasks[finalTag.id])) {
+            updatedTasks[finalTag.id] = [];
+          }
+          updatedTasks[finalTag.id].push(newTask);
+        }
+
+        onCreateTask(newTask);
+      }
+
+      // Save to localStorage and dispatch event
+      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+      dispatchTasksUpdated(updatedTasks);
+
+      // Reset form and states
+      setTaskTitle('');
+      setTaskNotes('');
+      setSelectedTag(null);
+      setPendingNewTag(null);
+      setDraftTag(null);
+      setTagSearchText('');
+      setScheduledDate(null);
+      setIsAddingTask(false);
+      setEditingTaskId(null);
+      setTaskToEdit(null);
+      handleClose();
+    } catch (error) {
+      console.error('Error saving task:', error);
+      // You might want to show an error message to the user here
+    }
+  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
@@ -607,7 +759,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <div className="flex-1">
                           <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
                             <div className="flex flex-col">
-                              <div className="flex px-4 py-3 flex-row border-b border-light-border dark:border-dark-border">
+                              <div className="flex px-4 py-4 flex-row border-b border-light-border dark:border-dark-border">
                                 <Task
                                   className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
                                 />
@@ -633,24 +785,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   />
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 px-4 py-4">
-                                <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                                <span>{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
-                                <button
-                                  className="text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
-                                  onClick={() => {
-                                    setIsScheduleOpen(true);
-                                  }}
-                                >
-                                  Edit
-                                </button>
-                              </div>
+                              <div className="flex items-center gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border cursor-pointer">
                               <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                                 <PopoverTrigger asChild>
-                                  <div className="absolute w-0 h-0 overflow-hidden" />
+                                <div className="flex items-center w-full gap-2">
+                                  <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                  <span className="text-light-text/50 dark:text-dark-text/50 text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
+                                </div>
                                 </PopoverTrigger>
                                 <PopoverContent 
-                                  className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg backdrop-blur-lg shadow-lg border border-light-border dark:border-dark-border" 
+                                  className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
                                   align="start"
                                 >
                                   <div 
@@ -687,12 +831,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   </div>
                                 </PopoverContent>
                               </Popover>
-                              <Popover sideOffset={4} open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
+                              <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                                 <PopoverTrigger asChild>
                                   <div className="absolute w-0 h-0 overflow-hidden" />
                                 </PopoverTrigger>
                                 <PopoverContent 
-                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border shadow-lg"
+                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border shadow-lg"
                                   align="start"
                                 >
                                   <div
@@ -711,7 +855,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   </div>
                                 </PopoverContent>
                               </Popover>
-                              <div className="flex items-center gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
+                              </div>
+                              <div className="flex items-center gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border">
                                 <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                                 <div className="relative flex-1">
                                   <div className="flex items-center gap-1 py-1">
@@ -732,6 +877,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                       onChange={(e) => {
                                         if (!e.target.value) {
                                           setSelectedTag(null);
+                                          setDraftTag(null);
                                         }
                                         setTagSearchText(e.target.value);
                                         setIsTagDropdownOpen(true);
@@ -740,39 +886,44 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                         if (e.key === 'Backspace' && draftTag && !tagSearchText) {
                                           e.preventDefault();
                                           setDraftTag(null);
+                                          setSelectedTag(null);
+                                          setPendingNewTag(null);
                                           setTagSearchText('');
                                           return;
                                         }
                                         if (e.key === 'Enter' && tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase())) {
+                                          e.preventDefault();
                                           const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
                                           const newTag = {
                                             id: tagSearchText.toLowerCase().replace(/\s+/g, '-'),
                                             label: tagSearchText,
                                             color: randomColor
                                           };
-                                          setTags(prevTags => [...prevTags, newTag]);
+                                          setPendingNewTag(newTag);
                                           setSelectedTag(newTag);
+                                          setDraftTag(newTag);
                                           setTagSearchText(newTag.label);
                                           setIsTagDropdownOpen(false);
                                         }
                                       }}
                                     />
                                   {isTagDropdownOpen && tagSearchText.length > 0 && (
-                                    <div className="absolute left-0 z-50 right-0 max-w-[240 px] backdrop-blur-lg p-1 top-full  mt-1  bg-light-bg dark:bg-dark-bg  rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
+                                    <div className="absolute left-0 z-50 right-0 max-w-[240px] backdrop-blur-lg p-1 top-full mt-1 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
                                       {tags
                                         .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
                                         .map(tag => (
                                           <button
                                             key={`tag-option-${tag.id}`}
-                                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
+                                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-white/15 dark:hover:bg-white/5 rounded-[5px]"
                                             onClick={() => {
+                                              setSelectedTag(tag);
                                               setDraftTag(tag);
                                               setTagSearchText('');
                                               setIsTagDropdownOpen(false);
                                             }}
                                           >
                                             <Tag className="w-4 h-4" style={{ color: tag.color }} />
-                                            <span>{tag.label}</span>
+                                            <span className="text-dark-text dark:text-dark-text">{tag.label}</span>
                                           </button>
                                         ))
                                       }
@@ -787,15 +938,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                               label: tagSearchText,
                                               color: randomColor
                                             };
-                                            const updatedTags = [...tags, newTag];
-                                            setTags(updatedTags);
+                                            setPendingNewTag(newTag);
+                                            setSelectedTag(newTag);
                                             setDraftTag(newTag);
                                             setTagSearchText('');
                                             setIsTagDropdownOpen(false);
                                           }}
                                         >
-                                          <Add className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                                          <span className="font-regular text-light-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-light-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
+                                          <Add className="w-4 h-4 text-dark-text/50 dark:text-dark-text/50" />
+                                          <span className="font-regular text-dark-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-dark-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
                                         </button>
                                       )}
                                     </div>
@@ -821,52 +972,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             Discard
                           </button>
                           <button
-                            onClick={() => {
-                              if (taskTitle.trim()) {
-                                if (editingTaskId) {
-                                  
-                                  const updatedTask = {
-                                    ...taskToEdit,
-                                    title: taskTitle.trim(),
-                                    notes: taskNotes.trim(),
-                                    tag: draftTag,
-                                    scheduledDate: scheduledDate
-                                  };
-                                  
-                                  onUpdateTask(updatedTask);
-                                } else {
-                                  const newTask = {
-                                    id: Date.now(),
-                                    title: taskTitle.trim(),
-                                    notes: taskNotes.trim(),
-                                    tag: draftTag || selectedTag,
-                                    completed: false,
-                                    createdAt: new Date().toISOString(),
-                                    scheduledDate: scheduledDate ? scheduledDate.toISOString() : null
-                                  };
-                                  
-                                  onCreateTask(newTask);
-                                  
-                                  try {
-                                    const savedTasks = localStorage.getItem('tasks') || '{}';
-                                    const tasks = JSON.parse(savedTasks);
-                                    
-                                    const tagGroup = newTask.tag ? newTask.tag.id : 'all';
-                                    const updatedTasks = {
-                                      ...tasks,
-                                      [tagGroup]: [...(tasks[tagGroup] || []), newTask],
-                                      all: [...(tasks.all || []), newTask]
-                                    };
-                                    
-                                    localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-
-                                  } catch (e) {
-                                    console.error("Error updating localStorage:", e);
-                                  }
-                                }
-                                handleClose({ forceClose: true });
-                              }
-                            }}
+                            onClick={handleSaveTask}
                             disabled={!taskTitle.trim()}
                             className={`px-4 py-2 text-sm font-semibold rounded-[79px] transition-colors ${taskTitle.trim() 
                               ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
@@ -1107,9 +1213,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </div>
 
                         <div className="flex flex-col gap-1">
-                          <Popover>
+                          <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
                             <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none">
-                              <span className="text-sm font-semibold text-light-text/50 dark:text-dark-text/50">
+                              <span className={`text-sm font-medium text-light-text/50 dark:text-dark-text ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : ''}`}>
                                 {REPEAT_OPTIONS.find(option => option.id === eventState.repeat)?.label}
                               </span>
                             </PopoverTrigger>
@@ -1151,18 +1257,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     <button
                                       key={option.id}
                                       type="button"
-                                      className={`w-full text-left px-2 py-2 hover:bg-white/15 dark:hover:bg-dark-bg-lighter rounded-[5px] cursor-pointer ${eventState.repeat === option.id ? 'bg-white/10 dark:bg-dark-bg' : ''}`}
+                                      className={`w-full text-left  px-2 py-2 hover:bg-white/15 dark:hover:bg-dark-bg-lighter rounded-[5px] cursor-pointer ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleRepeatOptionSelect(option.id);
+                                        handleEventChange('repeat', option.id);
+                                        setIsRepeatDropdownOpen(false);
                                       }}
                                       role="option"
                                       aria-selected={eventState.repeat === option.id}
                                     >
                                       <div className="flex justify-between items-center">
-                                        <span className="text-xs text-dark-text dark:text-dark-text">{option.label}</span>
+                                        <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${eventState.repeat === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
                                         {sublabel && (
-                                          <span className="text-xs text-dark-text/50 dark:text-dark-text/50">{sublabel}</span>
+                                          <span className="text-xs text-dark-text/30 dark:text-dark-text/30">{sublabel}</span>
                                         )}
                                       </div>
                                     </button>
@@ -1193,7 +1300,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
                           : 'bg-black/5 dark:bg-white/5 text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                       >
-                        {originalEventState?.id ? 'Save changes' : 'Add event'}
+                        {originalEventState?.id ? 'Edit event' : 'Add event'}
                       </button>
                     </div>
                   </motion.div>

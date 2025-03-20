@@ -111,6 +111,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     setRepeatEditModalState,
     setClickState,
     colors,
+    handleUpdateEvent,
   });
 
   const eventStyleGetter = useCallback((event, start, end, isSelected) => {

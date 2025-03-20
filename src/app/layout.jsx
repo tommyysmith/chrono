@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { TauriProvider } from "../components/TauriProvider";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { ReactScan } from "@/utils/ReactScan";
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,7 +20,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <ReactScan />
+
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
