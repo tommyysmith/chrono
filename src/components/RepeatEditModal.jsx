@@ -40,22 +40,52 @@ const RepeatEditModal = ({
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
     
-    // Call onEditConfirm with the selected scope and event data
-    onEditConfirm({
-      scope: editScope,
-      event: {
-        ...draggedEvent,
-        repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
-        seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
-        isRepeat: editScope !== 'single',
-        _editScope: editScope, // Add internal property for scope
-        _seriesUpdate: editScope === 'all' // Add internal property for series update
+    // Make completely new objects with fresh dates to avoid any possible reference issues
+    const updatedEvent = {
+      ...JSON.parse(JSON.stringify(draggedEvent)), // Deep clone without Date objects
+      // For single events, remove repeat properties
+      repeat: editScope === 'single' ? null : draggedEvent.repeat,
+      seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
+      isRepeat: editScope !== 'single',
+      // Internal properties for handling the update
+      _editScope: editScope,
+      _seriesUpdate: editScope === 'all',
+      // Recreate date objects to ensure they're fresh instances
+      start: new Date(draggedEvent.start.getTime()),
+      end: new Date(draggedEvent.end.getTime()),
+      // Preserve the manipulation flag
+      _isBeingManipulated: true,
+      // Create fresh date objects for exact position
+      _exactPosition: {
+        start: new Date(draggedEvent.start.getTime()),
+        end: new Date(draggedEvent.end.getTime())
+      },
+      // Create fresh original event with new date objects
+      _originalEvent: originalEvent ? {
+        ...JSON.parse(JSON.stringify(originalEvent)),
+        start: new Date(originalEvent.start.getTime()),
+        end: new Date(originalEvent.end.getTime())
+      } : null
+    };
+
+    console.log('RepeatEditModal - Confirming event update:', updatedEvent);
+
+    // For inline edits (drag/resize), update directly
+    if (!isEditOperation) {
+      onEditConfirm({
+        scope: editScope,
+        event: updatedEvent
+      });
+    } else {
+      // For double-click edits, open command bar
+      if (commandBarRef?.current) {
+        commandBarRef.current.openForEdit(updatedEvent);
       }
-    });
+    }
     
     // Close the modal
     onClose();
-  }, [editScope, draggedEvent, onEditConfirm, onClose]);
+  }, [editScope, draggedEvent, originalEvent, onEditConfirm, onClose, isEditOperation, commandBarRef]);
 
   // Don't render anything if not open or if we don't have the events
   if (!isOpen || !originalEvent || !draggedEvent) return null;
@@ -177,12 +207,12 @@ const RepeatEditModal = ({
         {/* Time preview - Only show for drag/resize operations when times actually changed */}
         {!isEditOperation && timesAreDifferent && (
           <div className="mb-8 px-8">
-            <div className="flex items-center gap-3 text-sm text-light-text/50 dark:text-dark-text/50">
+            <div className="flex items-center gap-3 text-sm text-dark-text/50 dark:text-dark-text/50">
               <span>Time</span>
               <div className="flex-1 flex items-center">
                 <span className="line-through">{originalTimeStr}</span>
                 <span className="mx-2">→</span>
-                <span className="text-light-text font-medium dark:text-dark-text">{newTimeStr}</span>
+                <span className="text-dark-text font-medium dark:text-dark-text">{newTimeStr}</span>
               </div>
             </div>
           </div>

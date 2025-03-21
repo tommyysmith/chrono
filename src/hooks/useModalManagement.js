@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export function useModalManagement(setEvents, commandBarRef) {
+export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent) {
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
     event: null,
@@ -72,16 +72,57 @@ export function useModalManagement(setEvents, commandBarRef) {
         return;
       }
 
-      // Open the CommandBar for editing with the event data
-      if (commandBarRef?.current) {
-        setTimeout(() => {
-          commandBarRef.current.openForEdit({
-            ...event,
-            _editScope: scope,
-            _preserveSeriesEvents: true,
-            _originalSeriesId: event.seriesId
-          });
-        }, 10);
+      // For inline edits (drag/resize), update the event directly
+      if (!repeatEditModalState.isEditOperation) {
+        // Create fresh object with new date instances
+        const originalEvent = repeatEditModalState.originalEvent ? {
+          ...JSON.parse(JSON.stringify(repeatEditModalState.originalEvent)),
+          start: new Date(repeatEditModalState.originalEvent.start.getTime()),
+          end: new Date(repeatEditModalState.originalEvent.end.getTime()),
+        } : null;
+        
+        // Calculate time differences for all events in the series
+        const startDiff = event.start.getTime() - (originalEvent ? originalEvent.start.getTime() : 0);
+        const endDiff = event.end.getTime() - (originalEvent ? originalEvent.end.getTime() : 0);
+
+        // Create a clean event object with the necessary metadata and fresh Date objects
+        const eventToUpdate = {
+          ...JSON.parse(JSON.stringify(event)), // Deep clone without Date objects
+          start: new Date(event.start.getTime()),
+          end: new Date(event.end.getTime()),
+          _editScope: scope,
+          _timeChange: {
+            startDiff,
+            endDiff
+          },
+          _seriesUpdate: scope === 'all',
+          _originalEvent: originalEvent,
+          // Ensure manipulation flag and position metadata are preserved
+          _isBeingManipulated: true,
+          _exactPosition: {
+            start: new Date(event.start.getTime()),
+            end: new Date(event.end.getTime())
+          }
+        };
+
+        console.log('ModalManagement - Updating event:', eventToUpdate);
+
+        // Use the handleUpdateEvent function to ensure consistent state updates
+        handleUpdateEvent(eventToUpdate);
+      } else {
+        // For double-click edits, open the CommandBar
+        if (commandBarRef?.current) {
+          setTimeout(() => {
+            commandBarRef.current.openForEdit({
+              ...JSON.parse(JSON.stringify(event)),
+              start: new Date(event.start.getTime()),
+              end: new Date(event.end.getTime()),
+              _editScope: scope,
+              _preserveSeriesEvents: true,
+              _originalSeriesId: event.seriesId
+            });
+          }, 10);
+        }
       }
 
       // Close the modal
@@ -93,16 +134,24 @@ export function useModalManagement(setEvents, commandBarRef) {
         isEditOperation: false,
       });
     },
-    [commandBarRef]
+    [commandBarRef, handleUpdateEvent, repeatEditModalState]
   );
 
   const handleRepeatEditDiscard = useCallback(() => {
-    const { originalEvent } = repeatEditModalState;
-
-    // Revert the event to its original state
-    if (originalEvent) {
-      setEvents((prev) =>
-        prev.map((e) => (e.id === originalEvent.id ? { ...originalEvent } : e))
+    // If we have an event and original event, revert the changes
+    if (repeatEditModalState.event && repeatEditModalState.originalEvent) {
+      setEvents((prevEvents) =>
+        prevEvents.map((e) =>
+          e.id === repeatEditModalState.event.id
+            ? {
+                ...repeatEditModalState.originalEvent,
+                id: e.id,
+                repeat: e.repeat,
+                seriesId: e.seriesId,
+                isRepeat: e.isRepeat,
+              }
+            : e
+        )
       );
     }
 

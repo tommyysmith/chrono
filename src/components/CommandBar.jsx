@@ -15,7 +15,7 @@ import { Microphone } from '../assets/icons/Microphone';
 import { Calendar } from '@/components/ui/calendar';
 import { Task } from '../assets/icons/Task';
 import { Tag } from '../assets/icons/Tag';
-import TagDropdown from './TagDropdown';
+import { ArrowAlt } from '../assets/icons/ArrowAlt';
 import RepeatEditModal from './RepeatEditModal';
 import {
   Popover,
@@ -736,10 +736,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       layout
                       className="flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
                     >
-                      <Microphone className="w-4 h-4" fill="none">
+                      <ArrowAlt className="w-4 h-4" fill="none">
                         <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </Microphone>
-                      <span className="text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Ask me!</span>
+                      </ArrowAlt>
+                      <span className="text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Go to date</span>
                     </motion.button>
                   )}
 

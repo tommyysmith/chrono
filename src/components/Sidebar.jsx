@@ -34,6 +34,7 @@ import { Flag } from "../assets/icons/Flag";
 import { Add } from "../assets/icons/Add";
 import { Task } from "../assets/icons/Task";
 import { Clipboard } from "../assets/icons/Clipboard";
+import { SidebarIcon } from "../assets/icons/Sidebar";
 import { Inbox as InboxIcon } from "../assets/icons/Inbox";
 import AgendaView from "./AgendaView";
 import {
@@ -49,6 +50,7 @@ export default function Sidebar({
   events = [],
   selectedDate,
   onDateSelect,
+  setIsVisible,
 }) {
   const [activeTab, setActiveTab] = useState("tasks"); // 'tasks' or 'agenda'
   const [expandedSections, setExpandedSections] = useState(() => {
@@ -523,8 +525,24 @@ export default function Sidebar({
   };
 
   return (
+    
     <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
+        <div className="flex p-2">
+          <TooltipProvider delayDuration={500}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+          <button
+            onClick={() => setIsVisible(false)}
+            className="flex group w-[32px] h-[32px] mr-2 items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+          >
+            <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
+          </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Close Sidebar</TooltipContent>
+          </Tooltip>
+          </TooltipProvider>
+        </div>
         <div className="flex-1 min-h-0 relative overflow-hidden">
           <AnimatePresence initial={false} mode="sync">
             {activeTab === "tasks" ? (
@@ -833,9 +851,9 @@ export default function Sidebar({
               <motion.div
                 key="agenda"
                 className="absolute inset-0 flex flex-col"
-                initial={{ x: "100%", filter: "blur(24px), scale(0.9)" }}
-                animate={{ x: 0, filter: "blur(0px), scale(1)" }}
-                exit={{ x: "100%", filter: "blur(24px), scale(0.9)" }}
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
                 transition={{
                   type: "easeInOut",
                   duration: 0.2,
@@ -958,5 +976,6 @@ export default function Sidebar({
         </div>
       </div>
     </aside>
+
   );
 }

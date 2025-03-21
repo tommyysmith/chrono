@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { addDays } from "date-fns";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "./Sidebar";
 import DeleteEventModal from "./DeleteEventModal";
 import RepeatEditModal from "./RepeatEditModal";
@@ -30,6 +30,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
 import {
   getTimeFromMousePosition,
   getColumnFromMousePosition,
@@ -38,6 +40,7 @@ import {
 import { TAG_COLORS } from "../constants/colors";
 import { Trash } from "@/assets/icons/Trash";
 import { Copy } from "@/assets/icons/Copy";
+import { SidebarIcon } from "@/assets/icons/Sidebar";
 
 const ViewType = {
   DAY: "day",
@@ -48,6 +51,7 @@ const ViewType = {
 export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [viewType, setViewType] = useState(ViewType.WEEK);
   const [currentDate, setCurrentDate] = useState(selectedDate);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const colors = TAG_COLORS;
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
@@ -74,7 +78,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDeleteModalClose,
     handleRepeatEditConfirm,
     handleRepeatEditDiscard,
-  } = useModalManagement(setEvents, commandBarRef);
+  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent);
 
   const {
     setClickState,
@@ -162,9 +166,28 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
 
     return (
-      <div className="flex items-center justify-between p-4 border-b border-light-border dark:border-dark-border">
-        <div className="flex w-full justify-between items-center gap-4">
-          <div className="flex items-baseline">
+      <div className="flex items-center justify-between px-2 py-2 border-b border-light-border dark:border-dark-border">
+        <div className="flex items-center gap-2">
+          {!isSidebarVisible && (
+            <div className="flex items-center gap-1">
+            <TooltipProvider delayDuration={500}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+            <button
+              onClick={() => setIsSidebarVisible(true)}
+              className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+            >
+              <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
+            </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Open Sidebar</TooltipContent>
+            </Tooltip>
+            </TooltipProvider>
+           
+            <div className="w-[1px] h-[20px] bg-light-border dark:bg-dark-border"></div>
+            </div>
+          )}
+          <div className="flex items-center">
             <h1 className="text-xl font-semibold">
               {selectedDate.toLocaleString("en-US", { month: "long" })}
             </h1>
@@ -172,61 +195,61 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               {selectedDate.getFullYear()}
             </span>
           </div>
-          <div className="flex items-center justify-center gap-1">
-            <div className="relative">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <div
-                    className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
+        </div>
+        <div className="flex items-center justify-center gap-1">
+          <div className="relative">
+            <Popover>
+              <PopoverTrigger asChild>
+                <div
+                  className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
+                >
+                  <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
+                    {viewType === ViewType.DAY
+                      ? "Day"
+                      : viewType === ViewType.WEEK
+                      ? "Week"
+                      : "Month"}
+                  </span>
+                  <svg
+                    className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform"
+                    viewBox="0 0 24 24"
+                    fill="none"
                   >
-                    <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
-                      {viewType === ViewType.DAY
-                        ? "Day"
-                        : viewType === ViewType.WEEK
-                        ? "Week"
-                        : "Month"}
-                    </span>
-                    <svg
-                      className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform"
-                      viewBox="0 0 24 24"
-                      fill="none"
+                    <path
+                      d="M19 9l-7 7-7-7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+                <div className="flex flex-col gap-1">
+                  {Object.values(ViewType).map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => {
+                        setViewType(type);
+                      }}
+                      className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
+                        viewType === type
+                          ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
+                          : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
+                      }`}
                     >
-                      <path
-                        d="M19 9l-7 7-7-7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
-                  <div className="flex flex-col gap-1">
-                    {Object.values(ViewType).map((type) => (
-                      <button
-                        key={type}
-                        onClick={() => {
-                          setViewType(type);
-                        }}
-                        className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
-                          viewType === type
-                            ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
-                            : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
-                        }`}
-                      >
-                        <span>
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </span>
-                        <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
-                          {type.charAt(0).toUpperCase()}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+                      <span>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </span>
+                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
+                        {type.charAt(0).toUpperCase()}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </div>
@@ -452,18 +475,48 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, [isViewDropdownOpen]);
 
   return (
-    <div className="flex h-full w-full overflow-hidden">
-      <Sidebar
-        commandBarRef={commandBarRef}
-        events={events}
-        selectedDate={selectedDate}
-        onDateSelect={onDateSelect}
-      />
-      <div className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative">
+    <div className="flex h-full relative isolate">
+      <TooltipProvider delayDuration={400} skipDelayDuration={0}>
+      <AnimatePresence initial={false} mode="sync">
+        {isSidebarVisible && (
+          <motion.div
+            initial={{ x: "-100%", width: 0 }}
+            animate={{ x: 0, width: 280 }}
+            exit={{ x: "-100%", width: 0 }}
+            transition={{
+              type: "easeInOut",
+              duration: 0.2,
+              ease: [0.25, 1, 0.5, 1],
+            }}
+            className="overflow-hidden h-full"
+          >
+            <div className="w-[280px] h-full">
+              <Sidebar
+                commandBarRef={commandBarRef}
+                events={events}
+                selectedDate={currentDate}
+                onDateSelect={setCurrentDate}
+                setIsVisible={setIsSidebarVisible}
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.div 
+        className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative"
+        layout
+        transition={{
+          type: "easeInOut",
+          duration: 0.2,
+          ease: [0.25, 1, 0.5, 1],
+        }}
+      >
         {/* Add header with z-index to ensure it's clickable */}
-        <div className="z-10 relative">{renderHeader()}</div>
+        <div className="z-20 relative">
+          {renderHeader()}
+        </div>
         {/* Calendar views */}
-        <div className="flex-1 overflow-hidden flex flex-col relative">
+        <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
           <div className="absolute inset-0 flex flex-col">
             {viewType === ViewType.WEEK && (
               <Week
@@ -574,32 +627,33 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           isEditOperation={repeatEditModalState.isEditOperation}
           commandBarRef={commandBarRef}
         />
-        <CommandBar
-          ref={commandBarRef}
-          onCreateEvent={useCallback(handleCreateEvent, [])}
-          onUpdateEvent={useCallback(handleUpdateEvent, [])}
-          onPrevious={useCallback(
-            () => handlePrevious(viewType, currentDate, onDateSelect),
-            [viewType, currentDate, onDateSelect]
-          )}
-          onNext={useCallback(
-            () => handleNext(viewType, currentDate, onDateSelect),
-            [viewType, currentDate, onDateSelect]
-          )}
-          onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
-          onClose={useCallback(handleCommandBarClose, [])}
-          onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
-          onUpdateTask={useCallback(
-            (updateTask) => handleUpdateTask(updateTask),
-            []
-          )}
-        />
         <GoToDateCommand
           isOpen={isGoToDateOpen}
           onClose={() => setIsGoToDateOpen(false)}
           onDateSelect={onDateSelect}
         />
-      </div>
+      </motion.div>
+      <CommandBar
+        ref={commandBarRef}
+        onCreateEvent={useCallback(handleCreateEvent, [])}
+        onUpdateEvent={useCallback(handleUpdateEvent, [])}
+        onPrevious={useCallback(
+          () => handlePrevious(viewType, currentDate, onDateSelect),
+          [viewType, currentDate, onDateSelect]
+        )}
+        onNext={useCallback(
+          () => handleNext(viewType, currentDate, onDateSelect),
+          [viewType, currentDate, onDateSelect]
+        )}
+        onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
+        onClose={useCallback(handleCommandBarClose, [])}
+        onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
+        onUpdateTask={useCallback(
+          (updateTask) => handleUpdateTask(updateTask),
+          []
+        )}
+      />
+      </TooltipProvider>
     </div>
   );
 }

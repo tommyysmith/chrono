@@ -134,8 +134,8 @@ export function useDragAndDrop({
               // Store the dragged event details for later use
               finalDraggedEvent = {
                 ...e,
-                start: newStart,
-                end: newEnd,
+                start: new Date(newStart.getTime()),
+                end: new Date(newEnd.getTime()),
               };
 
               return finalDraggedEvent;
@@ -160,9 +160,21 @@ export function useDragAndDrop({
             // For repeated events, show the RepeatEditModal
             setRepeatEditModalState({
               isOpen: true,
-              event: event,
-              draggedEvent: finalDraggedEvent,
-              originalEvent: dragStartOriginalEvent,
+              event: {
+                ...event,
+                start: new Date(event.start.getTime()),
+                end: new Date(event.end.getTime()),
+              },
+              draggedEvent: {
+                ...finalDraggedEvent,
+                start: new Date(finalDraggedEvent.start.getTime()),
+                end: new Date(finalDraggedEvent.end.getTime()),
+              },
+              originalEvent: {
+                ...dragStartOriginalEvent,
+                start: new Date(dragStartOriginalEvent.start.getTime()),
+                end: new Date(dragStartOriginalEvent.end.getTime()),
+              },
               isEditOperation: false,
             });
           } else if (finalDraggedEvent) {
@@ -272,7 +284,7 @@ export function useDragAndDrop({
       const newEvent = {
         id: newEventId,
         title: "New Event",
-        start: initialTime,
+        start: new Date(initialTime.getTime()),
         end: new Date(initialTime.getTime() + 30 * 60 * 1000), // Start with 30 min duration
         color: getLastSelectedColor(),
         repeat: "none",
@@ -360,15 +372,15 @@ export function useDragAndDrop({
                   if (isReverse) {
                     // If dragging upwards, adjust the start time
                     const newStart = new Date(end.getTime() - minDuration);
-                    return { ...e, start: newStart, end };
+                    return { ...e, start: new Date(newStart.getTime()), end };
                   } else {
                     // If dragging downwards, adjust the end time
                     const newEnd = new Date(start.getTime() + minDuration);
-                    return { ...e, start, end: newEnd };
+                    return { ...e, start, end: new Date(newEnd.getTime()) };
                   }
                 }
 
-                return { ...e, start, end };
+                return { ...e, start: new Date(start.getTime()), end: new Date(end.getTime()) };
               }
               return e;
             })
@@ -403,8 +415,8 @@ export function useDragAndDrop({
                 if (e.id === newEventId) {
                   return {
                     ...e,
-                    start: finalStartTime,
-                    end: adjustedEndTime,
+                    start: new Date(finalStartTime.getTime()),
+                    end: new Date(adjustedEndTime.getTime()),
                   };
                 }
                 return e;
@@ -630,12 +642,53 @@ export function useDragAndDrop({
               originalEvent.end.getTime() !== draggedEvent.end.getTime();
 
             if (startChanged || endChanged) {
-              // Open the RepeatEditModal with the original and resized event
+              // Keep the dragged event in its new position and mark it as being manipulated
+              const eventWithManipulationFlag = {
+                ...draggedEvent,
+                _isBeingManipulated: true,
+                start: new Date(draggedEvent.start.getTime()),
+                end: new Date(draggedEvent.end.getTime()),
+              };
+
+              setEvents((prevEvents) => {
+                // Deep copy of events to avoid reference issues
+                const newEvents = prevEvents.map((e) => ({
+                  ...e,
+                  start: new Date(e.start),
+                  end: new Date(e.end),
+                }));
+
+                // Find the event index and replace it
+                const eventIndex = newEvents.findIndex(
+                  (e) => e.id === draggedEvent.id
+                );
+                if (eventIndex !== -1) {
+                  newEvents[eventIndex] = eventWithManipulationFlag;
+                }
+
+                return newEvents;
+              });
+
+              // Open the RepeatEditModal with the manipulation flag
               setRepeatEditModalState({
                 isOpen: true,
-                event: draggedEvent,
-                draggedEvent: draggedEvent,
-                originalEvent: originalEvent,
+                event: {
+                  ...draggedEvent,
+                  _isBeingManipulated: true,
+                  start: new Date(draggedEvent.start.getTime()),
+                  end: new Date(draggedEvent.end.getTime()),
+                },
+                draggedEvent: {
+                  ...draggedEvent,
+                  _isBeingManipulated: true,
+                  start: new Date(draggedEvent.start.getTime()),
+                  end: new Date(draggedEvent.end.getTime()),
+                },
+                originalEvent: {
+                  ...originalEvent,
+                  start: new Date(originalEvent.start.getTime()),
+                  end: new Date(originalEvent.end.getTime()),
+                },
                 isEditOperation: false,
               });
             }

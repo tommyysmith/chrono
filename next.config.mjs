@@ -13,6 +13,8 @@ const nextConfig = {
       'date-fns'
     ]
   },
+
+  devIndicators: false,
   // Disable server components for Tauri
   reactStrictMode: true,
   webpack: (config) => {
