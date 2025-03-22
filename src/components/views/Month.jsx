@@ -95,34 +95,40 @@ export default function Month({
 
               {/* Events */}
               <div className="space-y-1">
-                {dayEvents.map((event, index) => (
-                  <div
-                    key={`${event.id}-${index}`}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(event);
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                    className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
-                    style={{
-                      backgroundColor: event.color
-                        ? `${event.color}20`
-                        : "#80808020",
-                    }}
-                  >
+                {dayEvents.map((event, index) => {
+                  const now = new Date();
+                  const isPastEvent = new Date(event.end) < now;
+
+                  return (
                     <div
-                      className="w-1 self-stretch mr-1.5"
-                      style={{ backgroundColor: event.color || "#808080" }}
-                    />
-                    <span className="text-gray-500 py-1">
-                      {format(new Date(event.start), "HH:mm")}
-                    </span>
-                    <span className="ml-1 truncate py-1">{event.title}</span>
-                  </div>
-                ))}
+                      key={`${event.id}-${index}`}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        handleEventClick(event);
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                      className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                      style={{
+                        backgroundColor: event.color
+                          ? `${event.color}20`
+                          : "#80808020",
+                        opacity: isPastEvent ? 0.5 : 1,
+                      }}
+                    >
+                      <div
+                        className="w-1 self-stretch mr-1.5"
+                        style={{ backgroundColor: event.color || "#808080" }}
+                      />
+                      <span className="text-gray-500 py-1">
+                        {format(new Date(event.start), "HH:mm")}
+                      </span>
+                      <span className="ml-1 truncate py-1">{event.title}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );

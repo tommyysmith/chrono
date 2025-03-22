@@ -116,7 +116,7 @@ const RepeatEditModal = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-dark-bg-lighter dark:bg-dark-bg border border-dark-border dark:border-dark-border rounded-[9px] shadow-md w-full max-w-md p-6">
+      <div className="relative bg-dark-bg-lighter dark:bg-dark-bg dark:bg-gradient-to-t from-white/0 to-white/[0.035] to-90% outline outline-dark-border dark:outline-dark-border rounded-[9px] shadow-md w-full max-w-md p-6">
         <h2 className="text-md text-dark-text dark:text-dark-text mb-6">
           Edit repeat event <span className="!font-semibold">"{eventTitle || 'Untitled'}"</span>
         </h2>
@@ -133,7 +133,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
                 ${editScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -160,7 +160,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
                 ${editScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -187,7 +187,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
                 ${editScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -230,9 +230,11 @@ const RepeatEditModal = ({
           <button
             type="button"
             onClick={handleContinue}
-            className="px-3 py-2 bg-primary hover:bg-primary/90 text-sm font-semibold text-white rounded-[5px]"
+            className="px-3 py-2 bg-primary text-sm bg-gradient-to-b hover:bg-gradient-to-b hover:from-black/0 hover:to-black/50 from-black/0 to-black/30 rounded-[9px] shadow-[inset_0px_2px_0px_0px_rgba(255,255,255,0.08)] shadow-[inset_0px_2px_6px_0px_rgba(255,255,255,0.16)] shadow-[inset_0px_-2px_6px_0px_rgba(0,0,0,0.16)] outline outline-1 outline-offset-[-1px] outline-orange-700 inline-flex justify-end items-center gap-2"
           >
+            <span className="font-semibold font-['Inter'] [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
             {continueButtonText}
+            </span>
           </button>
         </div>
       </div>

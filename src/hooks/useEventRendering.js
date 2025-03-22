@@ -178,37 +178,43 @@ export function useEventRendering(
                   className="relative border-l border-light-border dark:border-dark-border min-h-[32px]"
                 >
                   <div className="flex flex-col gap-1 p-1">
-                    {dayEvents.map((event, index) => (
-                      <div
-                        key={`${event.id}-${index}`}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        onContextMenu={(e) =>
-                          handleEventContextMenu(e, event.id)
-                        }
-                        className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
-                        style={{
-                          backgroundColor: event.color
-                            ? `${event.color}20`
-                            : "#80808020",
-                        }}
-                      >
+                    {dayEvents.map((event, index) => {
+                      const now = new Date();
+                      const isPastEvent = new Date(event.end) < now;
+
+                      return (
                         <div
-                          className="w-1 self-stretch mr-1.5"
-                          style={{ backgroundColor: event.color || "#808080" }}
-                        />
-                        <div className="px-3 py-1">
-                          <div className="font-medium text-xs">
-                            {event.title}
+                          key={`${event.id}-${index}`}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            handleEventClick(event);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onContextMenu={(e) =>
+                            handleEventContextMenu(e, event.id)
+                          }
+                          className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                          style={{
+                            backgroundColor: event.color
+                              ? `${event.color}20`
+                              : "#80808020",
+                            opacity: isPastEvent ? 0.5 : 1,
+                          }}
+                        >
+                          <div
+                            className="w-1 self-stretch mr-1.5"
+                            style={{ backgroundColor: event.color || "#808080" }}
+                          />
+                          <div className="px-3 py-1">
+                            <div className="font-medium text-xs">
+                              {event.title}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -230,33 +236,39 @@ export function useEventRendering(
                 (event) =>
                   event.isAllDay && isSameDay(event.start, selectedDate)
               )
-              .map((event, index) => (
-                <div
-                  key={`${event.id}-${index}`}
-                  className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
-                  style={{
-                    backgroundColor: event.color
-                      ? `${event.color}20`
-                      : "#80808020",
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                  }}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleEventClick(event);
-                  }}
-                  onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                >
+              .map((event, index) => {
+                const now = new Date();
+                const isPastEvent = new Date(event.end) < now;
+
+                return (
                   <div
-                    className="absolute left-0 top-0 bottom-0 w-1"
-                    style={{ backgroundColor: event.color || "#808080" }}
-                  />
-                  <div className="px-3 py-1">
-                    <div className="font-medium text-xs">{event.title}</div>
+                    key={`${event.id}-${index}`}
+                    className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
+                    style={{
+                      backgroundColor: event.color
+                        ? `${event.color}20`
+                        : "#80808020",
+                      opacity: isPastEvent ? 0.5 : 1,
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      handleEventClick(event);
+                    }}
+                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                  >
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-1"
+                      style={{ backgroundColor: event.color || "#808080" }}
+                    />
+                    <div className="px-3 py-1">
+                      <div className="font-medium text-xs">{event.title}</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
         </div>
       </div>

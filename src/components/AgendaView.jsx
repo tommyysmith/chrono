@@ -14,15 +14,17 @@ import TaskItem from './TaskItem';
 import 'react-day-picker/dist/style.css';
 
 const dayPickerStyles = {
-  day_today: "!bg-primary !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
+  day_today: "!bg-primary hover:!text-light-text !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
   day: "!h-7 !w-7 !p-0 !font-normal !text-light-text dark:!text-dark-text [&:not(.rdp-day_today)]:hover:!bg-black/10 [&:not(.rdp-day_today)]:dark:hover:!bg-white/5 !rounded-[5px]",
-  day_selected: "!bg-white/15 dark:bg-dark-bg !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text hover:bg-primary rounded-[5px]",
+  day_selected: "!bg-dark-bg-lighter hover:!text-light-text dark:bg-dark-bg !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text hover:bg-primary rounded-[5px]",
 };
 
 const EventItem = memo(({ event }) => {
   const startTime = new Date(event.start);
   const endTime = new Date(event.end);
   const bgColor = event.color || '#3B82F6';
+  const now = new Date();
+  const isPastEvent = endTime < now;
   
   // Calculate duration in minutes
   const durationMs = endTime - startTime;
@@ -40,7 +42,7 @@ const EventItem = memo(({ event }) => {
   };
   
   return (
-    <div className="flex items-start relative">
+    <div className="flex items-start relative" style={{ opacity: isPastEvent ? 0.5 : 1 }}>
       {/* Left color bar - absolute positioned to fill height */}
       <div 
         className="absolute left-0 top-0 bottom-0 w-[4px] rounded-full"

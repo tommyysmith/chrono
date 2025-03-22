@@ -81,7 +81,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         </span>
         <div className="flex items-center flex-row gap-1">
         {!hideScheduledDate && task.scheduledDate && (
-          <div className="inline-flex self-start mt-1 items-center px-1 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
+          <div className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
             <Calendar className="h-3 w-3" />
             <span className="px-1">
             {format(new Date(task.scheduledDate), 'd MMM')}
@@ -94,7 +94,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             className="flex flex-wrap gap-1"
           >
             <div
-              className="inline-flex self-start items-center px-1 py-1 text-xs rounded-[5px]"
+              className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px]"
               style={{
                 backgroundColor: `${task.tag.color}15`,
                 color: task.tag.color

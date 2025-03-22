@@ -70,7 +70,7 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
   };
 
   // Add lower opacity for past events
-  const now = new Date("2025-01-27T14:44:40Z");
+  const now = new Date();
   if (event.end < now) {
     style.opacity = 0.5;
   }

@@ -52,7 +52,26 @@ export default function Sidebar({
   onDateSelect,
   setIsVisible,
 }) {
-  const [activeTab, setActiveTab] = useState("tasks"); // 'tasks' or 'agenda'
+  const [activeTab, setActiveTab] = useState(() => {
+    // Try to load from localStorage first
+    const savedTab = localStorage.getItem("activeTab");
+    if (savedTab) {
+      try {
+        return savedTab;
+      } catch (e) {
+        console.error("Error parsing activeTab:", e);
+      }
+    }
+
+    // Default to 'tasks' if no saved state
+    return "tasks";
+  }); // 'tasks' or 'agenda'
+
+  // Save activeTab to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem("activeTab", activeTab);
+  }, [activeTab]);
+
   const [expandedSections, setExpandedSections] = useState(() => {
     // Try to load from localStorage first
     const savedState = localStorage.getItem("expandedSections");
