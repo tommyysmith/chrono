@@ -133,7 +133,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/[0.16] dark:border-white/30 flex items-center justify-center
                 ${editScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -160,7 +160,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/[0.16] dark:border-white/30 flex items-center justify-center
                 ${editScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -187,7 +187,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-5 h-5 rounded-full border-2 border-white/30 dark:border-white/30 flex items-center justify-center
+              className={`w-5 h-5 rounded-full border-2 border-white/10 dark:border-white/30 flex items-center justify-center
                 ${editScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'

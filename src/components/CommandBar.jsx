@@ -17,6 +17,8 @@ import { Task } from '../assets/icons/Task';
 import { Tag } from '../assets/icons/Tag';
 import { ArrowAlt } from '../assets/icons/ArrowAlt';
 import RepeatEditModal from './RepeatEditModal';
+import GoToDateCommand from './GoToDateCommand';
+import { parseNaturalLanguage } from '../utils/dateUtils';
 import {
   Popover,
   PopoverContent,
@@ -42,11 +44,14 @@ const REPEAT_OPTIONS = [
   { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' }
 ];
 
-const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose }, ref) => {
+const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose, onDateSelect }, ref) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [scheduleOption, setScheduleOption] = useState('today');
+  const [isGoToDateMode, setIsGoToDateMode] = useState(false);
+  const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
   const roundToNearest15Min = (timeStr) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes;
@@ -194,6 +199,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [isExpandingBeforeClosing, setIsExpandingBeforeClosing] = useState(false);
   const previousSizeRef = useRef({ width: 0, height: 0 });
   const exitingRef = useRef(false);
+  const prevStateRef = useRef(null);
 
   useEffect(() => {
     // Capture dimensions when component mounts or state changes
@@ -202,13 +208,31 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const { width, height } = containerRef.current.getBoundingClientRect();
       previousSizeRef.current = { width, height };
     }
-  }, [isOpen, isAddingEvent, isAddingTask]);
+    
+    // Track state changes for animation coordination
+    const prevState = prevStateRef.current;
+    if (prevState && (prevState.isGoToDateMode !== isGoToDateMode || prevState.isAddingEvent !== isAddingEvent || prevState.isAddingTask !== isAddingTask)) {
+      setIsAnimating(true);
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsAnimating(false);
+      }, 25); // Short delay to allow animation to start
+    }
+    prevStateRef.current = {
+      isGoToDateMode,
+      isAddingEvent,
+      isAddingTask
+    };
+  }, [isOpen, isAddingEvent, isAddingTask, isGoToDateMode]);
 
   // Fix layout animation state tracking
   useEffect(() => {
     // Reset animation flags when component unmounts
     return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
       exitingRef.current = false;
+      setIsAnimating(false);
     };
   }, []);
 
@@ -389,6 +413,38 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     openForTaskEdit
   }), [onCreateEvent, openForEdit, openForTaskEdit]);
 
+  const handleGoToDate = useCallback((date) => {
+    if (date) {
+      // Set animating state before changing modes to prevent layout bugs
+      setIsAnimating(true);
+      
+      // Call the onDateSelect handler directly to set the exact date
+      onDateSelect(date);
+      
+      // Ensure state changes happen after animation completes
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsGoToDateMode(false);
+        setQuery('');
+        setSuggestions([]);
+        setIsAnimating(false);
+      }, 25); // Short delay to allow animation to start
+    }
+  }, [onDateSelect]);
+
+  const handleQueryChange = (e) => {
+    const newQuery = e.target.value;
+    setQuery(newQuery);
+    const date = parseNaturalLanguage(newQuery);
+    if (date) {
+      setSuggestions([{
+        date,
+        label: format(date, 'MMMM d, yyyy')
+      }]);
+    } else {
+      setSuggestions([]);
+    }
+  };
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (repeatDropdownRef.current && !repeatDropdownRef.current.contains(event.target)) {
@@ -410,6 +466,27 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       document.removeEventListener('keydown', handleClickOutside);
     };
   }, [isRepeatDropdownOpen]);
+
+  useEffect(() => {
+    // Capture dimensions when component mounts or state changes
+    // This ensures we have accurate dimensions for exit animations
+    if (containerRef.current && isOpen) {
+      const { width, height } = containerRef.current.getBoundingClientRect();
+      previousSizeRef.current = { width, height };
+    }
+  }, [isOpen, isAddingEvent, isAddingTask]);
+
+  // Fix layout animation state tracking
+  useEffect(() => {
+    // Reset animation flags when component unmounts
+    return () => {
+      if (animationTimeoutRef.current) {
+        clearTimeout(animationTimeoutRef.current);
+      }
+      exitingRef.current = false;
+      setIsAnimating(false);
+    };
+  }, []);
 
   const [pendingNewTag, setPendingNewTag] = useState(null);
 
@@ -584,7 +661,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             key="commandBar-container"
             ref={containerRef}
             layout
-            layoutId={`commandBar-container-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+            layoutId={`commandBar-container-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
             initial={{ 
               opacity: 0,
               scale: 0.95,
@@ -629,17 +706,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 duration: 0.3, 
                 type: "spring",
                 bounce: 0.2,
-                // Only use layout animations when not exiting
-                ease: exitingRef.current ? "linear" : "easeInOut"
+                // Only use layout animations when not exiting or animating
+                ease: exitingRef.current || isAnimating ? "linear" : "easeInOut"
               }
             }}
             className="bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
           >
-            <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}>
+            <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}>
               <motion.div 
-                key={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                key={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
                 layout 
-                layoutId={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : 'default'}`}
+                layoutId={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
                 transition={{
                   type: "spring",
                   stiffness: 300,
@@ -649,7 +726,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 className="flex items-center gap-4"
               >
                 <AnimatePresence mode="popLayout">
-                  {!isAddingEvent && !isAddingTask && (
+                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
                     <div className="flex items-center gap-2">
                       <Popover>
                         <PopoverTrigger asChild>
@@ -691,7 +768,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     </div>
                   )}
 
-                  {!isAddingEvent && !isAddingTask && (
+                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
                     <motion.div 
                       layout
                       key="commandBar-divider"
@@ -699,7 +776,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     />
                   )}
 
-                  {!isAddingEvent && !isAddingTask && (
+                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
                     <motion.div 
                       layout
                       key="commandBar-date-buttons"
@@ -722,7 +799,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     </motion.div>
                   )}
 
-                  {!isAddingEvent && !isAddingTask && (
+                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
                     <motion.div 
                       layout
                       key="commandBar-divider-2"
@@ -730,16 +807,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     />
                   )}
 
-                  {!isAddingEvent && !isAddingTask && (
+                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
                     <motion.button 
-                    key="commandBar-ask-me"
+                      key="commandBar-ask-me"
                       layout
-                      className="flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
+                      onClick={() => {
+                        setIsGoToDateMode(true);
+                        setQuery('');
+                        setSuggestions([]);
+                      }}
+                      className="group flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors cursor-pointer"
                     >
-                      <ArrowAlt className="w-4 h-4" fill="none">
+                      <ArrowAlt className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" fill="none">
                         <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </ArrowAlt>
-                      <span className="text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Go to date</span>
+                      <span className="group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Go to date</span>
                     </motion.button>
                   )}
 
@@ -1214,7 +1296,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
                         <div className="flex flex-col gap-1">
                           <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
-                            <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none">
+                            <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none" ref={repeatDropdownRef}>
                               <span className={`text-sm font-medium text-light-text/50 dark:text-dark-text ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : ''}`}>
                                 {REPEAT_OPTIONS.find(option => option.id === eventState.repeat)?.label}
                               </span>
@@ -1304,6 +1386,79 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       </button>
                     </div>
                   </motion.div>
+                </motion.div>
+              )}
+              {isGoToDateMode && (
+                <motion.div
+                  layout
+                  key="commandBar-go-to-date"
+                  className="flex flex-col min-w-[450px]"
+                  initial={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <div className="flex items-start justify-between -mx-4">
+                    <div className="flex-1">
+                      <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
+                        <div className="flex flex-col">
+                          <div className="flex px-4 py-4 flex-row items-center border-b border-light-border dark:border-dark-border">
+                            <div 
+                              className="cursor-pointer flex items-center mr-2"
+                              onClick={() => {
+                                // Set animating state to prevent layout bugs during transition
+                                setIsAnimating(true);
+                                
+                                // Use timeout to ensure animation completes before state changes
+                                animationTimeoutRef.current = setTimeout(() => {
+                                  setIsGoToDateMode(false);
+                                  setQuery('');
+                                  setSuggestions([]);
+                                  setIsAnimating(false);
+                                }, 25); // Short delay to allow animation to start
+                              }}
+                            >
+                              <button type="button" className=" flex group items-center justify-center cursor-pointer hover:bg-light-bg-lighter dark:hover:bg-white/5 rounded-[5px] h-[32px] w-[32px]">  
+                                <ArrowAlt 
+                                  className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors" 
+                                  style={{ transform: 'rotate(180deg)' }}
+                                />
+                              </button>
+                            </div>
+                            
+                            <div className="flex-1 flex-col gap-1 pl-1">
+                              <input
+                                type="text"
+                                placeholder="e.g. nov 5, in 10 weeks"
+                                value={query}
+                                onChange={handleQueryChange}
+                                className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          {query && (
+                            <div className="p-2">
+                              {suggestions.length > 0 ? (
+                                suggestions.map((suggestion, index) => (
+                                  <div
+                                    key={index}
+                                    onClick={() => handleGoToDate(suggestion.date)}
+                                    className="w-full px-3 py-2 text-sm text-left text-light-text dark:text-dark-text hover:bg-black/5 dark:hover:bg-white/5 rounded-[9px] cursor-pointer"
+                                  >
+                                    Go to <span className="font-medium">{suggestion.label}</span>
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="px-3 py-2 text-sm text-light-text/50 dark:text-dark-text/50">
+                                  No matching date found
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

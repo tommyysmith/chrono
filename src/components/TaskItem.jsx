@@ -1,42 +1,25 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil } from 'lucide-react';
 import Checkbox from './Checkbox';
 import { format } from 'date-fns';
 import { Calendar } from '../assets/icons/Calendar';
 import { Trash } from '../assets/icons/Trash';
 import { Tag } from '../assets/icons/Tag';
+import { More } from '../assets/icons/More';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
 export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, isSelected, hideScheduledDate, hideTag }) {
-  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [isHovering, setIsHovering] = useState(false);
+  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
-  const contextMenuRef = useRef(null);
-
- 
-
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target)) {
-        setShowContextMenu(false);
-      }
-    };
-
-    if (showContextMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showContextMenu]);
+  const taskItemRef = useRef(null);
 
   const handleClick = (e) => {
-    // Don't trigger selection when clicking checkbox or context menu
-    if (e.target.closest('.checkbox') || contextMenuRef.current?.contains(e.target)) {
+    // Don't trigger selection when clicking checkbox
+    if (e.target.closest('.checkbox')) {
       return;
     }
 
@@ -45,29 +28,28 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   const handleContextMenu = (e) => {
     e.preventDefault();
-
-    setContextMenuPosition({ x: e.clientX, y: e.clientY });
-    setShowContextMenu(true);
+    setIsPopoverOpen(true);
   };
 
   const handleEdit = () => {
-
     onDoubleClickEdit(task);
-    setShowContextMenu(false);
+    setIsPopoverOpen(false);
   };
 
   const handleDelete = () => {
-
     onDelete(task.id);
-    setShowContextMenu(false);
+    setIsPopoverOpen(false);
   };
 
   return (
     <div 
-      className={`task-item group flex items-top gap-2 p-2 ${isSelected ? 'bg-light-bg-light dark:bg-dark-bg-lighter' : 'hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter'} rounded-md relative`}
+      ref={taskItemRef}
+      className={`task-item flex items-top gap-2 p-2 ${isSelected ? 'bg-light-bg-light dark:bg-dark-bg-lighter' : 'hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter'} rounded-[11px] relative`}
       onContextMenu={handleContextMenu}
       onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}
+      onMouseEnter={() => setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
     >
       <div className="checkbox flex-shrink-0 mt-0.5">
         <Checkbox 
@@ -111,36 +93,40 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         </div>
       </div>
 
+      {/* More icon shown on hover */}
       <AnimatePresence>
-        {showContextMenu && (
-          <motion.div
-            ref={contextMenuRef}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.05 }}
-            style={{
-              position: 'fixed',
-              left: contextMenuPosition.x,
-              top: contextMenuPosition.y,
-            }}
-            className="z-50 min-w-[120px] p-1 flex flex-col gap-1 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border"
-          >
-            <button
-              onClick={handleEdit}
-              className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5"
-            >
-              <Pencil className="w-3 h-3 text-dark-text dark:text-dark-text" />
-              Edit
-            </button>
-            <button
-              onClick={handleDelete}
-              className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2  hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white hover:font-semibold text-[#EC0F0F]"
-            >
-              <Trash className="w-3 h-3" />
-             Delete
-            </button>
-          </motion.div>
+        {isHovering && (
+          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
+            <PopoverTrigger asChild>
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.1 }}
+                className="flex group h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-white/5"
+              >
+                <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+              </motion.button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border">
+              <div className="flex flex-col gap-1">
+                <button
+                  onClick={handleEdit}
+                  className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5"
+                >
+                  <Pencil className="w-3 h-3 text-dark-text dark:text-dark-text" />
+                  Edit
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white hover:font-semibold text-[#EC0F0F]"
+                >
+                  <Trash className="w-3 h-3" />
+                  Delete
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
       </AnimatePresence>
     </div>

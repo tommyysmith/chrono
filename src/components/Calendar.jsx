@@ -153,6 +153,17 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   );
 
   const { handleCreateTask, handleUpdateTask } = useTaskManagement();
+  // Handle date selection from GoToDateCommand
+  const handleGoToDate = useCallback((date) => {
+    if (date) {
+      setCurrentDate(date);
+      if (onDateSelect) {
+        onDateSelect(date);
+      }
+      setIsGoToDateOpen(false);
+    }
+  }, [onDateSelect]);
+
   // Sync with selectedDate prop
   useEffect(() => {
     setCurrentDate(selectedDate);
@@ -169,7 +180,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       <div className="flex items-center justify-between px-2 py-2 border-b border-light-border dark:border-dark-border">
         <div className="flex items-center gap-2">
           {!isSidebarVisible && (
-            <div className="flex items-center gap-1">
+            <motion.div layout className="flex items-center gap-0.5">
             <TooltipProvider delayDuration={500}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -185,13 +196,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             </TooltipProvider>
            
             <div className="w-[1px] h-[20px] bg-light-border dark:bg-dark-border"></div>
-            </div>
+            </motion.div>
           )}
           <div className="flex items-center">
             <h1 className="text-xl font-semibold">
               {selectedDate.toLocaleString("en-US", { month: "long" })}
             </h1>
-            <span className="text-xl font-regular text-gray-400 ml-2">
+            <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
               {selectedDate.getFullYear()}
             </span>
           </div>
@@ -630,7 +641,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         <GoToDateCommand
           isOpen={isGoToDateOpen}
           onClose={() => setIsGoToDateOpen(false)}
-          onDateSelect={onDateSelect}
+          onDateSelect={handleGoToDate}
         />
       </motion.div>
       <CommandBar
@@ -652,6 +663,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           (updateTask) => handleUpdateTask(updateTask),
           []
         )}
+        onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
       />
       </TooltipProvider>
     </div>
