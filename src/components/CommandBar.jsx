@@ -318,8 +318,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       repeat: eventState.repeat,
       seriesId: eventState.seriesId,
       color: eventState.color,
-      _editScope: originalEventState?._editScope, // Pass through the edit scope
-      _seriesUpdate: originalEventState?._seriesUpdate // Pass through the series update flag
+      _editScope: originalEventState?._editScope,
+      _seriesUpdate: originalEventState?._seriesUpdate,
+      _repeatChanged: !originalEventState?.repeat && eventState.repeat && eventState.repeat !== 'none'
     };
 
     if (originalEventState?.id) {
@@ -378,11 +379,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setHasChanges(false);
     },
     openWithTime: (date) => {
-      const endTime = new Date(date.getTime() + 60 * 60 * 1000);
+      const roundedTimeStr = roundToNearest15Min(format(date, 'HH:mm'));
+      const roundedTime = parse(roundedTimeStr, 'HH:mm', date);
+      const endTime = new Date(roundedTime.getTime() + 60 * 60 * 1000);
       const newEventData = {
         title: 'New Event',
         description: '',
-        start: date,
+        start: roundedTime,
         end: endTime,
         allDay: false,
         color: '#3B82F6',
@@ -394,8 +397,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const eventState = {
         title: 'New Event',
         description: '',
-        date: format(date, 'yyyy-MM-dd'),
-        startTime: format(date, 'HH:mm'),
+        date: format(roundedTime, 'yyyy-MM-dd'),
+        startTime: roundedTimeStr,
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
         color: '#3B82F6',
@@ -497,13 +500,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const handleAddEventClick = useCallback(() => {
     const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+    const roundedTimeStr = roundToNearest15Min(format(now, 'HH:mm'));
+    const roundedTime = parse(roundedTimeStr, 'HH:mm', now);
+    const endTime = new Date(roundedTime.getTime() + 60 * 60 * 1000);
     
     const eventState = {
       title: 'New Event',
       description: '',
       date: format(now, 'yyyy-MM-dd'),
-      startTime: format(now, 'HH:mm'),
+      startTime: roundedTimeStr,
       endTime: format(endTime, 'HH:mm'),
       isAllDay: false,
       color: '#3B82F6',

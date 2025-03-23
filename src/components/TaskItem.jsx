@@ -11,7 +11,7 @@ import { Tag } from '../assets/icons/Tag';
 import { More } from '../assets/icons/More';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, isSelected, hideScheduledDate, hideTag }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag }) {
   const [isHovering, setIsHovering] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
@@ -44,12 +44,15 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   return (
     <div 
       ref={taskItemRef}
-      className={`task-item flex items-top gap-2 p-2 ${isSelected ? 'bg-light-bg-light dark:bg-dark-bg-lighter' : 'hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter'} rounded-[11px] relative`}
+      className="task-item cursor-pointer flex items-top gap-2 p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter rounded-[11px] relative"
       onContextMenu={handleContextMenu}
       onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}
       onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
+      onMouseLeave={() => {
+        setIsHovering(false);
+        setIsPopoverOpen(false);
+      }}
     >
       <div className="checkbox flex-shrink-0 mt-0.5">
         <Checkbox 

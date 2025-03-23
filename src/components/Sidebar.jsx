@@ -25,7 +25,6 @@ import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import TagDropdown from "./TagDropdown";
 import TaskItem from "./TaskItem";
 import Checkbox from "./Checkbox";
-import ColorPickerMenu from "./ColorPickerMenu";
 import { TAG_COLORS } from "../constants/colors";
 import { Chevron } from "../assets/icons/Chevron";
 import { Calendar } from "../assets/icons/Calendar";
@@ -36,6 +35,7 @@ import { Task } from "../assets/icons/Task";
 import { Clipboard } from "../assets/icons/Clipboard";
 import { SidebarIcon } from "../assets/icons/Sidebar";
 import { Inbox as InboxIcon } from "../assets/icons/Inbox";
+import { Trash } from "../assets/icons/Trash";
 import AgendaView from "./AgendaView";
 import {
   Tooltip,
@@ -43,7 +43,9 @@ import {
   TooltipTrigger,
   TooltipProvider,
 } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { More } from "../assets/icons/More";
+import { createPortal } from 'react-dom';
 
 export default function Sidebar({
   commandBarRef,
@@ -544,22 +546,22 @@ export default function Sidebar({
   };
 
   return (
-    
+    // eslint-disable-next-line tailwindcss/no-custom-classname
     <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
         <div className="flex p-2">
           <TooltipProvider delayDuration={500}>
             <Tooltip>
               <TooltipTrigger asChild>
-          <button
-            onClick={() => setIsVisible(false)}
-            className="flex group w-[32px] h-[32px] mr-2 items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
-          >
-            <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
-          </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">Close Sidebar</TooltipContent>
-          </Tooltip>
+                <button
+                  onClick={() => setIsVisible(false)}
+                  className="flex group w-[32px] h-[32px] mr-2 items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+                >
+                  <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Close Sidebar</TooltipContent>
+            </Tooltip>
           </TooltipProvider>
         </div>
         <div className="flex-1 min-h-0 relative overflow-hidden">
@@ -628,8 +630,6 @@ export default function Sidebar({
                             onContextMenu={(e) => {
                               e.preventDefault();
                               if (section.id !== "all") {
-                                const rect =
-                                  e.currentTarget.getBoundingClientRect();
                                 setColorMenuPosition({
                                   x: e.clientX,
                                   y: e.clientY,
@@ -682,8 +682,6 @@ export default function Sidebar({
                                   onClick={(e) => {
                                     e.stopPropagation(); // Prevent the click from reaching the parent button
                                     if (section.id !== "all") {
-                                      const rect =
-                                        e.currentTarget.getBoundingClientRect();
                                       setColorMenuPosition({
                                         x: e.clientX,
                                         y: e.clientY,
@@ -894,57 +892,89 @@ export default function Sidebar({
             )}
           </AnimatePresence>
         </div>
-        <ColorPickerMenu
-          isOpen={colorMenuOpen}
-          onClose={() => setColorMenuOpen(false)}
-          position={colorMenuPosition}
-          colors={TAG_COLORS}
-          onSelectColor={(color) => {
-            // Update the tag color
-            setTags((prevTags) => {
-              const updatedTags = prevTags.map((tag) =>
-                tag.id === selectedTagId ? { ...tag, color: color } : tag
-              );
-              localStorage.setItem("tags", JSON.stringify(updatedTags));
-              return updatedTags;
-            });
+        {/* Color Picker Menu */}
+        {colorMenuOpen && (
+          <div className="fixed top-0 left-0 z-50 pointer-events-none" style={{ transform: `translate(${colorMenuPosition.x}px, ${colorMenuPosition.y}px)` }}>
+            <Popover open={true} onOpenChange={(open) => !open && setColorMenuOpen(false)}>
+              <PopoverTrigger asChild>
+                <div className="w-0 h-0" />
+              </PopoverTrigger>
+              <PopoverContent
+                className="p-0 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border"
+                align="start"
+                side="right"
+                sideOffset={5}
+                avoidCollisions={true}
+                style={{ width: 'auto' }}
+              >
+                <div className="pointer-events-auto">
+                  <div className="flex flex-wrap gap-2 pb-1 p-3" style={{ maxWidth: '280px' }}>
+                    {TAG_COLORS.map((color) => (
+                      <motion.div
+                        key={color}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className={`w-5 h-5 rounded-[5px] cursor-pointer hover:ring-1 hover:ring-offset-1 hover:ring-light-border-2 dark:hover:ring-dark-border transition-all ${selectedTagId && tags.find(tag => tag.id === selectedTagId)?.color === color ? 'ring-1 ring-offset-1 ring-light-border dark:ring-dark-border' : ''}`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => {
+                          // Update the tag color
+                          setTags((prevTags) => {
+                            const updatedTags = prevTags.map((tag) =>
+                              tag.id === selectedTagId ? { ...tag, color: color } : tag
+                            );
+                            localStorage.setItem("tags", JSON.stringify(updatedTags));
+                            return updatedTags;
+                          });
 
-            // Update all tasks that use this tag
-            setTasks((prevTasks) => {
-              const updatedTasks = { ...prevTasks };
-              Object.keys(updatedTasks).forEach((group) => {
-                if (Array.isArray(updatedTasks[group])) {
-                  updatedTasks[group] = updatedTasks[group].map((task) =>
-                    task.tag?.id === selectedTagId
-                      ? {
-                          ...task,
-                          tag: {
-                            ...task.tag,
-                            color: color,
-                          },
-                        }
-                      : task
-                  );
-                }
-              });
-              localStorage.setItem("tasks", JSON.stringify(updatedTasks));
-              return updatedTasks;
-            });
+                          // Update all tasks that use this tag
+                          setTasks((prevTasks) => {
+                            const updatedTasks = { ...prevTasks };
+                            Object.keys(updatedTasks).forEach((group) => {
+                              if (Array.isArray(updatedTasks[group])) {
+                                updatedTasks[group] = updatedTasks[group].map((task) =>
+                                  task.tag?.id === selectedTagId
+                                    ? {
+                                        ...task,
+                                        tag: {
+                                          ...task.tag,
+                                          color: color,
+                                        },
+                                      }
+                                    : task
+                                );
+                              }
+                            });
+                            localStorage.setItem("tasks", JSON.stringify(updatedTasks));
+                            return updatedTasks;
+                          });
 
-            setColorMenuOpen(false);
-          }}
-          onDelete={
-            selectedTagId
-              ? () => {
-                  setTags((prevTags) =>
-                    prevTags.filter((tag) => tag.id !== selectedTagId)
-                  );
-                  setColorMenuOpen(false);
-                }
-              : undefined
-          }
-        />
-
+                          setColorMenuOpen(false);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {selectedTagId && (
+                    <>
+                      <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
+                      <div className="p-1">
+                        <button
+                          className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                          onClick={() => {
+                            setTags((prevTags) => prevTags.filter((tag) => tag.id !== selectedTagId));
+                            setColorMenuOpen(false);
+                          }}
+                        >
+                          <Trash className="w-3 h-3" />
+                          Delete
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
+        )}
         {/* Tab selector */}
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
           <TooltipProvider delayDuration={0} skipDelayDuration={0}>
@@ -995,6 +1025,5 @@ export default function Sidebar({
         </div>
       </div>
     </aside>
-
   );
 }

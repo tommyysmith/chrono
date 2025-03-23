@@ -24,16 +24,36 @@ export function useEventManagement(commandBarRef) {
       const start = eventData.start instanceof Date ? eventData.start : new Date(eventData.start);
       const end = eventData.end instanceof Date ? eventData.end : new Date(eventData.end);
       
+      // Generate a new series ID if this is a repeat event
+      const seriesId = eventData.repeat && eventData.repeat !== 'none' ? generateEventId() : null;
+      
       const newEvent = {
         ...eventData,
         id: generateEventId(),
         start,
         end,
-        seriesId: null,
+        seriesId,
+        isRepeat: Boolean(seriesId)
       };
 
       setEvents((prev) => {
-        const newEvents = [...prev, newEvent];
+        let newEvents;
+        
+        // If this is a repeat event, generate the series
+        if (seriesId) {
+          const repeatedEvents = generateRepeatedEvents(newEvent, eventData.repeat);
+          // Ensure unique IDs for all events except the first one
+          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
+            ...event,
+            id: index === 0 ? newEvent.id : generateEventId(),
+            seriesId,
+            isRepeat: true
+          }));
+          newEvents = [...prev, ...uniqueRepeatedEvents];
+        } else {
+          newEvents = [...prev, newEvent];
+        }
+        
         localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
         return newEvents;
       });
@@ -152,7 +172,12 @@ export function useEventManagement(commandBarRef) {
           
           // Generate new series events
           const repeatedEvents = generateRepeatedEvents(
-            eventTemplate,
+            {
+              ...eventTemplate,
+              repeat: cleanEventData.repeat, // Ensure repeat type is set
+              isRepeat: true,
+              seriesId: seriesId || generateEventId()
+            },
             cleanEventData.repeat
           );
           
@@ -213,10 +238,44 @@ export function useEventManagement(commandBarRef) {
       // For non-repeated events or other cases
       const eventIndex = updatedEvents.findIndex(e => e.id === existingEvent.id);
       if (eventIndex !== -1) {
-        updatedEvents[eventIndex] = {
-          ...cleanEventData,
-          id: existingEvent.id
-        };
+        // Check if we're converting a non-repeat event to a repeat event
+        const isConvertingToRepeat = (!existingEvent.repeat || existingEvent.repeat === 'none') && cleanEventData.repeat && cleanEventData.repeat !== 'none';
+        
+        if (isConvertingToRepeat || repeatChanged) {
+          // Remove the original event
+          updatedEvents = updatedEvents.filter(e => e.id !== existingEvent.id);
+          
+          // Create a new series
+          const newSeriesId = generateEventId();
+          const eventTemplate = {
+            ...cleanEventData,
+            id: existingEvent.id,
+            seriesId: newSeriesId,
+            isRepeat: true,
+            start: exactPosition ? exactPosition.start : cleanEventData.start,
+            end: exactPosition ? exactPosition.end : cleanEventData.end,
+          };
+          
+          // Generate the repeat series
+          const repeatedEvents = generateRepeatedEvents(eventTemplate, cleanEventData.repeat);
+          
+          // Ensure unique IDs for all events except the first one
+          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
+            ...event,
+            id: index === 0 ? existingEvent.id : generateEventId(),
+            seriesId: newSeriesId,
+            isRepeat: true
+          }));
+          
+          // Add the new series events
+          updatedEvents = [...updatedEvents, ...uniqueRepeatedEvents];
+        } else {
+          // Regular single event update
+          updatedEvents[eventIndex] = {
+            ...cleanEventData,
+            id: existingEvent.id
+          };
+        }
       }
       
       localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
