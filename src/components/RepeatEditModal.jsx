@@ -117,8 +117,8 @@ const RepeatEditModal = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-dark-bg-lighter dark:bg-dark-bg-lighter outline outline-dark-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
-        <h2 className="text-sm px-8 pt-8 text-dark-text dark:text-dark-text mb-6">
+      <div className="relative bg-light-bg dark:bg-dark-bg-lighter outline outline-light-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
+        <h2 className="text-sm px-8 pt-8 text-light-text dark:text-dark-text mb-6">
           Edit repeat event <span className="!font-semibold">"{eventTitle || 'Untitled'}"</span>
         </h2>
 
@@ -134,7 +134,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-white/[0.16] dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -142,10 +142,10 @@ const RepeatEditModal = ({
               onClick={() => handleRadioSelect('single')}
             >
               {editScope === 'single' && (
-                <div className="w-2 h-2 rounded-full bg-white" />
+                <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
               )}
             </div>
-            <span className="text-dark-text dark:text-dark-text text-xs">
+            <span className="text-light-text dark:text-dark-text text-xs">
               This event
             </span>
           </label>
@@ -161,7 +161,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-white/[0.08] dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -169,10 +169,10 @@ const RepeatEditModal = ({
               onClick={() => handleRadioSelect('future')}
             >
               {editScope === 'future' && (
-                <div className="w-2 h-2 rounded-full bg-white" />
+                <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
               )}
             </div>
-            <span className="text-dark-text dark:text-dark-text text-xs">
+            <span className="text-light-text dark:text-dark-text text-xs">
               This and following events
             </span>
           </label>
@@ -188,7 +188,7 @@ const RepeatEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-white/5 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -196,10 +196,10 @@ const RepeatEditModal = ({
               onClick={() => handleRadioSelect('all')}
             >
               {editScope === 'all' && (
-                <div className="w-2 h-2 rounded-full bg-white" />
+                <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
               )}
             </div>
-            <span className="text-dark-text dark:text-dark-text text-xs">
+            <span className="text-light-text dark:text-dark-text text-xs">
               All events
             </span>
           </label>
@@ -208,12 +208,12 @@ const RepeatEditModal = ({
         {/* Time preview - Only show for drag/resize operations when times actually changed */}
         {!isEditOperation && timesAreDifferent && (
           <div className="mb-8 px-8 pt-8 border-t border-light-border dark:border-dark-border">
-            <div className="flex items-center gap-3 text-xs text-dark-text/50 dark:text-dark-text/50">
+            <div className="flex items-center gap-3 text-xs text-light-text/50 dark:text-dark-text/50">
               <span>Time</span>
               <div className="flex-1 flex items-center">
                 <span className="line-through">{originalTimeStr}</span>
                 <span className="mx-2">→</span>
-                <span className="text-dark-text font-medium dark:text-dark-text">{newTimeStr}</span>
+                <span className="text-light-text font-medium dark:text-dark-text">{newTimeStr}</span>
               </div>
             </div>
           </div>
@@ -224,16 +224,16 @@ const RepeatEditModal = ({
           <button
             type="button"
             onClick={handleDiscard}
-            className="px-4 py-2 text-dark-text/50 text-sm dark:text-dark-text/50 hover:text-dark-text hover:font-medium dark:hover:text-dark-text rounded-[9px]"
+            className="px-4 h-[36px] font-medium bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
           >
             Discard change
           </button>
           <button
             type="button"
             onClick={handleContinue}
-            className="px-3 py-2 bg-primary text-sm bg-gradient-to-b hover:bg-gradient-to-b hover:from-black/0 hover:to-black/50 from-black/0 to-black/30 rounded-[5px] shadow-[inset_0px_2px_0px_0px_rgba(255,255,255,0.08)] shadow-[inset_0px_2px_6px_0px_rgba(255,255,255,0.16)] shadow-[inset_0px_-2px_6px_0px_rgba(0,0,0,0.16)] outline outline-1 outline-offset-[-1px] outline-orange-700 inline-flex justify-end items-center gap-2"
+            className="px-4 h-[36px] bg-primary text-xs bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] items-center gap-2"
           >
-            <span className="font-semibold font-['Inter'] [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
+            <span className="font-semibold font-['Inter'] text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
             {continueButtonText}
             </span>
           </button>

@@ -37,23 +37,7 @@ export function useEventManagement(commandBarRef) {
       };
 
       setEvents((prev) => {
-        let newEvents;
-        
-        // If this is a repeat event, generate the series
-        if (seriesId) {
-          const repeatedEvents = generateRepeatedEvents(newEvent, eventData.repeat);
-          // Ensure unique IDs for all events except the first one
-          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
-            ...event,
-            id: index === 0 ? newEvent.id : generateEventId(),
-            seriesId,
-            isRepeat: true
-          }));
-          newEvents = [...prev, ...uniqueRepeatedEvents];
-        } else {
-          newEvents = [...prev, newEvent];
-        }
-        
+        const newEvents = [...prev, newEvent];
         localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
         return newEvents;
       });
@@ -154,13 +138,10 @@ export function useEventManagement(commandBarRef) {
 
       // If editing a repeat event with the "all" scope
       if ((existingEvent.seriesId || originalSeriesId) && editScope === 'all') {
-        // If the repeat option changed or this is a series-wide update, regenerate the series
+        // If the repeat option changed or this is a series-wide update, update the base event
         if (hasRepeatChanged || isSeriesUpdate) {
-          // Remove all events in the series
-          updatedEvents = updatedEvents.filter(e => e.seriesId !== seriesId);
-          
-          // Create template for the new events
-          const eventTemplate = {
+          // Update the base event
+          const updatedEvent = {
             ...cleanEventData,
             id: existingEvent.id,
             seriesId: seriesId || generateEventId(),
@@ -170,25 +151,11 @@ export function useEventManagement(commandBarRef) {
             end: exactPosition ? exactPosition.end : cleanEventData.end,
           };
           
-          // Generate new series events
-          const repeatedEvents = generateRepeatedEvents(
-            {
-              ...eventTemplate,
-              repeat: cleanEventData.repeat, // Ensure repeat type is set
-              isRepeat: true,
-              seriesId: seriesId || generateEventId()
-            },
-            cleanEventData.repeat
-          );
-          
-          // Ensure unique IDs for all events except the first one
-          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
-            ...event,
-            id: index === 0 ? existingEvent.id : generateEventId()
-          }));
-          
-          // Add the new series events to the updated events
-          updatedEvents = [...updatedEvents, ...uniqueRepeatedEvents];
+          // Replace the event in the array
+          const eventIndex = updatedEvents.findIndex(e => e.id === existingEvent.id);
+          if (eventIndex !== -1) {
+            updatedEvents[eventIndex] = updatedEvent;
+          }
         } 
         // For modifications without changing the repeat pattern, update all events in the series
         else {
@@ -242,33 +209,18 @@ export function useEventManagement(commandBarRef) {
         const isConvertingToRepeat = (!existingEvent.repeat || existingEvent.repeat === 'none') && cleanEventData.repeat && cleanEventData.repeat !== 'none';
         
         if (isConvertingToRepeat || repeatChanged) {
-          // Remove the original event
-          updatedEvents = updatedEvents.filter(e => e.id !== existingEvent.id);
-          
-          // Create a new series
+          // Create a new series ID if needed
           const newSeriesId = generateEventId();
-          const eventTemplate = {
+          
+          // Update the event with repeat properties
+          updatedEvents[eventIndex] = {
             ...cleanEventData,
             id: existingEvent.id,
             seriesId: newSeriesId,
             isRepeat: true,
             start: exactPosition ? exactPosition.start : cleanEventData.start,
-            end: exactPosition ? exactPosition.end : cleanEventData.end,
+            end: exactPosition ? exactPosition.end : cleanEventData.end
           };
-          
-          // Generate the repeat series
-          const repeatedEvents = generateRepeatedEvents(eventTemplate, cleanEventData.repeat);
-          
-          // Ensure unique IDs for all events except the first one
-          const uniqueRepeatedEvents = repeatedEvents.map((event, index) => ({
-            ...event,
-            id: index === 0 ? existingEvent.id : generateEventId(),
-            seriesId: newSeriesId,
-            isRepeat: true
-          }));
-          
-          // Add the new series events
-          updatedEvents = [...updatedEvents, ...uniqueRepeatedEvents];
         } else {
           // Regular single event update
           updatedEvents[eventIndex] = {

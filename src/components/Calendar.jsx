@@ -24,6 +24,7 @@ import { useDragAndDrop } from "@/hooks/useDragAndDrop.js";
 import { useEventRendering } from "@/hooks/useEventRendering.js";
 import { useModalManagement } from "@/hooks/useModalManagement.js";
 import { useTaskManagement } from "@/hooks/useTaskManagement.js";
+import { useVirtualizedEvents } from "@/hooks/useVirtualizedEvents.js";
 import {
   Popover,
   PopoverContent,
@@ -63,6 +64,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleUpdateEvent,
     handleDeleteEvent,
   } = useEventManagement(commandBarRef);
+
+  const virtualizedEvents = useVirtualizedEvents(events, viewType, currentDate);
 
   const {
     deleteModalState,
@@ -141,7 +144,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, []);
 
   const { renderEvents, renderAllDayEvents } = useEventRendering(
-    events,
+    virtualizedEvents,
     selectedDate,
     viewType,
     dragState,

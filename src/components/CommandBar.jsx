@@ -6,6 +6,7 @@ import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate } fr
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
+import { Return } from '../assets/icons/Return';
 import { User } from '../assets/icons/User';
 import { Pin } from '../assets/icons/Pin';
 import { Repeat } from '../assets/icons/Repeat';
@@ -19,6 +20,7 @@ import { ArrowAlt } from '../assets/icons/ArrowAlt';
 import RepeatEditModal from './RepeatEditModal';
 import GoToDateCommand from './GoToDateCommand';
 import { parseNaturalLanguage } from '../utils/dateUtils';
+import { Shift } from '../assets/icons/Shift';
 import {
   Popover,
   PopoverContent,
@@ -658,6 +660,46 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
   }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
+  const handleKeyDown = useCallback((e) => {
+    if (e.key === 'Escape') {
+      // Handle escape key - use the same flow as clicking discard
+      handleClose();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // Handle enter key - use the same flow as clicking save
+      if (isAddingEvent) {
+        handleSaveChanges();
+      } else if (isAddingTask) {
+        handleSaveTask();
+      }
+    } else if (e.key === 'T' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
+      e.preventDefault();
+      // Handle Shift+T - use the same flow as clicking the Task button
+      setIsAddingTask(true);
+      setIsOpen(true);
+    } else if (e.key === 'E' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
+      e.preventDefault();
+      // Handle Shift+E - use the same flow as clicking the Event button
+      handleAddEventClick();
+      setIsOpen(true);
+    }
+  }, [
+    handleClose,
+    handleSaveChanges,
+    handleSaveTask,
+    handleAddEventClick,
+    isAddingEvent,
+    isAddingTask,
+    isGoToDateMode
+  ]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [handleKeyDown]);
+
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
@@ -757,7 +799,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           >
                             <Task className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
-                          </button>
+                            </button>
                           <button
                             onClick={() => {
                               handleAddEventClick();
@@ -923,7 +965,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   <div className="absolute w-0 h-0 overflow-hidden" />
                                 </PopoverTrigger>
                                 <PopoverContent 
-                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border shadow-lg"
+                                  className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border shadow-lg"
                                   align="start"
                                 >
                                   <div
@@ -1051,24 +1093,30 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   <span>Repeat</span>
                                 </div>
                               </button>
-                              <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-light-border dark:border-dark-border">
+                              <div className="flex items-center justify-end gap-2 px-4 py-4">
                           <button
                             onClick={handleClose}
-                            className="px-3 py-1.5 text-sm text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors"
+                            className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                           >
-                            Discard
+                            <span className="flex items-center pl-1 pr-3">Discard</span>
+                            <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
+                              <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
+                            </div>
                           </button>
                           <button
                             onClick={handleSaveTask}
                             disabled={!taskTitle.trim()}
-                            className={`px-4 py-2 text-sm font-semibold rounded-[79px] transition-colors ${taskTitle.trim() 
-                              ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
-                              : 'bg-black/5 dark:bg-white/5 text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+                            className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
+                              ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
+                              : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                           >
-                            {editingTaskId ? 'Edit task' : 'Add task'}
+                            <span className="flex items-center pl-1 pr-3">{editingTaskId ? 'Edit task' : 'Add task'}</span>
+                            <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
+                              <Return className="w-3 h-3" />
+                            </div>
                           </button>
                         </div>
-                          </div>
+                      </div>
                         </div>
                       </div>
                     
@@ -1344,7 +1392,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     <button
                                       key={option.id}
                                       type="button"
-                                      className={`w-full text-left  px-2 py-2 hover:bg-white/15 dark:hover:bg-dark-bg-lighter rounded-[5px] cursor-pointer ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
+                                      className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleEventChange('repeat', option.id);
@@ -1373,21 +1421,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
                     
                     {/* Add Edit/Discard row at the bottom with task-like styling */}
-                    <div className="flex items-center justify-end gap-3 px-4 py-3 border-t border-light-border dark:border-dark-border">
+                    <div className="flex items-center justify-end gap-3 px-4 py-4">
                       <button
                         onClick={() => handleClose()}
-                        className="px-3 py-1.5 text-sm text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors"
+                        className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                       >
-                        Cancel
+                        <span className="flex items-center pl-1 pr-3">Discard</span>
+                        <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
+                          <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
+                        </div>
                       </button>
+                      
                       <button
                         onClick={handleSaveChanges}
                         disabled={!eventState.title.trim() || !hasChanges}
-                        className={`px-4 py-2 text-sm font-semibold rounded-[79px] transition-colors ${eventState.title.trim() && hasChanges
-                          ? 'bg-[#FF4400] hover:bg-[#E53E00] text-white' 
-                          : 'bg-black/5 dark:bg-white/5 text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+                        className={`px-2 flex items-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
+                          ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
+                          : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                       >
+                        <span className="text-xs pl-1 pr-3">
+                          
                         {originalEventState?.id ? 'Edit event' : 'Add event'}
+                        
+                        </span>
+                        <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && hasChanges ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
+                              <Return className="w-3 h-3" />
+                            </div>
                       </button>
                     </div>
                   </motion.div>
