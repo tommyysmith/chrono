@@ -19,6 +19,9 @@ export default function Week({
   renderEvents,
   renderAllDayEvents,
   timeGridRef,
+  currentDate,
+  contextMenu,
+  commandBarRef,
 }) {
   const weekStart = new Date(selectedDate);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -143,11 +146,13 @@ export default function Week({
                 const containerRect = container.getBoundingClientRect();
                 const clickedTime = getTimeFromMousePosition(
                   e.clientY,
-                  containerRect
+                  containerRect,
+                  currentDate
                 );
                 const column = getColumnFromMousePosition(
                   e.clientX,
-                  containerRect
+                  containerRect,
+                  currentDate
                 );
 
                 // Create a new date at the start of the clicked hour

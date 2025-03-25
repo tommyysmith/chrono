@@ -17,9 +17,11 @@ export default function Day({
   handleDragOver,
   handleDrop,
   getTimeFromMousePosition,
-  getColumnFromMousePosition,
   renderEvents,
   timeGridRef,
+  currentDate,
+  contextMenu,
+  commandBarRef,
 }) {
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -159,7 +161,8 @@ export default function Day({
                 const containerRect = container.getBoundingClientRect();
                 const clickedTime = getTimeFromMousePosition(
                   e.clientY,
-                  containerRect
+                  containerRect,
+                  currentDate
                 );
                 const column = 0;
 

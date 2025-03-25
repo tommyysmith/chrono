@@ -31,7 +31,12 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import {
+  TooltipProvider,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 import {
   getTimeFromMousePosition,
@@ -123,23 +128,23 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   const eventStyleGetter = useCallback((event, start, end, isSelected) => {
     const style = {
-      backgroundColor: event.color || '#808080',
-      borderRadius: '4px',
+      backgroundColor: event.color || "#808080",
+      borderRadius: "4px",
       opacity: 1,
-      color: '#fff',
-      border: 'none',
-      display: 'block'
+      color: "#fff",
+      border: "none",
+      display: "block",
     };
 
     // Add preview styling
     if (event._isPreview) {
-      style.border = '2px dashed #fff';
+      style.border = "2px dashed #fff";
       style.opacity = 0.8;
-      style.boxShadow = '0 0 8px rgba(0,0,0,0.2)';
+      style.boxShadow = "0 0 8px rgba(0,0,0,0.2)";
     }
 
     return {
-      style
+      style,
     };
   }, []);
 
@@ -157,15 +162,18 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   const { handleCreateTask, handleUpdateTask } = useTaskManagement();
   // Handle date selection from GoToDateCommand
-  const handleGoToDate = useCallback((date) => {
-    if (date) {
-      setCurrentDate(date);
-      if (onDateSelect) {
-        onDateSelect(date);
+  const handleGoToDate = useCallback(
+    (date) => {
+      if (date) {
+        setCurrentDate(date);
+        if (onDateSelect) {
+          onDateSelect(date);
+        }
+        setIsGoToDateOpen(false);
       }
-      setIsGoToDateOpen(false);
-    }
-  }, [onDateSelect]);
+    },
+    [onDateSelect]
+  );
 
   // Sync with selectedDate prop
   useEffect(() => {
@@ -184,21 +192,23 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         <div className="flex items-center gap-2">
           {!isSidebarVisible && (
             <motion.div layout className="flex items-center gap-0.5">
-            <TooltipProvider delayDuration={500}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-            <button
-              onClick={() => setIsSidebarVisible(true)}
-              className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
-            >
-              <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
-            </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start">Open Sidebar</TooltipContent>
-            </Tooltip>
-            </TooltipProvider>
-           
-            <div className="w-[1px] h-[20px] bg-light-border dark:bg-dark-border"></div>
+              <TooltipProvider delayDuration={500}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => setIsSidebarVisible(true)}
+                      className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+                    >
+                      <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" align="start">
+                    Open Sidebar
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <div className="w-[1px] h-[20px] bg-light-border dark:bg-dark-border"></div>
             </motion.div>
           )}
           <div className="flex items-center">
@@ -214,9 +224,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           <div className="relative">
             <Popover>
               <PopoverTrigger asChild>
-                <div
-                  className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
-                >
+                <div className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]">
                   <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
                     {viewType === ViewType.DAY
                       ? "Day"
@@ -491,183 +499,192 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   return (
     <div className="flex h-full relative isolate">
       <TooltipProvider delayDuration={400} skipDelayDuration={0}>
-      <AnimatePresence initial={false} mode="sync">
-        {isSidebarVisible && (
-          <motion.div
-            initial={{ x: "-100%", width: 0 }}
-            animate={{ x: 0, width: 280 }}
-            exit={{ x: "-100%", width: 0 }}
-            transition={{
-              type: "easeInOut",
-              duration: 0.2,
-              ease: [0.25, 1, 0.5, 1],
-            }}
-            className="overflow-hidden h-full"
-          >
-            <div className="w-[280px] h-full">
-              <Sidebar
-                commandBarRef={commandBarRef}
-                events={events}
-                selectedDate={currentDate}
-                onDateSelect={setCurrentDate}
-                setIsVisible={setIsSidebarVisible}
-              />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <motion.div 
-        className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative"
-        layout
-        transition={{
-          type: "easeInOut",
-          duration: 0.2,
-          ease: [0.25, 1, 0.5, 1],
-        }}
-      >
-        {/* Add header with z-index to ensure it's clickable */}
-        <div className="z-20 relative">
-          {renderHeader()}
-        </div>
-        {/* Calendar views */}
-        <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
-          <div className="absolute inset-0 flex flex-col">
-            {viewType === ViewType.WEEK && (
-              <Week
-                selectedDate={selectedDate}
-                events={events}
-                dragState={dragState}
-                setPendingEventCell={setPendingEventCell}
-                pendingEventCell={pendingEventCell}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-                handleCellDragStart={handleCellDragStart}
-                handleCellClick={handleCellClick}
-                handleDragOver={handleDragOver}
-                handleDrop={handleDrop}
-                getTimeFromMousePosition={getTimeFromMousePosition}
-                getColumnFromMousePosition={getColumnFromMousePosition}
-                renderEvents={renderEvents}
-                renderAllDayEvents={renderAllDayEvents}
-                timeGridRef={timeGridRef}
-              />
-            )}
-            {viewType === ViewType.DAY && (
-              <Day
-                selectedDate={selectedDate}
-                events={events}
-                dragState={dragState}
-                pendingEventCell={pendingEventCell}
-                setPendingEventCell={setPendingEventCell}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-                handleCellDragStart={handleCellDragStart}
-                handleCellClick={handleCellClick}
-                handleDragOver={handleDragOver}
-                handleDrop={handleDrop}
-                getTimeFromMousePosition={getTimeFromMousePosition}
-                getColumnFromMousePosition={getColumnFromMousePosition}
-                renderEvents={renderEvents}
-                timeGridRef={timeGridRef}
-              />
-            )}
-            {viewType === ViewType.MONTH && (
-              <Month
-                selectedDate={selectedDate}
-                events={events}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-              />
-            )}
-          </div>
-        </div>
-        {/* Context menu */}
-        {contextMenu.show && (
+        <AnimatePresence initial={false} mode="sync">
+          {isSidebarVisible && (
+            <motion.div
+              initial={{ x: "-100%", width: 0 }}
+              animate={{ x: 0, width: 280 }}
+              exit={{ x: "-100%", width: 0 }}
+              transition={{
+                type: "easeInOut",
+                duration: 0.2,
+                ease: [0.25, 1, 0.5, 1],
+              }}
+              className="overflow-hidden h-full"
+            >
+              <div className="w-[280px] h-full">
+                <Sidebar
+                  commandBarRef={commandBarRef}
+                  events={events}
+                  selectedDate={currentDate}
+                  onDateSelect={setCurrentDate}
+                  setIsVisible={setIsSidebarVisible}
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <motion.div
+          className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative"
+          layout
+          transition={{
+            type: "easeInOut",
+            duration: 0.2,
+            ease: [0.25, 1, 0.5, 1],
+          }}
+        >
+          {/* Add header with z-index to ensure it's clickable */}
+          <div className="z-20 relative">{renderHeader()}</div>
+          {/* Calendar views */}
           <div
-            ref={contextMenuRef}
-            className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="flex-1 overflow-hidden flex flex-col relative"
+            style={{ zIndex: 1 }}
           >
-            <div className="">
-              <div className="flex flex-wrap gap-2 pb-2 p-3">
-                {colors.map((color) => (
-                  <motion.button
-                    key={color}
-                    whileHover={{ scale: 1.02 }}
-                    className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
-                    style={{ backgroundColor: color }}
-                    onClick={(e) => handleColorSelect(e, color)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                ))}
-              </div>
-              <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-              <div className="p-1">
-                <button
-                  className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
-                  onClick={(e) => handleEventDuplicate(e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
-                  Duplicate
-                </button>
-
-                <button
-                  className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
-                  onClick={(e) => handleEventDelete(e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
-                  Delete
-                </button>
-              </div>
+            <div className="absolute inset-0 flex flex-col">
+              {viewType === ViewType.WEEK && (
+                <Week
+                  selectedDate={selectedDate}
+                  events={events}
+                  dragState={dragState}
+                  setPendingEventCell={setPendingEventCell}
+                  pendingEventCell={pendingEventCell}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                  handleCellDragStart={handleCellDragStart}
+                  handleCellClick={handleCellClick}
+                  handleDragOver={handleDragOver}
+                  handleDrop={handleDrop}
+                  getTimeFromMousePosition={getTimeFromMousePosition}
+                  getColumnFromMousePosition={getColumnFromMousePosition}
+                  renderEvents={renderEvents}
+                  renderAllDayEvents={renderAllDayEvents}
+                  timeGridRef={timeGridRef}
+                  contextMenu={contextMenu}
+                  commandBarRef={commandBarRef}
+                  currentDate={currentDate}
+                />
+              )}
+              {viewType === ViewType.DAY && (
+                <Day
+                  selectedDate={selectedDate}
+                  events={events}
+                  dragState={dragState}
+                  pendingEventCell={pendingEventCell}
+                  setPendingEventCell={setPendingEventCell}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                  handleCellDragStart={handleCellDragStart}
+                  handleCellClick={handleCellClick}
+                  handleDragOver={handleDragOver}
+                  handleDrop={handleDrop}
+                  getTimeFromMousePosition={getTimeFromMousePosition}
+                  renderEvents={renderEvents}
+                  timeGridRef={timeGridRef}
+                  currentDate={currentDate}
+                  contextMenu={contextMenu}
+                  commandBarRef={commandBarRef}
+                />
+              )}
+              {viewType === ViewType.MONTH && (
+                <Month
+                  selectedDate={selectedDate}
+                  events={events}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                />
+              )}
             </div>
           </div>
-        )}
+          {/* Context menu */}
+          {contextMenu.show && (
+            <div
+              ref={contextMenuRef}
+              className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+            >
+              <div className="">
+                <div className="flex flex-wrap gap-2 pb-2 p-3">
+                  {colors.map((color) => (
+                    <motion.button
+                      key={color}
+                      whileHover={{ scale: 1.02 }}
+                      className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
+                      style={{ backgroundColor: color }}
+                      onClick={(e) => handleColorSelect(e, color)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    />
+                  ))}
+                </div>
+                <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
+                <div className="p-1">
+                  <button
+                    className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
+                    onClick={(e) => handleEventDuplicate(e)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
+                    Duplicate
+                  </button>
 
-        <DeleteEventModal
-          isOpen={deleteModalState.isOpen}
-          eventTitle={deleteModalState.event?.title}
-          onClose={handleDeleteModalClose}
-          onDelete={handleDeleteConfirm}
+                  <button
+                    className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                    onClick={(e) => handleEventDelete(e)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DeleteEventModal
+            isOpen={deleteModalState.isOpen}
+            eventTitle={deleteModalState.event?.title}
+            onClose={handleDeleteModalClose}
+            onDelete={handleDeleteConfirm}
+          />
+          <RepeatEditModal
+            isOpen={repeatEditModalState.isOpen}
+            eventTitle={repeatEditModalState.event?.title}
+            onClose={handleRepeatEditDiscard}
+            onEditConfirm={handleRepeatEditConfirm}
+            originalEvent={repeatEditModalState.originalEvent}
+            draggedEvent={repeatEditModalState.draggedEvent}
+            isEditOperation={repeatEditModalState.isEditOperation}
+            commandBarRef={commandBarRef}
+          />
+          <GoToDateCommand
+            isOpen={isGoToDateOpen}
+            onClose={() => setIsGoToDateOpen(false)}
+            onDateSelect={handleGoToDate}
+          />
+        </motion.div>
+        <CommandBar
+          ref={commandBarRef}
+          onCreateEvent={useCallback(handleCreateEvent, [])}
+          onUpdateEvent={useCallback(handleUpdateEvent, [])}
+          onPrevious={useCallback(
+            () => handlePrevious(viewType, currentDate, onDateSelect),
+            [viewType, currentDate, onDateSelect]
+          )}
+          onNext={useCallback(
+            () => handleNext(viewType, currentDate, onDateSelect),
+            [viewType, currentDate, onDateSelect]
+          )}
+          onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
+          onClose={useCallback(handleCommandBarClose, [])}
+          onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
+          onUpdateTask={useCallback(
+            (updateTask) => handleUpdateTask(updateTask),
+            []
+          )}
+          onDateSelect={useCallback(
+            (date) => handleGoToDate(date),
+            [handleGoToDate]
+          )}
         />
-        <RepeatEditModal
-          isOpen={repeatEditModalState.isOpen}
-          eventTitle={repeatEditModalState.event?.title}
-          onClose={handleRepeatEditDiscard}
-          onEditConfirm={handleRepeatEditConfirm}
-          originalEvent={repeatEditModalState.originalEvent}
-          draggedEvent={repeatEditModalState.draggedEvent}
-          isEditOperation={repeatEditModalState.isEditOperation}
-          commandBarRef={commandBarRef}
-        />
-        <GoToDateCommand
-          isOpen={isGoToDateOpen}
-          onClose={() => setIsGoToDateOpen(false)}
-          onDateSelect={handleGoToDate}
-        />
-      </motion.div>
-      <CommandBar
-        ref={commandBarRef}
-        onCreateEvent={useCallback(handleCreateEvent, [])}
-        onUpdateEvent={useCallback(handleUpdateEvent, [])}
-        onPrevious={useCallback(
-          () => handlePrevious(viewType, currentDate, onDateSelect),
-          [viewType, currentDate, onDateSelect]
-        )}
-        onNext={useCallback(
-          () => handleNext(viewType, currentDate, onDateSelect),
-          [viewType, currentDate, onDateSelect]
-        )}
-        onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
-        onClose={useCallback(handleCommandBarClose, [])}
-        onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
-        onUpdateTask={useCallback(
-          (updateTask) => handleUpdateTask(updateTask),
-          []
-        )}
-        onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
-      />
       </TooltipProvider>
     </div>
   );
