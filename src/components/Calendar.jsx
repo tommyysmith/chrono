@@ -8,9 +8,7 @@ import DeleteEventModal from "./DeleteEventModal";
 import RepeatEditModal from "./RepeatEditModal";
 import CommandBar from "./CommandBar";
 import GoToDateCommand from "./GoToDateCommand";
-import Day from "./views/Day";
-import Week from "./views/Week";
-import Month from "./views/Month";
+import TimeGridView from "./views/TimeGridView";
 import { generateRepeatedEvents } from "../utils/eventUtils";
 import {
   handlePrevious,
@@ -38,11 +36,6 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 
-import {
-  getTimeFromMousePosition,
-  getColumnFromMousePosition,
-} from "@/utils/positionUtils.js";
-
 import { TAG_COLORS } from "../constants/colors";
 import { Trash } from "@/assets/icons/Trash";
 import { Copy } from "@/assets/icons/Copy";
@@ -60,7 +53,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const colors = TAG_COLORS;
   const commandBarRef = useRef(null);
-  const timeGridRef = useRef(null);
 
   const {
     events,
@@ -541,58 +533,22 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             style={{ zIndex: 1 }}
           >
             <div className="absolute inset-0 flex flex-col">
-              {viewType === ViewType.WEEK && (
-                <Week
-                  selectedDate={selectedDate}
-                  events={events}
-                  dragState={dragState}
-                  setPendingEventCell={setPendingEventCell}
-                  pendingEventCell={pendingEventCell}
-                  handleEventClick={handleEventClick}
-                  handleEventContextMenu={handleEventContextMenu}
-                  handleCellDragStart={handleCellDragStart}
-                  handleCellClick={handleCellClick}
-                  handleDragOver={handleDragOver}
-                  handleDrop={handleDrop}
-                  getTimeFromMousePosition={getTimeFromMousePosition}
-                  getColumnFromMousePosition={getColumnFromMousePosition}
-                  renderEvents={renderEvents}
-                  renderAllDayEvents={renderAllDayEvents}
-                  timeGridRef={timeGridRef}
-                  contextMenu={contextMenu}
-                  commandBarRef={commandBarRef}
-                  currentDate={currentDate}
-                />
-              )}
-              {viewType === ViewType.DAY && (
-                <Day
-                  selectedDate={selectedDate}
-                  events={events}
-                  dragState={dragState}
-                  pendingEventCell={pendingEventCell}
-                  setPendingEventCell={setPendingEventCell}
-                  handleEventClick={handleEventClick}
-                  handleEventContextMenu={handleEventContextMenu}
-                  handleCellDragStart={handleCellDragStart}
-                  handleCellClick={handleCellClick}
-                  handleDragOver={handleDragOver}
-                  handleDrop={handleDrop}
-                  getTimeFromMousePosition={getTimeFromMousePosition}
-                  renderEvents={renderEvents}
-                  timeGridRef={timeGridRef}
-                  currentDate={currentDate}
-                  contextMenu={contextMenu}
-                  commandBarRef={commandBarRef}
-                />
-              )}
-              {viewType === ViewType.MONTH && (
-                <Month
-                  selectedDate={selectedDate}
-                  events={events}
-                  handleEventClick={handleEventClick}
-                  handleEventContextMenu={handleEventContextMenu}
-                />
-              )}
+              <TimeGridView
+                selectedDate={selectedDate}
+                events={events}
+                dragState={dragState}
+                pendingEventCell={pendingEventCell}
+                setPendingEventCell={setPendingEventCell}
+                handleEventClick={handleEventClick}
+                handleEventContextMenu={handleEventContextMenu}
+                handleCellDragStart={handleCellDragStart}
+                handleCellClick={handleCellClick}
+                handleDrop={handleDrop}
+                contextMenu={contextMenu}
+                commandBarRef={commandBarRef}
+                currentDate={currentDate}
+                viewType={viewType.toLowerCase()}
+              />
             </div>
           </div>
           {/* Context menu */}
