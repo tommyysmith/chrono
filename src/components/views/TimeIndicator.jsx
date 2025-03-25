@@ -16,11 +16,10 @@ export default function TimeIndicator({ viewType }) {
   }, []); // Empty dependency array to run only on mount
 
   const getCurrentTimePosition = () => {
-    const now = new Date();
-    const hourHeight = 64; // h-16 = 4rem = 64px
-    const minutes = now.getHours() * 60 + now.getMinutes();
+    const minutes = currentTime.getHours() * 60 + currentTime.getMinutes();
     const hour = Math.floor(minutes / 60);
     const minuteOffset = (minutes % 60) / 60;
+    const hourHeight = 64; // h-16 = 4rem = 64px
 
     // Position is based on the hour block plus the minute offset within that hour
     return hour * hourHeight + minuteOffset * hourHeight - 10; // -10px to align with hour markers
@@ -29,7 +28,7 @@ export default function TimeIndicator({ viewType }) {
   const position = getCurrentTimePosition();
 
   // Calculate the current day's position in the week view
-  const todayIndex = new Date().getDay();
+  const todayIndex = currentTime.getDay();
   const columnWidth = `${100 / 7}%`;
   const leftOffset = `${(todayIndex * 100) / 7}%`;
   const isCurrentWeek = viewType === "week";
@@ -64,8 +63,8 @@ export default function TimeIndicator({ viewType }) {
             }}
           >
             {/* Vertical lines at ends */}
-            <div className="absolute left-0 top-[-3px] w-[2px] h-[8px] bg-primary" />
-            <div className="absolute right-0 top-[-3px] w-[2px] h-[8px] bg-primary" />
+            <div className="absolute left-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
+            <div className="absolute right-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
           </div>
         )}
       </div>

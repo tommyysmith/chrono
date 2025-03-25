@@ -77,7 +77,7 @@ export default function Week({
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}
-          <TimeIndicator />
+          <TimeIndicator viewType="week" />
 
           {/* Time labels */}
           <div className="flex flex-col pointer-events-none">

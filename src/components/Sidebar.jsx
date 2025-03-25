@@ -560,7 +560,7 @@ export default function Sidebar({
                   <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Close Sidebar</TooltipContent>
+              <TooltipContent side="bottom" align="start">Close Sidebar</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -997,7 +997,7 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Tasks</TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}>Tasks</TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -1019,7 +1019,7 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Agenda</TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}>Agenda</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         </div>

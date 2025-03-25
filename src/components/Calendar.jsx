@@ -194,7 +194,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
             </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Open Sidebar</TooltipContent>
+            <TooltipContent side="bottom" align="start">Open Sidebar</TooltipContent>
             </Tooltip>
             </TooltipProvider>
            
