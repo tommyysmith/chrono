@@ -1,2 +1,4 @@
 1. Do not change any styling unless I explicitly ask you to.
 2. Do not change unrelated components that do not affect your current task without me asking.
+3. Referencing an 'inline edit' to events is directly describing any direct manipulation of an event in the @Calendar.jsx component. Inline editing inclueds, drag and drop and drag to resize.
+4) Referecing a 'double click edit' refers to the user double clicking an event in the @Calendar.jsx component, and modifying its properties with the @CommandBar.jsx component.

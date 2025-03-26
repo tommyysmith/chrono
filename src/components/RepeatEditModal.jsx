@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { format } from 'date-fns';
+import { format, isBefore } from 'date-fns';
 
 const RepeatEditModal = ({ 
   isOpen, 
@@ -39,49 +39,44 @@ const RepeatEditModal = ({
   const handleContinue = useCallback(() => {
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
-    
-    // Make completely new objects with fresh dates to avoid any possible reference issues
+
+    // Create a clean event object with just the essential properties
     const updatedEvent = {
-      ...JSON.parse(JSON.stringify(draggedEvent)), // Deep clone without Date objects
-      // For single events, remove repeat properties
-      repeat: editScope === 'single' ? null : draggedEvent.repeat,
+      ...draggedEvent,
+      // Core event properties
+      start: new Date(draggedEvent.start),
+      end: new Date(draggedEvent.end),
+      // Series properties based on edit scope
+      repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
       seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
       isRepeat: editScope !== 'single',
-      // Internal properties for handling the update
+      // Operation metadata
       _editScope: editScope,
-      _seriesUpdate: editScope === 'all',
-      _repeatChanged: true, // Force repeat recalculation
-      // Recreate date objects to ensure they're fresh instances
-      start: new Date(draggedEvent.start.getTime()),
-      end: new Date(draggedEvent.end.getTime()),
-      // Preserve the manipulation flag
-      _isBeingManipulated: true,
-      // Create fresh date objects for exact position
-      _exactPosition: {
-        start: new Date(draggedEvent.start.getTime()),
-        end: new Date(draggedEvent.end.getTime())
+      _timeChange: {
+        startDiff: draggedEvent.start.getTime() - originalEvent.start.getTime(),
+        endDiff: draggedEvent.end.getTime() - originalEvent.end.getTime()
       },
-      // Create fresh original event with new date objects
-      _originalEvent: originalEvent ? {
-        ...JSON.parse(JSON.stringify(originalEvent)),
-        start: new Date(originalEvent.start.getTime()),
-        end: new Date(originalEvent.end.getTime())
-      } : null
+      _originalEvent: {
+        ...originalEvent,
+        start: new Date(originalEvent.start),
+        end: new Date(originalEvent.end)
+      },
+      // Operation flags
+      _isDragging: draggedEvent._isDragging || false,
+      _isResizing: draggedEvent._isResizing || false,
+      _updateSeries: editScope === 'all',
+      _preserveRepeat: editScope !== 'single'
     };
 
-    console.log('RepeatEditModal - Confirming event update:', updatedEvent);
+    // Always update through onEditConfirm to ensure consistent handling
+    onEditConfirm({
+      scope: editScope,
+      event: updatedEvent
+    });
 
-    // For inline edits (drag/resize), update directly
-    if (!isEditOperation) {
-      onEditConfirm({
-        scope: editScope,
-        event: updatedEvent
-      });
-    } else {
-      // For double-click edits, open command bar
-      if (commandBarRef?.current) {
-        commandBarRef.current.openForEdit(updatedEvent);
-      }
+    // For double-click edits, also open command bar
+    if (isEditOperation && commandBarRef?.current) {
+      commandBarRef.current.openForEdit(updatedEvent);
     }
     
     // Close the modal

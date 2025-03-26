@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent) {
+export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents) {
   const [deleteModalState, setDeleteModalState] = useState({
     isOpen: false,
     event: null,
@@ -23,33 +23,34 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent) 
       const event = deleteModalState.event;
       if (!event) return;
 
-      setEvents((prevEvents) => {
-        let updatedEvents;
+      if (handleDeleteSeriesEvents) {
+        // Use the dedicated function for handling series deletion
+        handleDeleteSeriesEvents(event, deleteAll ? 'all' : 'single');
+      } else {
+        // Fallback to the old implementation if handleDeleteSeriesEvents is not provided
+        setEvents((prevEvents) => {
+          let updatedEvents;
 
-        if (deleteAll) {
-          // Delete all events in the series by matching both the base event ID and repeat pattern
-          const seriesId = event.seriesId;
-          updatedEvents = prevEvents.filter((e) => {
-            // Keep events that either:
-            // 1. Don't share the same base ID, or
-            // 2. Have the same base ID but different repeat pattern (different series)
-            return !e.seriesId || e.seriesId !== seriesId;
-          });
-        } else {
-          // Delete only this specific event instance
-          updatedEvents = prevEvents.filter((e) => e.id !== event.id);
-        }
+          if (deleteAll) {
+            // Delete all events in the series by matching the series ID
+            const seriesId = event.seriesId;
+            updatedEvents = prevEvents.filter((e) => !e.seriesId || e.seriesId !== seriesId);
+          } else {
+            // Delete only this specific event instance
+            updatedEvents = prevEvents.filter((e) => e.id !== event.id);
+          }
 
-        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
-        return updatedEvents;
-      });
+          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+          return updatedEvents;
+        });
+      }
 
       setDeleteModalState({
         isOpen: false,
         event: null,
       });
     },
-    [deleteModalState, setEvents]
+    [deleteModalState, setEvents, handleDeleteSeriesEvents]
   );
 
   const handleDeleteModalClose = useCallback(() => {
@@ -96,13 +97,17 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent) 
             endDiff
           },
           _seriesUpdate: scope === 'all',
+          _futureUpdate: scope === 'future',
           _originalEvent: originalEvent,
+          _originalSeriesId: originalEvent?.seriesId,
           // Ensure manipulation flag and position metadata are preserved
           _isBeingManipulated: true,
           _exactPosition: {
             start: new Date(event.start.getTime()),
             end: new Date(event.end.getTime())
-          }
+          },
+          // Add current date for future edits
+          _currentDate: new Date()
         };
 
         console.log('ModalManagement - Updating event:', eventToUpdate);
@@ -119,7 +124,9 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent) 
               end: new Date(event.end.getTime()),
               _editScope: scope,
               _preserveSeriesEvents: true,
-              _originalSeriesId: event.seriesId
+              _originalSeriesId: event.seriesId,
+              _futureUpdate: scope === 'future',
+              _currentDate: new Date()
             });
           }, 10);
         }

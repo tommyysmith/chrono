@@ -1,5 +1,6 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { generateRepeatedEvents, generateEventId } from "../utils/eventUtils";
+import { useState, useCallback, useEffect } from "react";
+import { generateEventId } from "../utils/eventUtils";
+import { generateRecurringEvents, updateSeriesEvents, getEventsInSeries } from "../utils/recurrenceUtils";
 
 export function useEventManagement(commandBarRef) {
   const [events, setEvents] = useState([]);
@@ -9,14 +10,29 @@ export function useEventManagement(commandBarRef) {
   useEffect(() => {
     const savedEvents = localStorage.getItem("calendarEvents");
     if (savedEvents) {
-      const parsedEvents = JSON.parse(savedEvents).map((event) => ({
-        ...event,
-        start: new Date(event.start),
-        end: new Date(event.end),
-      }));
-      setEvents(parsedEvents);
+      try {
+        const parsedEvents = JSON.parse(savedEvents).map((event) => ({
+          ...event,
+          start: new Date(event.start),
+          end: new Date(event.end),
+        }));
+        setEvents(parsedEvents);
+      } catch (error) {
+        console.error("Error parsing saved events:", error);
+        setEvents([]);
+      }
     }
   }, []);
+
+  // Save events to localStorage whenever they change
+  useEffect(() => {
+    if (events.length > 0) {
+      localStorage.setItem("calendarEvents", JSON.stringify(events));
+    } else {
+      // Clear localStorage when all events are deleted
+      localStorage.removeItem("calendarEvents");
+    }
+  }, [events]);
 
   const handleCreateEvent = useCallback(
     (eventData) => {
@@ -37,8 +53,18 @@ export function useEventManagement(commandBarRef) {
       };
 
       setEvents((prev) => {
-        const newEvents = [...prev, newEvent];
-        localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
+        let newEvents = [...prev];
+        
+        // For recurring events, generate all instances
+        if (seriesId) {
+          // Generate recurring event instances
+          const recurringEvents = generateRecurringEvents(newEvent);
+          newEvents = [...prev, ...recurringEvents];
+        } else {
+          // Non-recurring event
+          newEvents = [...prev, newEvent];
+        }
+        
         return newEvents;
       });
 
@@ -52,194 +78,261 @@ export function useEventManagement(commandBarRef) {
     [commandBarRef]
   );
 
-  const handleUpdateEvent = useCallback((eventData) => {
-    // Create a clean copy of the event data without internal properties
-    const cleanEventData = { ...eventData };
+  const handleUpdateEvent = useCallback((updatedEvent) => {
+    console.log('useEventManagement - handleUpdateEvent:', updatedEvent);
+    
+    // Extract special properties from the event
+    const { 
+      _editScope, 
+      _seriesUpdate, 
+      _exactPosition, 
+      _timeChange,
+      _originalEvent,
+      _updateSeries,
+      _isBaseEvent,
+      _isSeriesEvent,
+      _isDragging,
+      _isResizing,
+      _preserveRepeat,
+      ...cleanEventData
+    } = updatedEvent;
+
+    // Clean the event object by removing special properties
+    const cleanEvent = { ...cleanEventData };
+    delete cleanEvent._editScope;
+    delete cleanEvent._seriesUpdate;
+    delete cleanEvent._exactPosition;
+    delete cleanEvent._timeChange;
+    delete cleanEvent._originalEvent;
+    delete cleanEvent._updateSeries;
+    delete cleanEvent._isBaseEvent;
+    delete cleanEvent._isSeriesEvent;
+    delete cleanEvent._isDragging;
+    delete cleanEvent._isResizing;
+    delete cleanEvent._preserveRepeat;
 
     // Store important metadata before we remove it
-    const editScope = eventData._editScope;
-    const preserveSeriesEvents = eventData._preserveSeriesEvents;
-    const timeChange = eventData._timeChange;
-    const originalSeriesId = eventData._originalSeriesId;
-    const repeatChanged = eventData._repeatChanged;
-    const isSeriesUpdate = eventData._seriesUpdate;
-    const exactPosition = eventData._exactPosition;
-    const isBeingManipulated = eventData._isBeingManipulated;
-    const originalEvent = eventData._originalEvent;
+    const currentDate = updatedEvent._currentDate || new Date();
+    const isBeingManipulated = updatedEvent._isBeingManipulated;
 
     // Remove internal properties that shouldn't be stored
-    delete cleanEventData._editScope;
-    delete cleanEventData._repeatChanged;
-    delete cleanEventData._timeChange;
-    delete cleanEventData._originalSeriesId;
-    delete cleanEventData._preserveSeriesEvents;
-    delete cleanEventData._seriesUpdate;
-    delete cleanEventData._exactPosition;
-    delete cleanEventData._originalEvent;
-    delete cleanEventData._isBeingManipulated;
+    delete cleanEvent._editScope;
+    delete cleanEvent._repeatChanged;
+    delete cleanEvent._timeChange;
+    delete cleanEvent._originalSeriesId;
+    delete cleanEvent._preserveSeriesEvents;
+    delete cleanEvent._seriesUpdate;
+    delete cleanEvent._futureUpdate;
+    delete cleanEvent._exactPosition;
+    delete cleanEvent._originalEvent;
+    delete cleanEvent._isBeingManipulated;
+    delete cleanEvent._currentDate;
+    delete cleanEvent._preserveRepeat;
+    delete cleanEvent._forceSeriesUpdate;
+    delete cleanEvent._updateSeries;
 
     // Ensure we have valid start/end times
-    cleanEventData.start = cleanEventData.start instanceof Date ? cleanEventData.start : new Date(cleanEventData.start);
-    cleanEventData.end = cleanEventData.end instanceof Date ? cleanEventData.end : new Date(cleanEventData.end);
+    cleanEvent.start = cleanEvent.start instanceof Date ? cleanEvent.start : new Date(cleanEvent.start);
+    cleanEvent.end = cleanEvent.end instanceof Date ? cleanEvent.end : new Date(cleanEvent.end);
 
     setEditingEventId(null);
 
-    // First, create a clone of the current events
-    let updatedEvents = [];
-    let existingEvent = null;
-    let seriesId = null;
-
     setEvents((prev) => {
-      // Find the existing event and determine if we're dealing with a repeat event
-      existingEvent = prev.find((e) => e.id === eventData.id);
-      if (!existingEvent) return prev;
+      // Create a fresh copy of the events array to avoid state mutation issues
+      let updatedEvents = JSON.parse(JSON.stringify(prev)).map(event => ({
+        ...event,
+        start: new Date(event.start),
+        end: new Date(event.end)
+      }));
       
       // Get the seriesId whether from original or existing event
-      seriesId = originalSeriesId || existingEvent?.seriesId;
+      const seriesId = updatedEvent.seriesId || prev.find(e => e.id === updatedEvent.id)?.seriesId;
       
-      // Clone the events array to avoid reference issues
-      updatedEvents = [...prev];
-      
-      // Calculate time differences
-      const startDiff = exactPosition 
-        ? exactPosition.start.getTime() - existingEvent.start.getTime()
-        : timeChange?.startDiff || cleanEventData.start.getTime() - existingEvent.start.getTime();
-      const endDiff = exactPosition
-        ? exactPosition.end.getTime() - existingEvent.end.getTime()
-        : timeChange?.endDiff || cleanEventData.end.getTime() - existingEvent.end.getTime();
+      // Calculate time differences if needed
+      const startDiff = _exactPosition 
+        ? _exactPosition.start.getTime() - prev.find(e => e.id === updatedEvent.id).start.getTime()
+        : _timeChange?.startDiff || cleanEvent.start.getTime() - prev.find(e => e.id === updatedEvent.id).start.getTime();
+      const endDiff = _exactPosition
+        ? _exactPosition.end.getTime() - prev.find(e => e.id === updatedEvent.id).end.getTime()
+        : _timeChange?.endDiff || cleanEvent.end.getTime() - prev.find(e => e.id === updatedEvent.id).end.getTime();
 
-      const hasRepeatChanged = existingEvent.repeat !== cleanEventData.repeat;
-      
-      // Get the ID of the manipulated event
-      const manipulatedEventId = isBeingManipulated ? existingEvent.id : null;
+      const hasRepeatChanged = prev.find(e => e.id === updatedEvent.id).repeat !== cleanEvent.repeat;
 
-      // For single event edits, just detach from the series
-      if (editScope === 'single') {
-        const updatedEvent = {
-          ...cleanEventData,
-          id: existingEvent.id,
-          seriesId: null,
-          repeat: "none",
-          isRepeat: false,
-          start: exactPosition ? exactPosition.start : cleanEventData.start,
-          end: exactPosition ? exactPosition.end : cleanEventData.end,
-        };
-        
-        // Replace the event in the array
-        const eventIndex = updatedEvents.findIndex(e => e.id === existingEvent.id);
-        if (eventIndex !== -1) {
-          updatedEvents[eventIndex] = updatedEvent;
+      // Handle different edit scopes
+      switch (_editScope) {
+        case 'single': {
+          // For single event edits, detach from the series
+          const eventIndex = updatedEvents.findIndex(e => e.id === updatedEvent.id);
+          if (eventIndex !== -1) {
+            updatedEvents[eventIndex] = {
+              ...cleanEvent,
+              id: updatedEvent.id,
+              seriesId: null,
+              repeat: "none",
+              isRepeat: false,
+              start: _exactPosition ? new Date(_exactPosition.start) : new Date(cleanEvent.start),
+              end: _exactPosition ? new Date(_exactPosition.end) : new Date(cleanEvent.end),
+            };
+          }
+          break;
         }
         
-        // Save to localStorage
-        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
-        return updatedEvents;
-      }
+        case 'all': {
+          if (seriesId) {
+            console.log('Handling ALL edit scope:', {
+              updatedEvent,
+              timeChange: _timeChange,
+              exactPosition: _exactPosition,
+              originalEvent: prev.find(e => e.id === updatedEvent.id)
+            });
 
-      // If editing a repeat event with the "all" scope
-      if ((existingEvent.seriesId || originalSeriesId) && editScope === 'all') {
-        // If the repeat option changed or this is a series-wide update, update the base event
-        if (hasRepeatChanged || isSeriesUpdate) {
-          // Update the base event
-          const updatedEvent = {
-            ...cleanEventData,
-            id: existingEvent.id,
-            seriesId: seriesId || generateEventId(),
-            isRepeat: true,
-            repeat: cleanEventData.repeat,
-            start: exactPosition ? exactPosition.start : cleanEventData.start,
-            end: exactPosition ? exactPosition.end : cleanEventData.end,
-          };
-          
-          // Replace the event in the array
-          const eventIndex = updatedEvents.findIndex(e => e.id === existingEvent.id);
-          if (eventIndex !== -1) {
-            updatedEvents[eventIndex] = updatedEvent;
-          }
-        } 
-        // For modifications without changing the repeat pattern, update all events in the series
-        else {
-          // Update each event in the series
-          for (let i = 0; i < updatedEvents.length; i++) {
-            const event = updatedEvents[i];
+            // Get all events in the series
+            const seriesEvents = updatedEvents.filter(e => e.seriesId === seriesId);
             
-            if (event.seriesId === seriesId) {
-              // Special handling for the manipulated event
-              if (event.id === manipulatedEventId) {
-                updatedEvents[i] = {
-                  ...event,
-                  title: cleanEventData.title,
-                  description: cleanEventData.description,
-                  color: cleanEventData.color,
-                  isAllDay: cleanEventData.isAllDay,
-                  repeat: cleanEventData.repeat,
-                  // Use exact position
-                  start: exactPosition ? new Date(exactPosition.start) : new Date(cleanEventData.start),
-                  end: exactPosition ? new Date(exactPosition.end) : new Date(cleanEventData.end),
-                  seriesId: seriesId,
-                  isRepeat: true
+            // Calculate the time shift based on the original event's changes
+            const timeShift = {
+              startDiff: _timeChange?.startDiff || (_exactPosition ? 
+                _exactPosition.start.getTime() - prev.find(e => e.id === updatedEvent.id).start.getTime() : 0),
+              endDiff: _timeChange?.endDiff || (_exactPosition ? 
+                _exactPosition.end.getTime() - prev.find(e => e.id === updatedEvent.id).end.getTime() : 0)
+            };
+
+            console.log('Calculated time shift:', timeShift);
+
+            // Update all events in the series with the new properties and time shift
+            const updatedSeriesEvents = seriesEvents.map(event => {
+              // Calculate new start and end times
+              const newStart = new Date(event.start.getTime() + timeShift.startDiff);
+              const newEnd = new Date(event.end.getTime() + timeShift.endDiff);
+
+              const updatedSeriesEvent = {
+                ...event,
+                title: cleanEvent.title,
+                description: cleanEvent.description,
+                color: cleanEvent.color,
+                isAllDay: cleanEvent.isAllDay,
+                repeat: cleanEvent.repeat,
+                start: newStart,
+                end: newEnd
+              };
+
+              console.log('Updated series event:', {
+                id: event.id,
+                oldStart: event.start,
+                oldEnd: event.end,
+                newStart,
+                newEnd,
+                timeShift
+              });
+
+              return updatedSeriesEvent;
+            });
+
+            // Get all non-series events
+            const nonSeriesEvents = updatedEvents.filter(e => e.seriesId !== seriesId);
+
+            // If the repeat pattern changed, regenerate the series
+            if (hasRepeatChanged) {
+              const templateEvent = {
+                ...updatedSeriesEvents[0],
+                rrule: cleanEvent.rrule
+              };
+              const newSeriesEvents = generateRecurringEvents(templateEvent);
+              updatedEvents = [...nonSeriesEvents, ...newSeriesEvents];
+            } else {
+              // Otherwise use our manually updated events
+              updatedEvents = [...nonSeriesEvents, ...updatedSeriesEvents];
+            }
+
+            console.log('Final update result:', {
+              eventCount: updatedEvents.length,
+              seriesEventCount: updatedSeriesEvents.length,
+              hasRepeatChanged,
+              timeShift,
+              sampleEvent: updatedSeriesEvents[0]
+            });
+          }
+          break;
+        }
+        
+        default: {
+          // For recurring events, use the recurrence utilities
+          if (seriesId) {
+            console.log('Handling recurring event update:', {
+              seriesId,
+              isDragging: _isDragging,
+              isResizing: _isResizing,
+              updateSeries: _updateSeries
+            });
+
+            // Update the event being edited first
+            const eventIndex = updatedEvents.findIndex(e => e.id === updatedEvent.id);
+            if (eventIndex !== -1) {
+              const updatedSeriesEvent = {
+                ...cleanEvent,
+                id: updatedEvent.id,
+                seriesId: seriesId,
+                isRepeat: true,
+                start: _exactPosition ? new Date(_exactPosition.start) : new Date(cleanEvent.start),
+                end: _exactPosition ? new Date(_exactPosition.end) : new Date(cleanEvent.end)
+              };
+              
+              // Use updateSeriesEvents to handle the update
+              updatedEvents = updateSeriesEvents(
+                updatedEvents, 
+                updatedSeriesEvent, 
+                {
+                  timeChange: Boolean(_timeChange || _exactPosition),
+                  propertiesOnly: !(_timeChange || _exactPosition),
+                  regenerate: hasRepeatChanged || _seriesUpdate || _forceSeriesUpdate || _updateSeries,
+                  isDragging: _isDragging || false,
+                  isResizing: _isResizing || false,
+                  preserveRepeat: _preserveRepeat
+                }
+              );
+            }
+          } else {
+            // For non-repeated events or other cases
+            const eventIndex = updatedEvents.findIndex(e => e.id === updatedEvent.id);
+            if (eventIndex !== -1) {
+              if ((!prev.find(e => e.id === updatedEvent.id).repeat || prev.find(e => e.id === updatedEvent.id).repeat === 'none') && cleanEvent.repeat && cleanEvent.repeat !== 'none') {
+                // Converting to a repeat event
+                const newSeriesId = generateEventId();
+                const updatedEvent = {
+                  ...cleanEvent,
+                  id: updatedEvent.id,
+                  seriesId: newSeriesId,
+                  isRepeat: true,
+                  start: _exactPosition ? new Date(_exactPosition.start) : new Date(cleanEvent.start),
+                  end: _exactPosition ? new Date(_exactPosition.end) : new Date(cleanEvent.end)
                 };
-              } 
-              // For other events in the series, apply the time difference
-              else {
-                updatedEvents[i] = {
-                  ...event,
-                  title: cleanEventData.title,
-                  description: cleanEventData.description,
-                  color: cleanEventData.color,
-                  isAllDay: cleanEventData.isAllDay,
-                  repeat: cleanEventData.repeat,
-                  start: new Date(event.start.getTime() + startDiff),
-                  end: new Date(event.end.getTime() + endDiff)
+                updatedEvents[eventIndex] = updatedEvent;
+                
+                // Generate recurring instances
+                const newInstances = generateRecurringEvents(updatedEvent);
+                updatedEvents = [...updatedEvents, ...newInstances.slice(1)];
+              } else {
+                // Regular single event update
+                updatedEvents[eventIndex] = {
+                  ...cleanEvent,
+                  id: updatedEvent.id,
+                  start: new Date(cleanEvent.start),
+                  end: new Date(cleanEvent.end)
                 };
               }
             }
           }
         }
-        
-        // Save to localStorage
-        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
-        return updatedEvents;
       }
 
-      // For non-repeated events or other cases
-      const eventIndex = updatedEvents.findIndex(e => e.id === existingEvent.id);
-      if (eventIndex !== -1) {
-        // Check if we're converting a non-repeat event to a repeat event
-        const isConvertingToRepeat = (!existingEvent.repeat || existingEvent.repeat === 'none') && cleanEventData.repeat && cleanEventData.repeat !== 'none';
-        
-        if (isConvertingToRepeat || repeatChanged) {
-          // Create a new series ID if needed
-          const newSeriesId = generateEventId();
-          
-          // Update the event with repeat properties
-          updatedEvents[eventIndex] = {
-            ...cleanEventData,
-            id: existingEvent.id,
-            seriesId: newSeriesId,
-            isRepeat: true,
-            start: exactPosition ? exactPosition.start : cleanEventData.start,
-            end: exactPosition ? exactPosition.end : cleanEventData.end
-          };
-        } else {
-          // Regular single event update
-          updatedEvents[eventIndex] = {
-            ...cleanEventData,
-            id: existingEvent.id
-          };
-        }
-      }
-      
-      localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
       return updatedEvents;
     });
 
-    return eventData.id;
+    return updatedEvent.id;
   }, []);
 
   const handleDeleteEvent = useCallback((event, setDeleteModalState) => {
-    // Only treat as repeated event if it has a repeat property and it's not 'none'
-    const isRepeatedEvent = event.repeat && event.repeat !== "none";
+    const isRepeatedEvent = event.repeat && event.repeat !== "none" && event.seriesId;
 
     if (isRepeatedEvent) {
       setDeleteModalState({
@@ -247,13 +340,41 @@ export function useEventManagement(commandBarRef) {
         event,
       });
     } else {
-      // If not a repeated event, delete directly
       setEvents((prevEvents) => {
-        const updatedEvents = prevEvents.filter((e) => e.id !== event.id);
-        localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+        // Filter out the event and any orphaned series events
+        const updatedEvents = prevEvents.filter((e) => {
+          if (e.id === event.id) return false;
+          if (event.seriesId && e.seriesId === event.seriesId) return false;
+          return true;
+        });
         return updatedEvents;
       });
     }
+  }, []);
+
+  const handleDeleteSeriesEvents = useCallback((event, scope) => {
+    if (!event) return;
+    
+    setEvents((prevEvents) => {
+      let updatedEvents;
+      
+      if (scope === 'all' && event.seriesId) {
+        // Delete all events in the series
+        updatedEvents = prevEvents.filter(e => e.seriesId !== event.seriesId);
+      } else if (scope === 'single' && event.id) {
+        // Delete just this instance and any orphaned series events
+        updatedEvents = prevEvents.filter(e => {
+          if (e.id === event.id) return false;
+          if (event.seriesId && e.seriesId === event.seriesId) return false;
+          return true;
+        });
+      } else {
+        // If something's wrong with the event data, just return current state
+        return prevEvents;
+      }
+      
+      return updatedEvents;
+    });
   }, []);
 
   return {
@@ -262,6 +383,7 @@ export function useEventManagement(commandBarRef) {
     handleCreateEvent,
     handleUpdateEvent,
     handleDeleteEvent,
+    handleDeleteSeriesEvents,
     editingEventId,
     setEditingEventId
   };

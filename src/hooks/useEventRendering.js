@@ -30,8 +30,9 @@ export function useEventRendering(
       });
 
       return filteredEvents.map((event, index) => {
-        // Use findOverlappingGroup to get all transitively overlapping events
         const overlappingEvents = findOverlappingGroup(event, filteredEvents);
+        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
+        const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
           <motion.div
@@ -40,11 +41,10 @@ export function useEventRendering(
               event.isEditing || dragState.eventId === event.id
                 ? "bg-primary/30"
                 : "bg-primary/10"
-            } event-item`}
+            } event-item ${repeatClass}`}
             style={getEventStyle(event, overlappingEvents, viewType)}
             onMouseDown={(e) => {
-              if (e.button === 0) {
-                // Left click only
+              if (e.button === 0 && !e.target.closest(".resize-handle")) {
                 handleDragStart(e, event);
               }
             }}
@@ -58,35 +58,27 @@ export function useEventRendering(
               className="absolute left-0 top-0 bottom-0 w-1"
               style={{ backgroundColor: event.color || "#808080" }}
             />
-            {/* Only show resize handles for non-editing events */}
-            {!event.isEditing && (
-              <>
-                {/* Vertical resize handles */}
-                <div
-                  className="absolute top-0 left-2 right-2 h-2 cursor-ns-resize resize-handle"
-                  onMouseDown={(e) => handleResizeStart(e, event.id, "top")}
-                />
-                <div
-                  className="absolute bottom-0 left-2 right-2 h-2 cursor-ns-resize resize-handle"
-                  onMouseDown={(e) => handleResizeStart(e, event.id, "bottom")}
-                />
-                {/* Horizontal resize handles */}
-                <div
-                  className="absolute left-0 top-2 bottom-2 w-2 cursor-ew-resize resize-handle"
-                  onMouseDown={(e) => handleResizeStart(e, event.id, "left")}
-                />
-                <div
-                  className="absolute right-0 top-2 bottom-2 w-2 cursor-ew-resize resize-handle"
-                  onMouseDown={(e) => handleResizeStart(e, event.id, "right")}
-                />
-              </>
-            )}
+            {/* Resize handles */}
+            <div
+              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleResizeStart(e, event.id, "top");
+              }}
+            />
+            <div
+              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleResizeStart(e, event.id, "bottom");
+              }}
+            />
             <div className="px-3 py-1">
               <div className="font-medium text-xs">{event.title}</div>
               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                 {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
               </div>
-              {event.repeat && event.repeat !== "none" && (
+              {isRepeatEvent && (
                 <div className="absolute bottom-1 right-1">
                   <Repeat className="w-3 h-3" />
                 </div>
@@ -102,8 +94,9 @@ export function useEventRendering(
       );
 
       return dayEvents.map((event, index) => {
-        // Use findOverlappingGroup to get all transitively overlapping events
         const overlappingEvents = findOverlappingGroup(event, dayEvents);
+        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
+        const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
           <motion.div
@@ -111,11 +104,10 @@ export function useEventRendering(
             whileTap={{ scale: 0.95 }}
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
               dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
-            }`}
+            } ${repeatClass}`}
             style={getEventStyle(event, overlappingEvents, viewType)}
             onMouseDown={(e) => {
-              if (e.button === 0) {
-                // Left click only
+              if (e.button === 0 && !e.target.closest(".resize-handle")) {
                 handleDragStart(e, event);
               }
             }}
@@ -129,12 +121,27 @@ export function useEventRendering(
               className="absolute left-0 top-0 bottom-0 w-1"
               style={{ backgroundColor: event.color || "#808080" }}
             />
+            {/* Resize handles */}
+            <div
+              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleResizeStart(e, event.id, "top");
+              }}
+            />
+            <div
+              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                handleResizeStart(e, event.id, "bottom");
+              }}
+            />
             <div className="px-2 py-1">
               <div className="font-medium text-sm">{event.title}</div>
               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                 {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
               </div>
-              {event.repeat && event.repeat !== "none" && (
+              {isRepeatEvent && (
                 <div className="absolute bottom-1 right-1">
                   <Repeat className="w-3 h-3" />
                 </div>
@@ -151,6 +158,8 @@ export function useEventRendering(
     dragState,
     handleDragStart,
     handleEventClick,
+    handleEventContextMenu,
+    handleResizeStart,
   ]);
 
   const renderAllDayEvents = () => {

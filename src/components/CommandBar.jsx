@@ -270,28 +270,49 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [onClose]);
 
   const openForEdit = useCallback((event) => {
-    const eventData = {
-      title: event.title || '',
-      description: event.description || '',
-      date: format(event.start, 'yyyy-MM-dd'),
-      startTime: format(event.start, 'HH:mm'),
-      endTime: format(event.end, 'HH:mm'),
-      isAllDay: event.allDay || false,
-      color: event.color || '#808080',
-      repeat: event.repeat || 'none',
-      seriesId: event.seriesId || null,
-      id: event.id
+    // Create a deep copy of the event to avoid reference issues
+    const eventCopy = {
+      ...event,
+      start: new Date(event.start),
+      end: new Date(event.end)
     };
 
-    setOriginalEventState(event);
+    const eventData = {
+      title: eventCopy.title || '',
+      description: eventCopy.description || '',
+      date: format(eventCopy.start, 'yyyy-MM-dd'),
+      startTime: format(eventCopy.start, 'HH:mm'),
+      endTime: format(eventCopy.end, 'HH:mm'),
+      isAllDay: eventCopy.allDay || false,
+      color: eventCopy.color || '#808080',
+      repeat: eventCopy.repeat || 'none',
+      seriesId: eventCopy.seriesId || null,
+      isRepeat: eventCopy.isRepeat || false,
+      id: eventCopy.id,
+      // Preserve all metadata flags
+      _editScope: eventCopy._editScope || 'single',
+      _seriesUpdate: eventCopy._seriesUpdate || false,
+      _futureUpdate: eventCopy._futureUpdate || false,
+      _repeatChanged: eventCopy._repeatChanged || false,
+      _originalSeriesId: eventCopy._originalSeriesId || eventCopy.seriesId,
+      _originalEvent: eventCopy._originalEvent || eventCopy,
+      _exactPosition: eventCopy._exactPosition || {
+        start: new Date(eventCopy.start),
+        end: new Date(eventCopy.end)
+      },
+      _preserveRepeat: eventCopy._preserveRepeat || false,
+      _forceSeriesUpdate: eventCopy._seriesUpdate || false
+    };
+
+    // Set both the original state and event state
+    setOriginalEventState(eventCopy);
     setEventState(eventData);
-    setSelectedColor(event.color || '#808080'); // Add this line to sync the selectedColor state
+    setSelectedColor(eventCopy.color || '#808080');
     setIsAddingEvent(true);
     setHasChanges(false);
-    // Set preview event
     setPreviewEvent({
-      ...event,
-      _isPreview: true // Mark as preview so we can style it differently in the calendar
+      ...eventCopy,
+      _isPreview: true
     });
   }, []);
 
@@ -299,9 +320,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setEventState(prev => {
       const newState = { ...prev, [field]: value };
       // Compare with original state to determine if there are changes
-      const hasChanges = Object.keys(newState).some(key => 
-        newState[key] !== (originalEventState?.[key] || '')
-      );
+      const hasChanges = Object.keys(newState).some(key => {
+        // Skip internal properties starting with _
+        if (key.startsWith('_')) return false;
+        // Handle date comparison specially
+        if (key === 'date') {
+          const prevDate = format(originalEventState?.start || new Date(), 'yyyy-MM-dd');
+          return newState[key] !== prevDate;
+        }
+        // Handle time comparison specially
+        if (key === 'startTime') {
+          const prevTime = format(originalEventState?.start || new Date(), 'HH:mm');
+          return newState[key] !== prevTime;
+        }
+        if (key === 'endTime') {
+          const prevTime = format(originalEventState?.end || new Date(), 'HH:mm');
+          return newState[key] !== prevTime;
+        }
+        return newState[key] !== (originalEventState?.[key] || '');
+      });
       setHasChanges(hasChanges);
       return newState;
     });
@@ -320,9 +357,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       repeat: eventState.repeat,
       seriesId: eventState.seriesId,
       color: eventState.color,
-      _editScope: originalEventState?._editScope,
-      _seriesUpdate: originalEventState?._seriesUpdate,
-      _repeatChanged: !originalEventState?.repeat && eventState.repeat && eventState.repeat !== 'none'
+      // Ensure we keep the original repeat properties if this is a series update
+      isRepeat: originalEventState?.isRepeat || false,
+      // Preserve all edit scope flags from the original event
+      _editScope: originalEventState?._editScope || 'single',
+      _seriesUpdate: originalEventState?._seriesUpdate || false,
+      _futureUpdate: originalEventState?._futureUpdate || false,
+      _repeatChanged: originalEventState?._repeatChanged || (!originalEventState?.repeat && eventState.repeat && eventState.repeat !== 'none'),
+      _originalSeriesId: originalEventState?._originalSeriesId || originalEventState?.seriesId,
+      _originalEvent: originalEventState?._originalEvent || originalEventState,
+      _exactPosition: {
+        start: parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+        end: parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date())
+      },
+      // Preserve repeat properties for series updates
+      _preserveRepeat: originalEventState?._preserveRepeat || false,
+      // Force series update if this is a series edit
+      _forceSeriesUpdate: originalEventState?._seriesUpdate || false
     };
 
     if (originalEventState?.id) {

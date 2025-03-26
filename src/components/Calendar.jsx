@@ -11,7 +11,7 @@ import GoToDateCommand from "./GoToDateCommand";
 import Day from "./views/Day";
 import Week from "./views/Week";
 import Month from "./views/Month";
-import { generateRepeatedEvents } from "../utils/eventUtils";
+import { generateEventId } from "../utils/eventUtils";
 import {
   handlePrevious,
   handleNext,
@@ -24,7 +24,6 @@ import { useDragAndDrop } from "@/hooks/useDragAndDrop.js";
 import { useEventRendering } from "@/hooks/useEventRendering.js";
 import { useModalManagement } from "@/hooks/useModalManagement.js";
 import { useTaskManagement } from "@/hooks/useTaskManagement.js";
-import { useVirtualizedEvents } from "@/hooks/useVirtualizedEvents.js";
 import {
   Popover,
   PopoverContent,
@@ -63,9 +62,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleCreateEvent,
     handleUpdateEvent,
     handleDeleteEvent,
+    handleDeleteSeriesEvents,
   } = useEventManagement(commandBarRef);
 
-  const virtualizedEvents = useVirtualizedEvents(events, viewType, currentDate);
+  // We no longer need virtualized events - use real events directly
+  const displayEvents = events;
 
   const {
     deleteModalState,
@@ -81,7 +82,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDeleteModalClose,
     handleRepeatEditConfirm,
     handleRepeatEditDiscard,
-  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent);
+  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents);
 
   const {
     setClickState,
@@ -144,7 +145,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, []);
 
   const { renderEvents, renderAllDayEvents } = useEventRendering(
-    virtualizedEvents,
+    displayEvents,
     selectedDate,
     viewType,
     dragState,
@@ -535,7 +536,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             {viewType === ViewType.WEEK && (
               <Week
                 selectedDate={selectedDate}
-                events={events}
+                events={displayEvents}
                 dragState={dragState}
                 setPendingEventCell={setPendingEventCell}
                 pendingEventCell={pendingEventCell}
@@ -555,7 +556,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             {viewType === ViewType.DAY && (
               <Day
                 selectedDate={selectedDate}
-                events={events}
+                events={displayEvents}
                 dragState={dragState}
                 pendingEventCell={pendingEventCell}
                 setPendingEventCell={setPendingEventCell}
@@ -574,7 +575,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             {viewType === ViewType.MONTH && (
               <Month
                 selectedDate={selectedDate}
-                events={events}
+                events={displayEvents}
                 handleEventClick={handleEventClick}
                 handleEventContextMenu={handleEventContextMenu}
               />

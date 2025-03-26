@@ -32,7 +32,9 @@ export function useDragAndDrop({
     edge: null,
   });
 
+  const resizedEventRef = useRef(null);
   const wasResizingRef = useRef(false);
+  const originalEventRef = useRef(null);
 
   const handleDragStart = useCallback(
     (e, event) => {
@@ -169,17 +171,44 @@ export function useDragAndDrop({
                 ...finalDraggedEvent,
                 start: new Date(finalDraggedEvent.start.getTime()),
                 end: new Date(finalDraggedEvent.end.getTime()),
+                // Add flags for the type of operation
+                _isDragging: true,
+                _isResizing: false,
               },
               originalEvent: {
                 ...dragStartOriginalEvent,
                 start: new Date(dragStartOriginalEvent.start.getTime()),
                 end: new Date(dragStartOriginalEvent.end.getTime()),
+                // Also add flags to original event
+                _isDragging: true,
+                _isResizing: false,
               },
               isEditOperation: false,
             });
           } else if (finalDraggedEvent) {
-            // For non-repeated events, update directly
-            handleUpdateEvent(finalDraggedEvent);
+            // For non-repeated events, update directly with exact position information
+            // Using _exactPosition ensures precise time updates similar to resize handling
+            handleUpdateEvent({
+              ...finalDraggedEvent,
+              _exactPosition: {
+                start: new Date(finalDraggedEvent.start.getTime()),
+                end: new Date(finalDraggedEvent.end.getTime())
+              },
+              // Add time change information to match resize handling
+              _timeChange: {
+                startDiff: finalDraggedEvent.start.getTime() - dragStartOriginalEvent.start.getTime(),
+                endDiff: finalDraggedEvent.end.getTime() - dragStartOriginalEvent.end.getTime()
+              },
+              // Store the original event data for proper comparison
+              _originalEvent: dragStartOriginalEvent,
+              // Update all events in the series
+              _updateSeries: true,
+              // Flag for the type of operation
+              _isDragging: true,
+              _isResizing: false,
+              // Add the preserveRepeat flag to fix error
+              _preserveRepeat: true
+            });
           }
         }
 
@@ -462,263 +491,160 @@ export function useDragAndDrop({
       e.preventDefault();
       e.stopPropagation();
 
-      const eventElement = e.currentTarget.closest(".event-item");
-      if (!eventElement) return;
-
-      const event = events.find((ev) => ev.id === eventId);
+      const event = events.find((e) => e.id === eventId);
       if (!event) return;
 
-      const container = eventElement.closest(".calendar-grid");
+      const container = e.currentTarget.closest(".calendar-grid");
       if (!container) return;
 
       const containerRect = container.getBoundingClientRect();
-      const hourHeight = 64;
-      const timeColumnWidth = 60;
-      const availableWidth = containerRect.width - timeColumnWidth;
-      const dayWidth = availableWidth / 7;
 
-      // Store original event with deep copied dates to preserve original state
-      const originalEvent = {
+      // Store the original event for potential reversion
+      originalEventRef.current = {
         ...event,
         start: new Date(event.start.getTime()),
         end: new Date(event.end.getTime()),
       };
 
-      // Reference for tracking the latest state of the event during resize
-      const resizedEventRef = {
-        current: { ...originalEvent },
+      // Store the event being resized
+      resizedEventRef.current = {
+        ...event,
+        start: new Date(event.start.getTime()),
+        end: new Date(event.end.getTime()),
       };
 
       setDragState({
         isResizing: true,
-        eventId: eventId,
-        startTime: ["left", "top"].includes(edge) ? event.end : event.start,
-        initialHeight: eventElement.offsetHeight,
-        initialWidth: eventElement.offsetWidth,
+        eventId,
         edge,
-        originalEvent: originalEvent,
+        startTime: new Date(event.start),
+        initialHeight: null,
+        initialWidth: null,
       });
-
-      const getTimeFromY = (y) => {
-        const scrollTop = container.scrollTop;
-        const relativeY = y - containerRect.top + scrollTop;
-        const totalMinutes = (relativeY / hourHeight) * 60;
-        const roundedMinutes = Math.round(totalMinutes / 15) * 15;
-
-        const hours = Math.floor(roundedMinutes / 60);
-        const minutes = roundedMinutes % 60;
-
-        // Create new date while preserving the original date
-        const time =
-          edge === "top" ? new Date(event.start) : new Date(event.end);
-        time.setHours(hours);
-        time.setMinutes(minutes);
-        time.setSeconds(0);
-        time.setMilliseconds(0);
-        return time;
-      };
-
-      const getDayFromX = (x) => {
-        const relativeX = x - containerRect.left - timeColumnWidth;
-        const dayIndex = Math.floor(relativeX / dayWidth);
-
-        const weekStart = new Date(selectedDate);
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-
-        const newDate = new Date(weekStart);
-        newDate.setDate(weekStart.getDate() + dayIndex);
-
-        // Preserve the original time
-        const originalTime = edge === "left" ? event.end : event.start;
-        newDate.setHours(
-          originalTime.getHours(),
-          originalTime.getMinutes(),
-          0,
-          0
-        );
-
-        return newDate;
-      };
 
       const handleMove = (moveEvent) => {
         moveEvent.preventDefault();
         if (!container) return;
 
-        let newTime;
-        if (edge === "left" || edge === "right") {
-          newTime = getDayFromX(moveEvent.clientX);
-        } else {
-          newTime = getTimeFromY(moveEvent.clientY);
-        }
+        // Get the new time while preserving the original day
+        const newTimeOnCurrentDay = getTimeFromMousePosition(moveEvent.clientY, containerRect, currentDate);
+        const newTime = new Date(event.start);
+        newTime.setHours(newTimeOnCurrentDay.getHours());
+        newTime.setMinutes(newTimeOnCurrentDay.getMinutes());
 
-        setEvents((prevEvents) => {
-          const updatedEvents = prevEvents.map((e) => {
+        setEvents((prevEvents) =>
+          prevEvents.map((e) => {
             if (e.id === eventId) {
-              const newEvent = { ...e };
-              if (edge === "bottom") {
-                if (newTime > e.start) {
-                  // Preserve the date of the end time, only update hours and minutes
-                  const updatedEnd = new Date(e.end);
-                  updatedEnd.setHours(
-                    newTime.getHours(),
-                    newTime.getMinutes(),
-                    0,
-                    0
-                  );
-                  newEvent.end = updatedEnd;
-                }
-              } else if (edge === "top") {
-                if (newTime < e.end) {
-                  // Preserve the date of the start time, only update hours and minutes
-                  const updatedStart = new Date(e.start);
-                  updatedStart.setHours(
-                    newTime.getHours(),
-                    newTime.getMinutes(),
-                    0,
-                    0
-                  );
-                  newEvent.start = updatedStart;
-                }
-              } else if (edge === "right") {
-                const endOfDay = new Date(newTime);
-                endOfDay.setHours(e.end.getHours(), e.end.getMinutes(), 0, 0);
-                if (endOfDay >= e.start) {
-                  newEvent.end = endOfDay;
-                }
-              } else if (edge === "left") {
-                const startOfDay = new Date(newTime);
-                startOfDay.setHours(
-                  e.start.getHours(),
-                  e.start.getMinutes(),
-                  0,
-                  0
-                );
-                if (startOfDay <= e.end) {
-                  newEvent.start = startOfDay;
-                }
+              const updatedEvent = { ...e };
+              
+              if (edge === "top" && newTime < e.end) {
+                // Preserve the original day when adjusting start time
+                const newStart = new Date(e.start);
+                newStart.setHours(newTime.getHours());
+                newStart.setMinutes(newTime.getMinutes());
+                updatedEvent.start = newStart;
+              } else if (edge === "bottom" && newTime > e.start) {
+                // Preserve the original day when adjusting end time
+                const newEnd = new Date(e.end);
+                newEnd.setHours(newTime.getHours());
+                newEnd.setMinutes(newTime.getMinutes());
+                updatedEvent.end = newEnd;
               }
 
-              // Update our resizedEventRef with the latest state
+              // Update our reference to the current state
               resizedEventRef.current = {
-                ...newEvent,
-                start: new Date(newEvent.start.getTime()),
-                end: new Date(newEvent.end.getTime()),
+                ...updatedEvent,
+                start: new Date(updatedEvent.start.getTime()),
+                end: new Date(updatedEvent.end.getTime()),
               };
 
-              return newEvent;
+              return updatedEvent;
             }
             return e;
-          });
-
-          return updatedEvents;
-        });
+          })
+        );
       };
 
       const handleUp = () => {
-        setTimeout(() => {
-          wasResizingRef.current = false;
-        }, 0);
-
-        // Use our tracked resized event from the reference
         const resizedEvent = resizedEventRef.current;
+        const originalEvent = originalEventRef.current;
 
-        // Check if this is a repeating event
-        if (resizedEvent && (resizedEvent.repeat || resizedEvent.seriesId)) {
-          const isRepeatingEvent =
-            resizedEvent.repeat !== "none" || resizedEvent.seriesId;
+        if (resizedEvent && originalEvent) {
+          const startChanged = resizedEvent.start.getTime() !== originalEvent.start.getTime();
+          const endChanged = resizedEvent.end.getTime() !== originalEvent.end.getTime();
 
-          if (isRepeatingEvent) {
-            // Create deep copies to ensure we don't have reference issues
-            const draggedEvent = {
-              ...resizedEvent,
-              start: new Date(resizedEvent.start.getTime()),
-              end: new Date(resizedEvent.end.getTime()),
-            };
+          if (startChanged || endChanged) {
+            // Check if this is a repeated event
+            const isRepeatedEvent = resizedEvent.seriesId || (resizedEvent.repeat && resizedEvent.repeat !== "none");
 
-            // Only open the modal if the times actually changed
-            const startChanged =
-              originalEvent.start.getTime() !== draggedEvent.start.getTime();
-            const endChanged =
-              originalEvent.end.getTime() !== draggedEvent.end.getTime();
-
-            if (startChanged || endChanged) {
-              // Keep the dragged event in its new position and mark it as being manipulated
-              const eventWithManipulationFlag = {
-                ...draggedEvent,
-                _isBeingManipulated: true,
-                start: new Date(draggedEvent.start.getTime()),
-                end: new Date(draggedEvent.end.getTime()),
-              };
-
-              setEvents((prevEvents) => {
-                // Deep copy of events to avoid reference issues
-                const newEvents = prevEvents.map((e) => ({
-                  ...e,
-                  start: new Date(e.start),
-                  end: new Date(e.end),
-                }));
-
-                // Find the event index and replace it
-                const eventIndex = newEvents.findIndex(
-                  (e) => e.id === draggedEvent.id
-                );
-                if (eventIndex !== -1) {
-                  newEvents[eventIndex] = eventWithManipulationFlag;
-                }
-
-                return newEvents;
-              });
-
-              // Open the RepeatEditModal with the manipulation flag
+            if (isRepeatedEvent) {
+              // For repeated events, show the RepeatEditModal
               setRepeatEditModalState({
                 isOpen: true,
-                event: {
-                  ...draggedEvent,
-                  _isBeingManipulated: true,
-                  start: new Date(draggedEvent.start.getTime()),
-                  end: new Date(draggedEvent.end.getTime()),
-                },
+                event: originalEvent,
                 draggedEvent: {
-                  ...draggedEvent,
-                  _isBeingManipulated: true,
-                  start: new Date(draggedEvent.start.getTime()),
-                  end: new Date(draggedEvent.end.getTime()),
+                  ...resizedEvent,
+                  // Add flags for the type of operation
+                  _isDragging: false,
+                  _isResizing: true,
                 },
                 originalEvent: {
                   ...originalEvent,
-                  start: new Date(originalEvent.start.getTime()),
-                  end: new Date(originalEvent.end.getTime()),
+                  // Also add flags to original event
+                  _isDragging: false,
+                  _isResizing: true,
                 },
                 isEditOperation: false,
+              });
+            } else {
+              // For non-repeated events, update directly
+              handleUpdateEvent({
+                ...resizedEvent,
+                _exactPosition: {
+                  start: new Date(resizedEvent.start.getTime()),
+                  end: new Date(resizedEvent.end.getTime())
+                },
+                // Add time change information
+                _timeChange: {
+                  startDiff: resizedEvent.start.getTime() - originalEvent.start.getTime(),
+                  endDiff: resizedEvent.end.getTime() - originalEvent.end.getTime()
+                },
+                // Store the original event data for proper comparison
+                _originalEvent: originalEvent,
+                // Update all events in the series
+                _updateSeries: true,
+                // Flag for the type of operation
+                _isDragging: false,
+                _isResizing: true,
+                // Add the preserveRepeat flag to fix error
+                _preserveRepeat: true
               });
             }
           }
         }
 
+        // Reset the drag state
         setDragState({
           isResizing: false,
           eventId: null,
+          edge: null,
           startTime: null,
           initialHeight: null,
           initialWidth: null,
-          edge: null,
         });
+
+        // Clear our refs
+        resizedEventRef.current = null;
+        originalEventRef.current = null;
 
         window.removeEventListener("mousemove", handleMove);
         window.removeEventListener("mouseup", handleUp);
-
-        // Reset click state after drag operation
-        setClickState({
-          lastClickTime: 0,
-          lastClickPosition: null,
-          clickCount: 0,
-        });
       };
 
       window.addEventListener("mousemove", handleMove);
       window.addEventListener("mouseup", handleUp);
     },
-    [events, selectedDate, setEvents, setRepeatEditModalState, setClickState]
+    [events, setEvents, setRepeatEditModalState, handleUpdateEvent, currentDate]
   );
 
   return {
