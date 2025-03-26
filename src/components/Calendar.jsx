@@ -547,6 +547,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 contextMenu={contextMenu}
                 commandBarRef={commandBarRef}
                 currentDate={currentDate}
+                renderAllDayEvents={renderAllDayEvents}
+                renderEvents={renderEvents}
                 viewType={viewType.toLowerCase()}
               />
             </div>

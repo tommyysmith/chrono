@@ -32,6 +32,8 @@ export default function TimeGridView({
   contextMenu,
   commandBarRef,
   currentDate,
+  renderAllDayEvents,
+  renderEvents,
   viewType,
 }) {
   const timeGridRef = useRef(null);
@@ -82,61 +84,61 @@ export default function TimeGridView({
     );
   };
 
-  const renderAllDayEvents = () => {
-    if (viewType === "month") return null;
+  // const renderAllDayEvents = () => {
+  //   if (viewType === "month") return null;
 
-    return (
-      <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
-        <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
-          All-day
-        </div>
-        <div className="relative">
-          <div className="flex flex-col gap-1 p-1">
-            {events
-              .filter(
-                (event) =>
-                  event.isAllDay &&
-                  (viewType === "day"
-                    ? isSameDay(event.start, selectedDate)
-                    : true) // For week view show all all-day events
-              )
-              .map((event, index) => (
-                <div
-                  key={`${event.id}-${index}`}
-                  className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
-                  style={{
-                    backgroundColor: event.color
-                      ? `${event.color}20`
-                      : "#80808020",
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={(e) => {
-                    e.stopPropagation();
-                    handleEventClick(event);
-                  }}
-                  onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                >
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1"
-                    style={{ backgroundColor: event.color || "#808080" }}
-                  />
-                  <div className="px-3 py-1">
-                    <div className="font-medium text-xs">{event.title}</div>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  //   return (
+  //     <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
+  //       <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
+  //         All-day
+  //       </div>
+  //       <div className="relative">
+  //         <div className="flex flex-col gap-1 p-1">
+  //           {events
+  //             .filter(
+  //               (event) =>
+  //                 event.isAllDay &&
+  //                 (viewType === "day"
+  //                   ? isSameDay(event.start, selectedDate)
+  //                   : true) // For week view show all all-day events
+  //             )
+  //             .map((event, index) => (
+  //               <div
+  //                 key={`${event.id}-${index}`}
+  //                 className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
+  //                 style={{
+  //                   backgroundColor: event.color
+  //                     ? `${event.color}20`
+  //                     : "#80808020",
+  //                 }}
+  //                 onClick={(e) => e.stopPropagation()}
+  //                 onDoubleClick={(e) => {
+  //                   e.stopPropagation();
+  //                   handleEventClick(event);
+  //                 }}
+  //                 onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+  //               >
+  //                 <div
+  //                   className="absolute left-0 top-0 bottom-0 w-1"
+  //                   style={{ backgroundColor: event.color || "#808080" }}
+  //                 />
+  //                 <div className="px-3 py-1">
+  //                   <div className="font-medium text-xs">{event.title}</div>
+  //                 </div>
+  //               </div>
+  //             ))}
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // };
 
-  // Month view
+  // Month view - start
   if (viewType === "month") {
     const start = startOfMonth(selectedDate);
     const end = endOfMonth(selectedDate);
     const days = eachDayOfInterval({ start, end });
-
+    console.log(start, end, days);
     // Calculate days from previous month to fill first week
     const firstDay = start.getDay();
     const prevMonthDays = Array.from({ length: firstDay }, (_, i) => {
@@ -156,21 +158,18 @@ export default function TimeGridView({
     const allDays = [...prevMonthDays, ...days, ...nextMonthDays];
 
     return (
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Week day headers */}
-        <div className="grid grid-cols-7 bg-light-bg-light dark:bg-dark-bg-light">
+        <div className="grid grid-cols-7 border-b border-light-border dark:border-dark-border">
           {DAYS.map((day) => (
-            <div
-              key={day}
-              className="h-8 flex items-center justify-center text-xs font-medium text-light-text/50 dark:text-dark-text/50"
-            >
-              {day}
+            <div key={day} className="h-8 flex items-center justify-end p-2">
+              <span className="text-xs text-gray-500 font-medium">{day}</span>
             </div>
           ))}
         </div>
 
         {/* Calendar grid */}
-        <div className="flex-1 grid grid-cols-7 grid-rows-6 bg-light-border dark:bg-dark-border gap-px">
+        <div className="flex-1 grid grid-cols-7 grid-rows-6 overflow-hidden">
           {allDays.map((day, index) => {
             const isCurrentMonth = day.getMonth() === selectedDate.getMonth();
             const isToday = isSameDay(day, new Date());
@@ -178,51 +177,68 @@ export default function TimeGridView({
             return (
               <div
                 key={index}
-                className={`bg-light-bg dark:bg-dark-bg p-1 flex flex-col ${
-                  isCurrentMonth
-                    ? "text-light-text dark:text-dark-text"
-                    : "text-light-text/30 dark:text-dark-text/30"
-                } ${isToday ? "ring-2 ring-primary ring-inset" : ""}`}
+                className={` border-b border-r border-light-border dark:border-dark-border p-1 ${
+                  !isCurrentMonth
+                    ? "bg-light-background-secondary dark:bg-dark-background-secondary"
+                    : ""
+                }`}
                 onClick={() => handleCellClick(null, day)}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, day)}
               >
-                <div className="text-xs font-medium mb-1">
-                  {format(day, "d")}
+                <div className="flex justify-end mb-1">
+                  <span
+                    className={`text-sm px-1 rounded-md ${
+                      isToday
+                        ? "bg-primary text-white font-medium"
+                        : !isCurrentMonth
+                        ? "text-gray-500"
+                        : ""
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </span>
                 </div>
-                <div className="space-y-1 overflow-y-auto flex-1">
+                <div className="space-y-1">
                   {events
                     .filter((event) => isSameDay(event.start, day))
-                    .slice(0, 4) // Limit visible events for space
-                    .map((event) => (
-                      <div
-                        key={event.id}
-                        className="text-xs p-1 rounded cursor-pointer truncate"
-                        style={{
-                          backgroundColor: event.color || "#808080",
-                          color: "#fff",
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event);
-                        }}
-                        onContextMenu={(e) => {
-                          e.preventDefault();
-                          handleEventContextMenu(e, event.id);
-                        }}
-                      >
-                        {event.title}
-                      </div>
-                    ))}
-                  {events.filter((event) => isSameDay(event.start, day))
-                    .length > 4 && (
-                    <div className="text-xs text-light-text/50 dark:text-dark-text/50">
-                      +
-                      {events.filter((event) => isSameDay(event.start, day))
-                        .length - 4}{" "}
-                      more
-                    </div>
-                  )}
+                    .map((event, index) => {
+                      const now = new Date();
+                      const isPastEvent = new Date(event.end) < now;
+                      return (
+                        <div
+                          key={`${event.id}-${index}`}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            handleEventClick(event);
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            handleEventContextMenu(e, event.id);
+                          }}
+                          className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                          style={{
+                            backgroundColor: event.color
+                              ? `${event.color}20`
+                              : "#80808020",
+                            opacity: isPastEvent ? 0.5 : 1,
+                          }}
+                        >
+                          <div
+                            className="w-1 self-stretch mr-1.5"
+                            style={{
+                              backgroundColor: event.color || "#808080",
+                            }}
+                          />
+                          <span className="text-gray-500 py-1">
+                            {format(new Date(event.start), "HH:mm")}
+                          </span>
+                          <span className="ml-1 truncate py-1">
+                            {event.title}
+                          </span>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             );
@@ -231,7 +247,7 @@ export default function TimeGridView({
       </div>
     );
   }
-
+  //Month view - end
   // TimeGrid view (day or week)
   const isWeekView = viewType === "week";
   const weekStart = new Date(selectedDate);
@@ -347,7 +363,7 @@ export default function TimeGridView({
               className={`relative h-full ${isWeekView ? "col-span-7" : ""}`}
             >
               {/* Render events */}
-              {renderTimeGridEvents()}
+              {renderEvents()}
 
               {/* Pending event highlight */}
               {pendingEventCell && (
