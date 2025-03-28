@@ -1161,7 +1161,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
                               : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                           >
-                            <span className="flex items-center pl-1 pr-3">{editingTaskId ? 'Edit task' : 'Add task'}</span>
+                            <span className="flex items-center pl-1 pr-3 [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">{editingTaskId ? 'Edit task' : 'Add task'}</span>
                             <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                               <Return className="w-3 h-3" />
                             </div>
@@ -1490,7 +1490,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
                           : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                       >
-                        <span className="text-xs pl-1 pr-3">
+                        <span className="text-xs pl-1 pr-3 [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
                           
                         {originalEventState?.id ? 'Edit event' : 'Add event'}
                         

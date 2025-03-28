@@ -61,12 +61,18 @@ const RepeatEditModal = ({
         start: new Date(originalEvent.start),
         end: new Date(originalEvent.end)
       },
-      // Operation flags
-      _isDragging: draggedEvent._isDragging || false,
-      _isResizing: draggedEvent._isResizing || false,
+      // Operation flags - ensure these are explicitly set as booleans
+      _isDragging: draggedEvent._isDragging === true,
+      _isResizing: draggedEvent._isResizing === true,
       _updateSeries: editScope === 'all',
       _preserveRepeat: editScope !== 'single'
     };
+
+    console.log('RepeatEditModal - Confirming edit with flags:', {
+      isDragging: updatedEvent._isDragging,
+      isResizing: updatedEvent._isResizing,
+      editScope
+    });
 
     // Always update through onEditConfirm to ensure consistent handling
     onEditConfirm({

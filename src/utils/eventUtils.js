@@ -57,6 +57,16 @@ export const findOverlappingGroup = (targetEvent, allEvents) => {
 };
 
 export const getEventStyle = (event, overlappingEvents = [], viewType) => {
+  const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5"; // Temporary ID for debugging
+
+  // Log times specifically for the manipulated event ID
+  if (event.id === manipulatedEventId) {
+    console.log(`[getEventStyle] Received times for manipulated event (${event.id}):`, {
+      start: event.start,
+      end: event.end,
+    });
+  }
+
   const style = {
     position: "absolute",
     backgroundColor: event.color ? `${event.color}20` : "#80808020",

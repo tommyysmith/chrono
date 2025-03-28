@@ -187,27 +187,17 @@ export function useDragAndDrop({
             });
           } else if (finalDraggedEvent) {
             // For non-repeated events, update directly with exact position information
-            // Using _exactPosition ensures precise time updates similar to resize handling
-            handleUpdateEvent({
+            console.log('[useDragAndDrop] Calling handleUpdateEvent for non-repeated DRAG');
+            const nonRepeatedTimeChange = {
+              startDiff: finalDraggedEvent.start.getTime() - dragStartOriginalEvent.start.getTime(),
+              endDiff: finalDraggedEvent.end.getTime() - dragStartOriginalEvent.end.getTime()
+            };
+            handleUpdateEvent({ 
               ...finalDraggedEvent,
-              _exactPosition: {
-                start: new Date(finalDraggedEvent.start.getTime()),
-                end: new Date(finalDraggedEvent.end.getTime())
-              },
-              // Add time change information to match resize handling
-              _timeChange: {
-                startDiff: finalDraggedEvent.start.getTime() - dragStartOriginalEvent.start.getTime(),
-                endDiff: finalDraggedEvent.end.getTime() - dragStartOriginalEvent.end.getTime()
-              },
-              // Store the original event data for proper comparison
-              _originalEvent: dragStartOriginalEvent,
-              // Update all events in the series
-              _updateSeries: true,
-              // Flag for the type of operation
+              _editScope: 'single', 
+              _timeChange: nonRepeatedTimeChange, 
               _isDragging: true,
               _isResizing: false,
-              // Add the preserveRepeat flag to fix error
-              _preserveRepeat: true
             });
           }
         }

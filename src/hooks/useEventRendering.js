@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { format, isSameDay, addDays } from "date-fns";
 import { Repeat } from "@/assets/icons/Repeat";
 import { ViewType } from "../constants/views";
@@ -16,6 +16,14 @@ export function useEventRendering(
   handleResizeStart
 ) {
   const renderEvents = useCallback(() => {
+    // --- DEBUG LOG: Check the specific event directly from the 'events' dependency
+    const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5";
+    const eventInRenderCallback = events.find(e => e.id === manipulatedEventId);
+    console.log(`[renderEvents Callback] Event ${manipulatedEventId} times:`, 
+      eventInRenderCallback ? { start: eventInRenderCallback.start, end: eventInRenderCallback.end } : "NOT FOUND"
+    );
+    // ---
+ 
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -29,14 +37,14 @@ export function useEventRendering(
         );
       });
 
-      return filteredEvents.map((event, index) => {
+      return filteredEvents.map((event) => {
         const overlappingEvents = findOverlappingGroup(event, filteredEvents);
         const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
           <motion.div
-            key={`${event.id}-${index}`}
+            key={event.id}
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer ${
               event.isEditing || dragState.eventId === event.id
                 ? "bg-primary/30"
@@ -93,14 +101,14 @@ export function useEventRendering(
         (event) => !event.isAllDay && isSameDay(event.start, selectedDate)
       );
 
-      return dayEvents.map((event, index) => {
+      return dayEvents.map((event) => {
         const overlappingEvents = findOverlappingGroup(event, dayEvents);
         const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
           <motion.div
-            key={`${event.id}-${index}`}
+            key={event.id}
             whileTap={{ scale: 0.95 }}
             className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
               dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
@@ -162,6 +170,16 @@ export function useEventRendering(
     handleResizeStart,
   ]);
 
+  // --- DEBUG LOG: Effect to check if 'events' prop contains the manipulated event
+  useEffect(() => {
+    const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5";
+    const eventInEffect = events.find(e => e.id === manipulatedEventId);
+    console.log(`[useEventRendering Effect] Event ${manipulatedEventId} in received 'events' prop:`, 
+      eventInEffect ? { start: eventInEffect.start, end: eventInEffect.end } : "NOT FOUND"
+    );
+  }, [events]); // Run only when the events prop reference changes
+  // ---
+
   const renderAllDayEvents = () => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
@@ -187,13 +205,13 @@ export function useEventRendering(
                   className="relative border-l border-light-border dark:border-dark-border min-h-[32px]"
                 >
                   <div className="flex flex-col gap-1 p-1">
-                    {dayEvents.map((event, index) => {
+                    {dayEvents.map((event) => {
                       const now = new Date();
                       const isPastEvent = new Date(event.end) < now;
 
                       return (
                         <div
-                          key={`${event.id}-${index}`}
+                          key={event.id}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
                             handleEventClick(event);
@@ -245,13 +263,13 @@ export function useEventRendering(
                 (event) =>
                   event.isAllDay && isSameDay(event.start, selectedDate)
               )
-              .map((event, index) => {
+              .map((event) => {
                 const now = new Date();
                 const isPastEvent = new Date(event.end) < now;
 
                 return (
                   <div
-                    key={`${event.id}-${index}`}
+                    key={event.id}
                     className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
                     style={{
                       backgroundColor: event.color

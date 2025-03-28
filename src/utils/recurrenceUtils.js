@@ -187,211 +187,314 @@ export function getEventsInSeries(allEvents, seriesId) {
 /**
  * Updates all events in a series based on changes to the base event
  * @param {Array} allEvents - All events in the calendar
- * @param {Object} updatedBaseEvent - The updated base event
+ * @param {Object} updatedEvent - The updated base event
  * @param {Object} options - Options for the update
  * @returns {Array} Updated events array
  */
-export const updateSeriesEvents = (allEvents, updatedBaseEvent, options = {}) => {
-  // Extract options
-  const { 
-    timeChange = true, 
-    propertiesOnly = false,
-    regenerate = false,
-    isNonBaseEdit = false,
-    baseEvent = null, // Accept the base event as a parameter
-    isBaseEventBeingDragged = false, // Flag for when base event is dragged
-    isDragging = false, // Flag for drag operations (either base or non-base)
-    isResizing = false // Flag for resize operations (either base or non-base)
+export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
+  console.log('🔴🔴🔴 [START] updateSeriesEvents 🔴🔴🔴', {
+    updatedEventId: updatedEvent?.id,
+    updatedEventStart: updatedEvent?.start,
+    updatedEventEnd: updatedEvent?.end,
+    updatedEventSeriesId: updatedEvent?.seriesId,
+    options
+  });
+  
+  // First check if the updatedEvent has inline operation flags
+  let directIsDragging = updatedEvent._isDragging === true;
+  let directIsResizing = updatedEvent._isResizing === true;
+  let directEditScope = updatedEvent._editScope;
+  let directTimeChange = updatedEvent._timeChange;
+  
+  console.log('Direct operation flags:', { 
+    directIsDragging, 
+    directIsResizing, 
+    directEditScope,
+    hasTimeChange: !!directTimeChange
+  });
+  
+  // Extract options, using direct values from updatedEvent if available
+  const {
+    editScope = directEditScope || 'single',  // 'single', 'future', or 'all'
+    timeChange = directTimeChange || null,    // { startDiff, endDiff } if time has changed
+    baseEvent = null,                        // original base event of the series
+    isDragging = directIsDragging || false,   // Flag for drag operations
+    isResizing = directIsResizing || false    // Flag for resize operations
   } = options;
   
-  const seriesId = updatedBaseEvent.seriesId;
-  if (!seriesId) return allEvents;
+  console.log('Final operation flags:', { editScope, isDragging, isResizing, hasTimeChange: !!timeChange });
+
+  // --- DEBUG LOGGING: Check seriesId before filtering ---
+  console.log('[DEBUG] updatedEvent.seriesId before filtering:', updatedEvent?.seriesId);
   
-  // Clone the events array
-  let updatedEvents = [...allEvents];
+  if (!updatedEvent.seriesId) {
+    console.warn('updateSeriesEvents called with non-series event');
+    return allEvents;
+  }
+
+  // Create a new events array excluding the current series
+  const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
+
+  // --- DEBUG LOGGING: Check result after filtering ---
+  console.log(`[DEBUG] Events remaining after filtering out series ${updatedEvent.seriesId}:`, eventsWithoutSeries.length);
   
-  // Get all events in the series
-  const seriesEvents = updatedEvents.filter(event => event.seriesId === seriesId);
-  
-  // Find the actual base event (first occurrence) in the series if not provided
-  const actualBaseEvent = baseEvent || seriesEvents.reduce((earliest, event) => 
-    event.start < earliest.start ? event : earliest, seriesEvents[0]);
-  
-  // If we need to regenerate the entire series using rrule
-  if (regenerate) {
-    // Find all events that are NOT part of this series
-    const nonSeriesEvents = updatedEvents.filter(event => event.seriesId !== seriesId);
-    
-    // Get time changes from the updated event if it was manipulated
-    const timeChanges = updatedBaseEvent._timeChange || {
-      startDiff: 0,
-      endDiff: 0
-    };
-    
-    // Create the base event for generating the series
-    const eventToUseForGeneration = {
-      ...updatedBaseEvent,
-      id: actualBaseEvent.id, // Always use the base event's ID
-      start: new Date(actualBaseEvent.start.getTime() + timeChanges.startDiff),
-      end: new Date(actualBaseEvent.end.getTime() + timeChanges.endDiff),
-      seriesId,
-      isRepeat: true,
-      // Update or create the rrule based on the repeat value
-      rrule: updatedBaseEvent.rrule || eventToRRule({
-        ...updatedBaseEvent,
-        start: new Date(actualBaseEvent.start.getTime() + timeChanges.startDiff)
-      })?.toString()
-    };
-    
-    // Add the base event to our results
-    nonSeriesEvents.push(eventToUseForGeneration);
-    
-    // Generate new instances using RRule
-    const newInstances = generateRecurringEvents(eventToUseForGeneration)
-      .filter(event => event.id !== eventToUseForGeneration.id)
-      .map(event => ({
+  // Function to apply time changes to an event
+  const applyTimeChanges = (event) => {
+    if (!timeChange) return event;
+
+    const { startDiff, endDiff } = timeChange;
+    if (isDragging) {
+      // For drag operations, shift both start and end
+      return {
         ...event,
-        // Apply the same time changes to all instances
-        start: new Date(event.start.getTime() + timeChanges.startDiff),
-        end: new Date(event.end.getTime() + timeChanges.endDiff)
-      }));
-    
-    // Ensure no duplicate dates
-    const includedDates = new Set([eventToUseForGeneration.start.getTime()]);
-    const uniqueInstances = newInstances.filter(event => {
-      const startTime = event.start.getTime();
-      if (includedDates.has(startTime)) return false;
-      includedDates.add(startTime);
-      return true;
-    });
-    
-    // Return combined events
-    return [...nonSeriesEvents, ...uniqueInstances];
-  }
-  
-  // If we're not regenerating, proceed with normal updates
-  
-  // Calculate time differences based on the updated event
-  let startDiff = 0;
-  let endDiff = 0;
-  let durationDiff = 0;
-  
-  // If we're updating times
-  if (timeChange) {
-    // Find the original event before update
-    const originalEvent = allEvents.find(e => e.id === updatedBaseEvent.id);
-    
-    if (originalEvent) {
-      // Calculate absolute time differences (for moving events)
-      startDiff = updatedBaseEvent.start.getTime() - originalEvent.start.getTime();
-      endDiff = updatedBaseEvent.end.getTime() - originalEvent.end.getTime();
-      
-      // Calculate duration difference (for resizing events)
-      const originalDuration = originalEvent.end.getTime() - originalEvent.start.getTime();
-      const newDuration = updatedBaseEvent.end.getTime() - updatedBaseEvent.start.getTime();
-      durationDiff = newDuration - originalDuration;
-    }
-  }
-  
-  // Determine if this is the base event of the series being edited
-  const isBaseEventEdit = updatedBaseEvent.id === actualBaseEvent.id;
-  
-  // CRITICAL: Always update the base event (even when editing a non-base event)
-  if (actualBaseEvent) {
-    // Find the base event in our array
-    const baseEventIndex = updatedEvents.findIndex(e => e.id === actualBaseEvent.id);
-    if (baseEventIndex !== -1) {
-      // Update the base event with appropriate properties
-      let baseEventUpdates = {
-        ...updatedEvents[baseEventIndex],
-        title: updatedBaseEvent.title,
-        description: updatedBaseEvent.description,
-        color: updatedBaseEvent.color,
-        isAllDay: updatedBaseEvent.isAllDay,
-        repeat: updatedBaseEvent.repeat,
-        // Update the rrule if the repeat pattern changed
-        rrule: updatedBaseEvent.repeat !== updatedEvents[baseEventIndex].repeat
-          ? eventToRRule({
-              ...updatedBaseEvent,
-              start: updatedEvents[baseEventIndex].start
-            })?.toString()
-          : updatedEvents[baseEventIndex].rrule
+        start: new Date(event.start.getTime() + startDiff),
+        end: new Date(event.end.getTime() + endDiff)
       };
-      
-      // If this is a time change and we're editing the base event directly, update its times
-      if (timeChange && isBaseEventEdit) {
-        baseEventUpdates.start = new Date(updatedBaseEvent.start.getTime());
-        baseEventUpdates.end = new Date(updatedBaseEvent.end.getTime());
-      }
-      // If this is a drag operation on a non-base event, we need to move the base event too
-      else if (timeChange && !isBaseEventEdit && isDragging) {
-        baseEventUpdates.start = new Date(updatedEvents[baseEventIndex].start.getTime() + startDiff);
-        baseEventUpdates.end = new Date(updatedEvents[baseEventIndex].end.getTime() + endDiff);
-      }
-      // If this is a resize operation on a non-base event, update the base event's duration
-      else if (timeChange && !isBaseEventEdit && isResizing) {
-        // Only update the end time (keeping start time the same) for resize operations
-        baseEventUpdates.end = new Date(updatedEvents[baseEventIndex].end.getTime() + durationDiff);
-      }
-      
-      // Update the base event in our array
-      updatedEvents[baseEventIndex] = baseEventUpdates;
-    }
-  }
-  
-  // Update each event in the series
-  for (let i = 0; i < updatedEvents.length; i++) {
-    const event = updatedEvents[i];
-    
-    if (event.seriesId === seriesId && event.id !== actualBaseEvent.id) {
-      // Update the event
-      const updatedEvent = {
+    } else if (isResizing) {
+      // For resize operations, handle both start and end time changes
+      return {
         ...event,
-        // Copy common properties
-        title: updatedBaseEvent.title,
-        description: updatedBaseEvent.description,
-        color: updatedBaseEvent.color,
-        isAllDay: updatedBaseEvent.isAllDay,
-        repeat: updatedBaseEvent.repeat,
-        // Ensure series properties are preserved
-        seriesId: updatedBaseEvent.seriesId,
-        isRepeat: true,
-        // Preserve or update the rrule
-        rrule: event.rrule || updatedBaseEvent.rrule || 
-          (updatedBaseEvent.repeat !== event.repeat 
-            ? eventToRRule({
-                ...updatedBaseEvent,
-                start: event.start
-              })?.toString()
-            : null)
+        start: startDiff !== 0 ? new Date(event.start.getTime() + startDiff) : event.start,
+        end: endDiff !== 0 ? new Date(event.end.getTime() + endDiff) : event.end
       };
+    }
+    return event;
+  };
+
+  // Function to apply non-time property changes
+  const applyPropertyChanges = (event) => ({
+    ...event,
+    title: updatedEvent.title ?? event.title,
+    description: updatedEvent.description ?? event.description,
+    color: updatedEvent.color ?? event.color,
+    isAllDay: updatedEvent.isAllDay ?? event.isAllDay
+  });
+
+  switch (editScope) {
+    case 'single': {
+      // Detach the event from the series
+      const singleEvent = {
+        ...updatedEvent,
+        id: updatedEvent.id,
+        seriesId: null,
+        repeat: 'none',
+        isRepeat: false,
+        rrule: null
+      };
+
+      // Add back all other series events unchanged
+      eventsWithoutSeries.push(...allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id));
+      // Add the updated single event
+      eventsWithoutSeries.push(singleEvent);
+      break;
+    }
+
+    case 'future': {
+      // Find the edited event's index in chronological order
+      const sortedEvents = [...allEvents.filter(e => e.seriesId === updatedEvent.seriesId)].sort((a, b) => a.start - b.start);
+      const editedIndex = sortedEvents.findIndex(e => e.id === updatedEvent.id);
+      if (editedIndex === -1) return allEvents;
+
+      // Keep past events unchanged
+      const pastEvents = sortedEvents.slice(0, editedIndex);
+      eventsWithoutSeries.push(...pastEvents);
+
+      // Create new series for future events
+      const futureBaseEvent = {
+        ...updatedEvent,
+        id: generateEventId(),
+        seriesId: generateEventId(),
+        isRepeat: true
+      };
+
+      // Store the manipulated event's exact time and ID
+      const manipulatedEventTime = {
+        id: updatedEvent.id,
+        start: new Date(updatedEvent.start.getTime()),
+        end: new Date(updatedEvent.end.getTime())
+      };
+
+      // Generate new future events
+      const futureEvents = generateRecurringEvents(futureBaseEvent);
       
-      // Apply time changes if needed
-      if (timeChange) {
-        // If it's explicitly a resize operation
-        if (isResizing) {
-          // Only update the end time (keeping start time the same)
-          updatedEvent.end = new Date(event.end.getTime() + durationDiff);
+      // Track if we found and preserved the manipulated event
+      let manipulatedEventPreserved = false;
+      
+      // Add all future events, but preserve the exact time for the manipulated event
+      futureEvents.forEach(event => {
+        let eventToAdd = event;
+        
+        // Check if this event occurs on the same date as the manipulated event
+        const isOnManipulatedDate = isSameEventDate(event, updatedEvent);
+        
+        // For the first event that matches the manipulated event's date, preserve the exact time and ID
+        if (!manipulatedEventPreserved && isOnManipulatedDate && (isDragging || isResizing)) {
+          eventToAdd = {
+            ...event,
+            id: manipulatedEventTime.id,
+            start: manipulatedEventTime.start,
+            end: manipulatedEventTime.end
+          };
+          manipulatedEventPreserved = true;
+        } else {
+          // Apply time changes to other events in the series
+          eventToAdd = applyTimeChanges(event);
         }
-        // If it's a drag operation or time shift, update both start and end
-        else if (isDragging || startDiff !== 0 || endDiff !== 0) {
-          updatedEvent.start = new Date(event.start.getTime() + startDiff);
-          updatedEvent.end = new Date(event.end.getTime() + endDiff);
-          
-          // Update the rrule to reflect the new start time if needed
-          if (updatedEvent.repeat !== 'none') {
-            const newRRule = eventToRRule(updatedEvent);
-            if (newRRule) {
-              updatedEvent.rrule = newRRule.toString();
-            }
-          }
-        }
+        
+        // Apply property changes to all events
+        const withAllChanges = applyPropertyChanges(eventToAdd);
+        eventsWithoutSeries.push(withAllChanges);
+      });
+      
+      // If we couldn't find the manipulated event in the series, add it explicitly
+      if (!manipulatedEventPreserved && (isDragging || isResizing)) {
+        const explicitEvent = {
+          ...updatedEvent,
+          id: manipulatedEventTime.id,
+          start: manipulatedEventTime.start,
+          end: manipulatedEventTime.end,
+          seriesId: futureBaseEvent.seriesId,
+          isRepeat: true
+        };
+        
+        eventsWithoutSeries.push(applyPropertyChanges(explicitEvent));
       }
       
-      // Update the event in the array
-      updatedEvents[i] = updatedEvent;
+      break;
     }
+
+    case 'all': {
+      console.log('[CASE ALL] Handling ALL events update - Complete rewrite');
+       
+       // Find the event that was being manipulated
+       const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
+       // --- DEBUG LOGGING: Log the original manipulated event found ---
+       console.log('[CASE ALL - DEBUG] Found original manipulatedEvent:', 
+         manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
+       );
+       if (!manipulatedEvent) {
+         console.error('Could not find the manipulated event in the series');
+         return allEvents;
+       }
+       
+       // Use the delta calculated from the actual user interaction passed in options
+       const startDelta = options.timeChange?.startDiff || 0;
+       const endDelta = options.timeChange?.endDiff || 0;
+
+       if (!options.timeChange) {
+         console.warn("[CASE ALL] options.timeChange not provided. Deltas will be 0.");
+       }
+       console.log('[CASE ALL] Using Deltas from options.timeChange:', { startDelta, endDelta });
+       
+       // Filter out the old series events and prepare to add new ones
+       const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
+       
+       // Process all events from the ORIGINAL series
+       const seriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId);
+       const updatedSeriesEvents = [];
+       const manipulatedId = options.manipulatedId || updatedEvent.id; // ID of the event actually dragged/resized
+       const originalBaseEvent = seriesEvents.find(e => e.id === manipulatedId);
+       
+       seriesEvents.forEach(event => {
+         let eventToPush;
+         if (event.id === manipulatedId) {
+           // For the manipulated event, use the exact final times from updatedEvent
+           eventToPush = {
+             ...event,
+             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+             start: updatedEvent.start, // Use exact final time
+             end: updatedEvent.end,     // Use exact final time
+             seriesId: event.seriesId,
+             isRepeat: true,
+             repeat: event.repeat,
+             rrule: originalBaseEvent.rrule
+           };
+           console.log('[CASE ALL] Processing manipulated event:', {id: event.id, newStart: eventToPush.start, newEnd: eventToPush.end});
+         } else {
+           // For other events, apply the manipulated event's TIME to the original event's DATE
+           const originalEventDate = new Date(event.start); // Date component from the original event
+
+           // Get the target time components from the updated (manipulated) event
+           const targetStartHours = updatedEvent.start.getHours();
+           const targetStartMinutes = updatedEvent.start.getMinutes();
+           const targetStartSeconds = updatedEvent.start.getSeconds();
+           const targetEndHours = updatedEvent.end.getHours();
+           const targetEndMinutes = updatedEvent.end.getMinutes();
+           const targetEndSeconds = updatedEvent.end.getSeconds();
+
+           // Construct the new start date/time
+           const newEventStart = new Date(originalEventDate);
+           newEventStart.setHours(targetStartHours, targetStartMinutes, targetStartSeconds, 0);
+
+           // Construct the new end date/time
+           const newEventEnd = new Date(originalEventDate);
+           newEventEnd.setHours(targetEndHours, targetEndMinutes, targetEndSeconds, 0);
+
+           // Handle cases where the event might cross midnight
+           if (newEventEnd <= newEventStart) {
+             newEventEnd.setDate(newEventEnd.getDate() + 1);
+           }
+
+           console.log(`[CASE ALL - Other Event ${event.id}] Time Construction:`, {
+             originalStart: event.start,
+             originalEnd: event.end,
+             targetStartTime: `${targetStartHours}:${targetStartMinutes}`,
+             targetEndTime: `${targetEndHours}:${targetEndMinutes}`,
+             constructedNewStart: newEventStart,
+             constructedNewEnd: newEventEnd,
+           });
+
+           eventToPush = {
+             ...event,
+             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+             start: newEventStart, // Apply newly constructed date/time
+             end: newEventEnd,       // Apply newly constructed date/time
+             seriesId: event.seriesId,
+             isRepeat: true,
+             repeat: originalBaseEvent.repeat,
+             rrule: originalBaseEvent.rrule
+           };
+         }
+         updatedSeriesEvents.push(eventToPush);
+       });
+       
+       // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
+       console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):', 
+         updatedSeriesEvents.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
+       );
+       
+       // Add all updated series events to the final result
+       return [...eventsWithoutSeries, ...updatedSeriesEvents];
+       console.log(`[CASE ALL] Added ${updatedSeriesEvents.length} updated series events to result`);
+       break;
+     }
+
+    default:
+      return allEvents;
   }
+
+  // --- DEBUG LOGGING: Final returned array ---
+  console.log('🔴🔴🔴 [END] updateSeriesEvents - Returning updatedEvents 🔴🔴🔴', 
+    eventsWithoutSeries.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title, seriesId: e.seriesId }))
+  );
   
-  return updatedEvents;
+  // Ensure a new array reference is always returned
+  return eventsWithoutSeries.map(event => ({ ...event })); // Shallow clone each event into a new array
+};
+
+/**
+ * Helper function to check if two events occur on the same date (ignoring time)
+ */
+function isSameEventDate(event1, event2) {
+  return (
+    event1.start.getFullYear() === event2.start.getFullYear() &&
+    event1.start.getMonth() === event2.start.getMonth() &&
+    event1.start.getDate() === event2.start.getDate()
+  );
 }
