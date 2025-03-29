@@ -277,13 +277,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       end: new Date(event.end)
     };
 
+    // Check both allDay and isAllDay properties to ensure compatibility
+    const isAllDayEvent = eventCopy.allDay || eventCopy.isAllDay || false;
+
     const eventData = {
       title: eventCopy.title || '',
       description: eventCopy.description || '',
       date: format(eventCopy.start, 'yyyy-MM-dd'),
       startTime: format(eventCopy.start, 'HH:mm'),
       endTime: format(eventCopy.end, 'HH:mm'),
-      isAllDay: eventCopy.allDay || false,
+      isAllDay: isAllDayEvent,
       color: eventCopy.color || '#808080',
       repeat: eventCopy.repeat || 'none',
       seriesId: eventCopy.seriesId || null,
@@ -354,6 +357,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       start: parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
       end: parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()),
       allDay: eventState.isAllDay,
+      isAllDay: eventState.isAllDay, // Ensure both properties are set consistently
       repeat: eventState.repeat,
       seriesId: eventState.seriesId,
       color: eventState.color,
@@ -1147,7 +1151,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <div className="flex items-center justify-end gap-2 px-4 py-4">
                           <button
                             onClick={handleClose}
-                            className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                            className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                           >
                             <span className="flex items-center pl-1 pr-3">Discard</span>
                             <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
@@ -1158,10 +1162,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             onClick={handleSaveTask}
                             disabled={!taskTitle.trim()}
                             className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
-                              ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
+                              ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                               : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                           >
-                            <span className="flex items-center pl-1 pr-3 [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">{editingTaskId ? 'Edit task' : 'Add task'}</span>
+                            <span className="flex items-center pl-1 pr-3">{editingTaskId ? 'Edit task' : 'Add task'}</span>
                             <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                               <Return className="w-3 h-3" />
                             </div>
@@ -1475,7 +1479,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     <div className="flex items-center justify-end gap-3 px-4 py-4">
                       <button
                         onClick={() => handleClose()}
-                        className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                        className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                       >
                         <span className="flex items-center pl-1 pr-3">Discard</span>
                         <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
@@ -1487,10 +1491,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         onClick={handleSaveChanges}
                         disabled={!eventState.title.trim() || !hasChanges}
                         className={`px-2 flex items-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
-                          ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text shadow-sm' 
+                          ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                           : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                       >
-                        <span className="text-xs pl-1 pr-3 [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
+                        <span className="text-xs pl-1 pr-3 ">
                           
                         {originalEventState?.id ? 'Edit event' : 'Add event'}
                         

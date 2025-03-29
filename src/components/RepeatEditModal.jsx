@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, isBefore } from 'date-fns';
+import { Return } from '../assets/icons/Return';
 
 const RepeatEditModal = ({ 
   isOpen, 
@@ -222,21 +223,26 @@ const RepeatEditModal = ({
 
         {/* Action buttons */}
         <div className="flex px-8 pb-8 justify-end gap-3">
-          <button
-            type="button"
-            onClick={handleDiscard}
-            className="px-4 h-[36px] font-medium bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-          >
-            Discard change
-          </button>
+        <button
+          onClick={handleDiscard}
+          className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+        >
+          <span className="flex items-center pl-1 pr-3">Discard</span>
+          <div className="flex flex-row h-[20px] items-center outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border bg-black/5 dark:bg-white/5 px-1.5 rounded-[5px]">
+            <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
+          </div>
+        </button>
           <button
             type="button"
             onClick={handleContinue}
-            className="px-4 h-[36px] bg-primary text-xs bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] items-center gap-2"
+            className="px-2 h-[36px] flex flex-row bg-primary text-xs bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] items-center"
           >
-            <span className="font-semibold font-['Inter'] text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
+            <span className="font-semibold pl-1 pr-3 font-['Inter'] text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">
             {continueButtonText}
             </span>
+            <div className={`flex items-center text-white px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border bg-white/10 p-1 rounded-[5px]`}>
+              <Return className="w-3 h-3" />
+            </div>
           </button>
         </div>
       </div>

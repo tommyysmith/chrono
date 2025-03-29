@@ -44,7 +44,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   return (
     <div 
       ref={taskItemRef}
-      className="task-item cursor-pointer flex items-top gap-2 p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter rounded-[11px] relative"
+      className="task-item select-none cursor-pointer flex items-top gap-2 p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter rounded-[11px] relative"
       onContextMenu={handleContextMenu}
       onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}

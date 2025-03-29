@@ -32,8 +32,10 @@ export function useEventRendering(
 
       const filteredEvents = events.filter((event) => {
         const eventStart = new Date(event.start);
+        // Check both allDay and isAllDay properties to ensure compatibility
+        const isAllDayEvent = event.allDay || event.isAllDay;
         return (
-          eventStart >= weekStart && eventStart < weekEnd && !event.isAllDay
+          eventStart >= weekStart && eventStart < weekEnd && !isAllDayEvent
         );
       });
 
@@ -97,9 +99,11 @@ export function useEventRendering(
       });
     } else {
       // Day view
-      const dayEvents = events.filter(
-        (event) => !event.isAllDay && isSameDay(event.start, selectedDate)
-      );
+      const dayEvents = events.filter((event) => {
+        // Check both allDay and isAllDay properties to ensure compatibility
+        const isAllDayEvent = event.allDay || event.isAllDay;
+        return !isAllDayEvent && isSameDay(event.start, selectedDate);
+      });
 
       return dayEvents.map((event) => {
         const overlappingEvents = findOverlappingGroup(event, dayEvents);
@@ -170,15 +174,7 @@ export function useEventRendering(
     handleResizeStart,
   ]);
 
-  // --- DEBUG LOG: Effect to check if 'events' prop contains the manipulated event
-  useEffect(() => {
-    const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5";
-    const eventInEffect = events.find(e => e.id === manipulatedEventId);
-    console.log(`[useEventRendering Effect] Event ${manipulatedEventId} in received 'events' prop:`, 
-      eventInEffect ? { start: eventInEffect.start, end: eventInEffect.end } : "NOT FOUND"
-    );
-  }, [events]); // Run only when the events prop reference changes
-  // ---
+
 
   const renderAllDayEvents = () => {
     if (viewType === ViewType.WEEK) {
@@ -195,9 +191,11 @@ export function useEventRendering(
           <div className="relative grid grid-cols-7">
             {Array.from({ length: 7 }).map((_, dayIndex) => {
               const currentDate = addDays(weekStart, dayIndex);
-              const dayEvents = events.filter(
-                (event) => event.isAllDay && isSameDay(event.start, currentDate)
-              );
+              const dayEvents = events.filter((event) => {
+                // Check both allDay and isAllDay properties to ensure compatibility
+                const isAllDayEvent = event.allDay || event.isAllDay;
+                return isAllDayEvent && isSameDay(event.start, currentDate);
+              });
 
               return (
                 <div

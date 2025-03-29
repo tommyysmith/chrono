@@ -49,7 +49,10 @@ export function useEventManagement(commandBarRef) {
         start,
         end,
         seriesId,
-        isRepeat: Boolean(seriesId)
+        isRepeat: Boolean(seriesId),
+        // Ensure both allDay and isAllDay are set consistently
+        allDay: eventData.allDay || false,
+        isAllDay: eventData.allDay || false
       };
 
       setEvents((prev) => {
@@ -115,14 +118,46 @@ export function useEventManagement(commandBarRef) {
     setEvents(prevEvents => {
       // For recurring events
       if (cleanEvent.seriesId) {
-        // Find the base event
+        // Find the existing event and the base event
+        const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
         const seriesEvents = prevEvents.filter(e => e.seriesId === cleanEvent.seriesId);
         const baseEvent = seriesEvents.reduce((earliest, event) => 
           event.start < earliest.start ? event : earliest, 
           seriesEvents[0]
         );
         
-        console.log('Updating series event:', {
+        // Check if the repeat pattern has changed
+        if (existingEvent && 
+            existingEvent.repeat !== cleanEvent.repeat && 
+            cleanEvent.repeat && 
+            cleanEvent.repeat !== 'none') {
+          
+          console.log('Recurring pattern changed for recurring event:', {
+            eventId: cleanEvent.id,
+            oldRepeatRule: existingEvent.repeat,
+            newRepeatRule: cleanEvent.repeat
+          });
+          
+          // Keep the same series ID for consistency
+          const seriesId = cleanEvent.seriesId;
+          
+          // Update the event with the new recurring properties
+          const updatedEvent = {
+            ...cleanEvent,
+            seriesId,
+            isRepeat: true
+          };
+          
+          // Generate the new recurring series with the updated pattern
+          const recurringEvents = generateRecurringEvents(updatedEvent);
+          
+          // Replace the original series with the new recurring series
+          return prevEvents
+            .filter(e => e.seriesId !== cleanEvent.seriesId) // Remove the original series
+            .concat(recurringEvents);                        // Add the new recurring series
+        }
+        
+        console.log('Updating series event without pattern change:', {
           seriesId: cleanEvent.seriesId,
           baseEventId: baseEvent.id,
           eventsInSeries: seriesEvents.length
@@ -149,7 +184,47 @@ export function useEventManagement(commandBarRef) {
         return newEventsState;
       } 
       
-      // For non-recurring events
+      // For non-recurring events that are being updated
+      // Check if this is a non-recurring event being changed to recurring
+      const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
+      
+      // Ensure both allDay and isAllDay properties are consistent
+      if (cleanEvent.allDay !== undefined && cleanEvent.isAllDay !== cleanEvent.allDay) {
+        cleanEvent.isAllDay = cleanEvent.allDay;
+      } else if (cleanEvent.isAllDay !== undefined && cleanEvent.allDay !== cleanEvent.isAllDay) {
+        cleanEvent.allDay = cleanEvent.isAllDay;
+      }
+      
+      if (existingEvent && 
+          (!existingEvent.repeat || existingEvent.repeat === 'none') && 
+          cleanEvent.repeat && 
+          cleanEvent.repeat !== 'none') {
+        
+        console.log('Converting non-recurring event to recurring:', {
+          eventId: cleanEvent.id,
+          newRepeatRule: cleanEvent.repeat
+        });
+        
+        // Generate a series ID for the new recurring event
+        const seriesId = generateEventId();
+        
+        // Update the event with recurring properties
+        const updatedEvent = {
+          ...cleanEvent,
+          seriesId,
+          isRepeat: true
+        };
+        
+        // Generate the recurring series
+        const recurringEvents = generateRecurringEvents(updatedEvent);
+        
+        // Replace the original event with the recurring series
+        return prevEvents
+          .filter(e => e.id !== cleanEvent.id) // Remove the original event
+          .concat(recurringEvents);            // Add the recurring series
+      }
+      
+      // Regular update for non-recurring events
       return prevEvents.map(event => 
         event.id === cleanEvent.id ? cleanEvent : event
       );
