@@ -44,7 +44,7 @@ const RepeatEditModal = ({
     // Create a clean event object with just the essential properties
     const updatedEvent = {
       ...draggedEvent,
-      // Core event properties
+      // Core event properties - ensure we have fresh Date objects
       start: new Date(draggedEvent.start),
       end: new Date(draggedEvent.end),
       // Series properties based on edit scope
@@ -66,13 +66,30 @@ const RepeatEditModal = ({
       _isDragging: draggedEvent._isDragging === true,
       _isResizing: draggedEvent._isResizing === true,
       _updateSeries: editScope === 'all',
-      _preserveRepeat: editScope !== 'single'
+      _preserveRepeat: editScope !== 'single',
+      // Preserve exact position for 'this event' scope
+      _exactPosition: {
+        start: new Date(draggedEvent.start),
+        end: new Date(draggedEvent.end)
+      },
+      // For 'this event' scope, ensure we're using the dragged event's exact position
+      ...(editScope === 'single' && {
+        _detachedEvent: true,
+        _preserveExactPosition: true
+      })
     };
 
     console.log('RepeatEditModal - Confirming edit with flags:', {
+      id: updatedEvent.id,
       isDragging: updatedEvent._isDragging,
       isResizing: updatedEvent._isResizing,
-      editScope
+      editScope,
+      start: updatedEvent.start.toISOString(),
+      end: updatedEvent.end.toISOString(),
+      exactPosition: updatedEvent._exactPosition ? {
+        start: updatedEvent._exactPosition.start.toISOString(),
+        end: updatedEvent._exactPosition.end.toISOString()
+      } : null
     });
 
     // Always update through onEditConfirm to ensure consistent handling

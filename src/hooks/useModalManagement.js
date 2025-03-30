@@ -86,16 +86,46 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         const startDiff = event.start.getTime() - (originalEvent ? originalEvent.start.getTime() : 0);
         const endDiff = event.end.getTime() - (originalEvent ? originalEvent.end.getTime() : 0);
 
+        // Get the dragged event with exact position
+        const draggedEvent = repeatEditModalState.draggedEvent ? {
+          ...JSON.parse(JSON.stringify(repeatEditModalState.draggedEvent)),
+          start: new Date(repeatEditModalState.draggedEvent.start.getTime()),
+          end: new Date(repeatEditModalState.draggedEvent.end.getTime()),
+        } : null;
+
+        // For 'this event' scope, we need to ensure we use the dragged event's exact position
+        const isSingleEventEdit = scope === 'single';
+        const isDragOrResize = event._isDragging === true || event._isResizing === true;
+        
+        // Get the correct start and end times based on scope
+        let startTime, endTime;
+        
+        if (isSingleEventEdit && draggedEvent) {
+          // For 'this event' scope, use the dragged event's position
+          startTime = draggedEvent.start.getTime();
+          endTime = draggedEvent.end.getTime();
+          console.log('ModalManagement - Using dragged position for single event:', {
+            start: new Date(startTime).toISOString(),
+            end: new Date(endTime).toISOString()
+          });
+        } else {
+          // For other scopes, use the event position from the modal
+          startTime = event.start.getTime();
+          endTime = event.end.getTime();
+        }
+
         // Create a clean event object with the necessary metadata and fresh Date objects
         const eventToUpdate = {
           ...JSON.parse(JSON.stringify(event)), // Deep clone without Date objects
-          start: new Date(event.start.getTime()),
-          end: new Date(event.end.getTime()),
+          start: new Date(startTime),
+          end: new Date(endTime),
           _editScope: scope,
           _timeChange: {
             startDiff,
             endDiff
           },
+          _isDragging: event._isDragging === true,
+          _isResizing: event._isResizing === true,
           _seriesUpdate: scope === 'all',
           _futureUpdate: scope === 'future',
           _originalEvent: originalEvent,
@@ -103,14 +133,32 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           // Ensure manipulation flag and position metadata are preserved
           _isBeingManipulated: true,
           _exactPosition: {
-            start: new Date(event.start.getTime()),
-            end: new Date(event.end.getTime())
+            start: new Date(draggedEvent ? draggedEvent.start.getTime() : event.start.getTime()),
+            end: new Date(draggedEvent ? draggedEvent.end.getTime() : event.end.getTime())
           },
+          // Add special flags for 'this event' scope
+          ...(isSingleEventEdit && {
+            _detachedEvent: true,
+            _preserveExactPosition: true
+          }),
           // Add current date for future edits
           _currentDate: new Date()
         };
 
-        console.log('ModalManagement - Updating event:', eventToUpdate);
+        console.log('ModalManagement - Updating event:', {
+          id: eventToUpdate.id,
+          scope,
+          start: eventToUpdate.start.toISOString(),
+          end: eventToUpdate.end.toISOString(),
+          isDragging: eventToUpdate._isDragging,
+          isResizing: eventToUpdate._isResizing,
+          exactPosition: eventToUpdate._exactPosition ? {
+            start: eventToUpdate._exactPosition.start.toISOString(),
+            end: eventToUpdate._exactPosition.end.toISOString()
+          } : null,
+          detachedEvent: eventToUpdate._detachedEvent,
+          preserveExactPosition: eventToUpdate._preserveExactPosition
+        });
 
         // Use the handleUpdateEvent function to ensure consistent state updates
         handleUpdateEvent(eventToUpdate);

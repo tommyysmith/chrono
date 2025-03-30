@@ -272,15 +272,91 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
 
   switch (editScope) {
     case 'single': {
+      console.log('[CASE SINGLE] Handling SINGLE event update - Detaching from series');
+      
+      // Find the event that was being manipulated
+      const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
+      console.log('[CASE SINGLE - DEBUG] Found original manipulatedEvent:', 
+        manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
+      );
+      
+      // Check for exact position metadata
+      const hasExactPosition = updatedEvent._exactPosition && 
+                             updatedEvent._exactPosition.start instanceof Date && 
+                             updatedEvent._exactPosition.end instanceof Date;
+      
+      // Check for explicit detached event flag
+      const isDetachedEvent = updatedEvent._detachedEvent === true;
+      const preserveExactPosition = updatedEvent._preserveExactPosition === true;
+      
+      console.log('[CASE SINGLE] Event flags:', {
+        isDragging,
+        isResizing,
+        hasExactPosition,
+        isDetachedEvent,
+        preserveExactPosition
+      });
+      
+      // Apply time changes if this is a drag or resize operation
+      let finalEvent = { ...updatedEvent };
+      
+      if (isDetachedEvent && preserveExactPosition && hasExactPosition) {
+        console.log('[CASE SINGLE] This is a detached event with preserved position');
+        // For detached events with preserved position, use the exact position
+        finalEvent = {
+          ...updatedEvent,
+          start: new Date(updatedEvent._exactPosition.start),
+          end: new Date(updatedEvent._exactPosition.end)
+        };
+      } else if (isDragging || isResizing) {
+        console.log('[CASE SINGLE] This is a drag/resize operation. Using exact times from updatedEvent');
+        // For drag/resize operations, use the exact final times from updatedEvent
+        finalEvent = {
+          ...updatedEvent,
+          start: new Date(updatedEvent.start),
+          end: new Date(updatedEvent.end)
+        };
+      } else if (hasExactPosition) {
+        console.log('[CASE SINGLE] Using exact position from metadata');
+        // Use the exact position if available
+        finalEvent = {
+          ...updatedEvent,
+          start: new Date(updatedEvent._exactPosition.start),
+          end: new Date(updatedEvent._exactPosition.end)
+        };
+      } else if (timeChange) {
+        console.log('[CASE SINGLE] Applying time changes:', timeChange);
+        // Apply time changes if provided
+        finalEvent = applyTimeChanges(updatedEvent);
+      }
+      
+      // Ensure we have fresh Date objects
+      finalEvent.start = new Date(finalEvent.start);
+      finalEvent.end = new Date(finalEvent.end);
+      
+      // Log the final position before detaching
+      console.log('[CASE SINGLE] Position before detaching:', {
+        start: finalEvent.start.toISOString(),
+        end: finalEvent.end.toISOString()
+      });
+      
       // Detach the event from the series
       const singleEvent = {
-        ...updatedEvent,
+        ...finalEvent,
         id: updatedEvent.id,
         seriesId: null,
         repeat: 'none',
         isRepeat: false,
         rrule: null
       };
+      
+      console.log('[CASE SINGLE] Final detached event:', {
+        id: singleEvent.id,
+        start: singleEvent.start.toISOString(),
+        end: singleEvent.end.toISOString(),
+        seriesId: singleEvent.seriesId,
+        repeat: singleEvent.repeat
+      });
 
       // Add back all other series events unchanged
       eventsWithoutSeries.push(...allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id));

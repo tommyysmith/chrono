@@ -24,7 +24,7 @@ export default function Week({
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
   return (
-    <div className="flex-1 flex flex-col h-full">
+    <div className="flex-1 flex select-none flex-col h-full">
       {/* Fixed Headers */}
       <div className="flex-none bg-light-bg-light dark:bg-dark-bg-light z-10">
         {/* Days header */}

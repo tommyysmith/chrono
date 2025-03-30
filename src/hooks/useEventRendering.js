@@ -47,7 +47,7 @@ export function useEventRendering(
         return (
           <motion.div
             key={event.id}
-            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer ${
+            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer select-none ${
               event.isEditing || dragState.eventId === event.id
                 ? "bg-primary/30"
                 : "bg-primary/10"
@@ -220,7 +220,7 @@ export function useEventRendering(
                           onContextMenu={(e) =>
                             handleEventContextMenu(e, event.id)
                           }
-                          className="flex items-center text-xs cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                          className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
                           style={{
                             backgroundColor: event.color
                               ? `${event.color}20`
@@ -229,10 +229,10 @@ export function useEventRendering(
                           }}
                         >
                           <div
-                            className="w-1 self-stretch mr-1.5"
+                            className="w-1 self-stretch"
                             style={{ backgroundColor: event.color || "#808080" }}
                           />
-                          <div className="px-3 py-1">
+                          <div className="px-2 py-1">
                             <div className="font-medium text-xs">
                               {event.title}
                             </div>
