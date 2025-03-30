@@ -82,8 +82,23 @@ export function useEventManagement(commandBarRef) {
   );
 
   const handleUpdateEvent = useCallback((updatedEvent) => {
+    // --- NEW LOGGING ---
+    console.log('🔵🔵🔵 [START] handleUpdateEvent 🔵🔵🔵 - Received from modal/dragdrop:', {
+      id: updatedEvent?.id,
+      start: updatedEvent?.start,
+      end: updatedEvent?.end,
+      seriesId: updatedEvent?.seriesId,
+      _editScope: updatedEvent?._editScope,
+      _isDragging: updatedEvent?._isDragging,
+      _isResizing: updatedEvent?._isResizing,
+      _exactPosition: updatedEvent?._exactPosition,
+      _preserveExactPosition: updatedEvent?._preserveExactPosition,
+      _detachedEvent: updatedEvent?._detachedEvent,
+    });
+    // --- END NEW LOGGING ---
+
     console.log('handleUpdateEvent called with:', {
-      eventId: updatedEvent.id, 
+      eventId: updatedEvent.id,
       updatedEvent,
       editScope: updatedEvent._editScope,
       manipulatedId: updatedEvent.id,
@@ -175,14 +190,14 @@ export function useEventManagement(commandBarRef) {
         console.log(`[handleUpdateEvent] About to call setEvents for ID: ${cleanEvent.id}. Events array length: ${newEventsState.length}`);
         const eventCheckBeforeSet = newEventsState.find(e => e.id === cleanEvent.id);
         console.log(`[handleUpdateEvent] Event ${cleanEvent.id} in array BEFORE setEvents:`, eventCheckBeforeSet ? {start: eventCheckBeforeSet.start, end: eventCheckBeforeSet.end} : 'NOT FOUND');
-        
+
         setEvents(newEventsState); // Apply the update
-        
+
         // Log immediately after setEvents (though state update is async)
         console.log(`[handleUpdateEvent] Called setEvents for ID: ${cleanEvent.id}`);
-        
+
         return newEventsState;
-      } 
+      }
       
       // For non-recurring events that are being updated
       // Check if this is a non-recurring event being changed to recurring

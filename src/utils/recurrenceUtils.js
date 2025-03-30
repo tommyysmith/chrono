@@ -72,9 +72,9 @@ export function rruleToEventRepeat(rrule) {
       return 'daily';
     case RRule.WEEKLY:
       if (options.interval === 2) return 'biweekly';
-      
-      if (options.byweekday && 
-          options.byweekday.length === 5 && 
+
+      if (options.byweekday &&
+          options.byweekday.length === 5 &&
           options.byweekday.includes(RRule.MO) &&
           options.byweekday.includes(RRule.TU) &&
           options.byweekday.includes(RRule.WE) &&
@@ -82,7 +82,7 @@ export function rruleToEventRepeat(rrule) {
           options.byweekday.includes(RRule.FR)) {
         return 'weekday';
       }
-      
+
       return 'weekly';
     case RRule.MONTHLY:
       return 'monthly';
@@ -107,13 +107,13 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
 
   // Always include the original event in the result
   const result = [baseEvent];
-  
+
   // Default limit to 1 year if no end date is provided
   const limitDate = endDate || addYears(new Date(), 1);
-  
+
   // Create RRule from event's repeat pattern
   let rrule;
-  
+
   // If the event already has an rrule string, use that
   if (baseEvent.rrule) {
     rrule = rrulestr(baseEvent.rrule);
@@ -121,31 +121,31 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
     // Otherwise, create a new rrule from the repeat value
     rrule = eventToRRule(baseEvent);
   }
-  
+
   // If we couldn't create a valid rrule, just return the base event
   if (!rrule) return [baseEvent];
-  
+
   // Set the until date for the rrule
   rrule = new RRule({
     ...rrule.options,
     until: limitDate,
     count: maxInstances
   });
-  
+
   // Calculate the duration of the base event
   const duration = baseEvent.end.getTime() - baseEvent.start.getTime();
 
   // Generate dates using RRule
   const dates = rrule.all();
-  
+
   // Skip the first date if it's the same as the base event
   const startIndex = isSameDateTime(dates[0], baseEvent.start) ? 1 : 0;
-  
+
   // Create events for each date
   for (let i = startIndex; i < dates.length; i++) {
     const start = dates[i];
     const end = new Date(start.getTime() + duration);
-    
+
     result.push({
       ...baseEvent,
       id: generateEventId(),
@@ -159,7 +159,7 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
       originalEventId: baseEvent.id
     });
   }
-  
+
   return result;
 }
 
@@ -199,20 +199,20 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
     updatedEventSeriesId: updatedEvent?.seriesId,
     options
   });
-  
+
   // First check if the updatedEvent has inline operation flags
   let directIsDragging = updatedEvent._isDragging === true;
   let directIsResizing = updatedEvent._isResizing === true;
   let directEditScope = updatedEvent._editScope;
   let directTimeChange = updatedEvent._timeChange;
-  
-  console.log('Direct operation flags:', { 
-    directIsDragging, 
-    directIsResizing, 
+
+  console.log('Direct operation flags:', {
+    directIsDragging,
+    directIsResizing,
     directEditScope,
     hasTimeChange: !!directTimeChange
   });
-  
+
   // Extract options, using direct values from updatedEvent if available
   const {
     editScope = directEditScope || 'single',  // 'single', 'future', or 'all'
@@ -221,12 +221,12 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
     isDragging = directIsDragging || false,   // Flag for drag operations
     isResizing = directIsResizing || false    // Flag for resize operations
   } = options;
-  
+
   console.log('Final operation flags:', { editScope, isDragging, isResizing, hasTimeChange: !!timeChange });
 
   // --- DEBUG LOGGING: Check seriesId before filtering ---
   console.log('[DEBUG] updatedEvent.seriesId before filtering:', updatedEvent?.seriesId);
-  
+
   if (!updatedEvent.seriesId) {
     console.warn('updateSeriesEvents called with non-series event');
     return allEvents;
@@ -237,7 +237,7 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
 
   // --- DEBUG LOGGING: Check result after filtering ---
   console.log(`[DEBUG] Events remaining after filtering out series ${updatedEvent.seriesId}:`, eventsWithoutSeries.length);
-  
+
   // Function to apply time changes to an event
   const applyTimeChanges = (event) => {
     if (!timeChange) return event;
@@ -273,22 +273,22 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
   switch (editScope) {
     case 'single': {
       console.log('[CASE SINGLE] Handling SINGLE event update - Detaching from series');
-      
+
       // Find the event that was being manipulated
       const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
-      console.log('[CASE SINGLE - DEBUG] Found original manipulatedEvent:', 
+      console.log('[CASE SINGLE - DEBUG] Found original manipulatedEvent:',
         manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
       );
-      
+
       // Check for exact position metadata
-      const hasExactPosition = updatedEvent._exactPosition && 
-                             updatedEvent._exactPosition.start instanceof Date && 
+      const hasExactPosition = updatedEvent._exactPosition &&
+                             updatedEvent._exactPosition.start instanceof Date &&
                              updatedEvent._exactPosition.end instanceof Date;
-      
+
       // Check for explicit detached event flag
       const isDetachedEvent = updatedEvent._detachedEvent === true;
       const preserveExactPosition = updatedEvent._preserveExactPosition === true;
-      
+
       console.log('[CASE SINGLE] Event flags:', {
         isDragging,
         isResizing,
@@ -296,21 +296,21 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         isDetachedEvent,
         preserveExactPosition
       });
-      
+
       // Apply time changes if this is a drag or resize operation
       let finalEvent = { ...updatedEvent };
-      
-      if (isDetachedEvent && preserveExactPosition && hasExactPosition) {
-        console.log('[CASE SINGLE] This is a detached event with preserved position');
-        // For detached events with preserved position, use the exact position
+
+      // --- MODIFICATION START ---
+      // Prioritize exact position if requested, especially from modal edits
+      if (preserveExactPosition && hasExactPosition) {
+        console.log('[CASE SINGLE] Using preserved exact position from modal/flags');
         finalEvent = {
           ...updatedEvent,
           start: new Date(updatedEvent._exactPosition.start),
           end: new Date(updatedEvent._exactPosition.end)
         };
-      } else if (isDragging || isResizing) {
+      } else if (isDragging || isResizing) { // Fallback for direct drag/resize without modal flags
         console.log('[CASE SINGLE] This is a drag/resize operation. Using exact times from updatedEvent');
-        // For drag/resize operations, use the exact final times from updatedEvent
         finalEvent = {
           ...updatedEvent,
           start: new Date(updatedEvent.start),
@@ -324,22 +324,23 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
           start: new Date(updatedEvent._exactPosition.start),
           end: new Date(updatedEvent._exactPosition.end)
         };
+      // --- MODIFICATION END ---
       } else if (timeChange) {
         console.log('[CASE SINGLE] Applying time changes:', timeChange);
         // Apply time changes if provided
         finalEvent = applyTimeChanges(updatedEvent);
       }
-      
+
       // Ensure we have fresh Date objects
       finalEvent.start = new Date(finalEvent.start);
       finalEvent.end = new Date(finalEvent.end);
-      
+
       // Log the final position before detaching
       console.log('[CASE SINGLE] Position before detaching:', {
         start: finalEvent.start.toISOString(),
         end: finalEvent.end.toISOString()
       });
-      
+
       // Detach the event from the series
       const singleEvent = {
         ...finalEvent,
@@ -349,21 +350,32 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         isRepeat: false,
         rrule: null
       };
-      
+
       console.log('[CASE SINGLE] Final detached event:', {
         id: singleEvent.id,
         start: singleEvent.start.toISOString(),
         end: singleEvent.end.toISOString(),
         seriesId: singleEvent.seriesId,
-        repeat: singleEvent.repeat
-      });
+         repeat: singleEvent.repeat
+       });
 
-      // Add back all other series events unchanged
-      eventsWithoutSeries.push(...allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id));
-      // Add the updated single event
-      eventsWithoutSeries.push(singleEvent);
-      break;
-    }
+      // --- MORE DEBUGGING ---
+      const otherSeriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id);
+      console.log('[CASE SINGLE] Other events in series being kept:', otherSeriesEvents.map(e => ({id: e.id, start: e.start})));
+      // Corrected log statement - simply log the object
+       console.log('[CASE SINGLE] Detached event being added:', singleEvent);
+       // --- END MORE DEBUGGING ---
+
+       // --- FIX FOR DUPLICATE KEY (v4) ---
+       // 1. Filter out the original event instance using its ID from the *original* allEvents array.
+       const finalArray = allEvents.filter(e => e.id !== updatedEvent.id);
+       // 2. Add the newly created detached single event.
+       finalArray.push(singleEvent);
+       console.log(`[CASE SINGLE] Final array constructed. Length: ${finalArray.length}. Includes detached event ${singleEvent.id}.`);
+       return finalArray;
+       // --- END FIX ---
+       // No break needed after return
+     }
 
     case 'future': {
       // Find the edited event's index in chronological order
@@ -392,17 +404,17 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
 
       // Generate new future events
       const futureEvents = generateRecurringEvents(futureBaseEvent);
-      
+
       // Track if we found and preserved the manipulated event
       let manipulatedEventPreserved = false;
-      
+
       // Add all future events, but preserve the exact time for the manipulated event
       futureEvents.forEach(event => {
         let eventToAdd = event;
-        
+
         // Check if this event occurs on the same date as the manipulated event
         const isOnManipulatedDate = isSameEventDate(event, updatedEvent);
-        
+
         // For the first event that matches the manipulated event's date, preserve the exact time and ID
         if (!manipulatedEventPreserved && isOnManipulatedDate && (isDragging || isResizing)) {
           eventToAdd = {
@@ -416,12 +428,12 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
           // Apply time changes to other events in the series
           eventToAdd = applyTimeChanges(event);
         }
-        
+
         // Apply property changes to all events
         const withAllChanges = applyPropertyChanges(eventToAdd);
         eventsWithoutSeries.push(withAllChanges);
       });
-      
+
       // If we couldn't find the manipulated event in the series, add it explicitly
       if (!manipulatedEventPreserved && (isDragging || isResizing)) {
         const explicitEvent = {
@@ -432,27 +444,27 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
           seriesId: futureBaseEvent.seriesId,
           isRepeat: true
         };
-        
+
         eventsWithoutSeries.push(applyPropertyChanges(explicitEvent));
       }
-      
+
       break;
     }
 
     case 'all': {
       console.log('[CASE ALL] Handling ALL events update - Complete rewrite');
-       
+
        // Find the event that was being manipulated
        const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
        // --- DEBUG LOGGING: Log the original manipulated event found ---
-       console.log('[CASE ALL - DEBUG] Found original manipulatedEvent:', 
+       console.log('[CASE ALL - DEBUG] Found original manipulatedEvent:',
          manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
        );
        if (!manipulatedEvent) {
          console.error('Could not find the manipulated event in the series');
          return allEvents;
        }
-       
+
        // Use the delta calculated from the actual user interaction passed in options
        const startDelta = options.timeChange?.startDiff || 0;
        const endDelta = options.timeChange?.endDiff || 0;
@@ -461,16 +473,16 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
          console.warn("[CASE ALL] options.timeChange not provided. Deltas will be 0.");
        }
        console.log('[CASE ALL] Using Deltas from options.timeChange:', { startDelta, endDelta });
-       
+
        // Filter out the old series events and prepare to add new ones
        const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
-       
+
        // Process all events from the ORIGINAL series
        const seriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId);
        const updatedSeriesEvents = [];
        const manipulatedId = options.manipulatedId || updatedEvent.id; // ID of the event actually dragged/resized
        const originalBaseEvent = seriesEvents.find(e => e.id === manipulatedId);
-       
+
        seriesEvents.forEach(event => {
          let eventToPush;
          if (event.id === manipulatedId) {
@@ -539,12 +551,12 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
          }
          updatedSeriesEvents.push(eventToPush);
        });
-       
+
        // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
-       console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):', 
+       console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):',
          updatedSeriesEvents.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
        );
-       
+
        // Add all updated series events to the final result
        return [...eventsWithoutSeries, ...updatedSeriesEvents];
        console.log(`[CASE ALL] Added ${updatedSeriesEvents.length} updated series events to result`);
@@ -556,13 +568,12 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
   }
 
   // --- DEBUG LOGGING: Final returned array ---
-  console.log('🔴🔴🔴 [END] updateSeriesEvents - Returning updatedEvents 🔴🔴🔴', 
+  console.log('🔴🔴🔴 [END] updateSeriesEvents - Returning updatedEvents 🔴🔴🔴',
     eventsWithoutSeries.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title, seriesId: e.seriesId }))
   );
-  
-  // Ensure a new array reference is always returned
-  return eventsWithoutSeries.map(event => ({ ...event })); // Shallow clone each event into a new array
-};
+
+   // The final .map clone is removed as we construct a new array in each case
+ };
 
 /**
  * Helper function to check if two events occur on the same date (ignoring time)

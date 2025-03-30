@@ -49,7 +49,8 @@ const RepeatEditModal = ({
       end: new Date(draggedEvent.end),
       // Series properties based on edit scope
       repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
-      seriesId: editScope === 'single' ? null : draggedEvent.seriesId,
+      // Keep original seriesId, detachment happens in updateSeriesEvents
+      seriesId: draggedEvent.seriesId,
       isRepeat: editScope !== 'single',
       // Operation metadata
       _editScope: editScope,
