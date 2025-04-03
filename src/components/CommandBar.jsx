@@ -26,6 +26,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { RRule } from 'rrule'; // Import RRule
+import RecurrenceModal from './RecurrenceModal'; // Import RecurrenceModal
 
 const SCHEDULE_OPTIONS = [
   { id: 'today', label: 'Today' },
@@ -43,7 +45,8 @@ const REPEAT_OPTIONS = [
   { id: 'monthly', label: 'Every month', sublabel: 'on the 30th' },
   { id: 'monthlyWeekday', label: 'Every month', sublabel: 'on the 5th Mon' },
   { id: 'monthlyLastWeekday', label: 'Every month', sublabel: 'on the last Mon' },
-  { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' }
+  { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' },
+  { id: 'custom', label: 'Custom...' } // Add Custom option
 ];
 
 const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose, onDateSelect }, ref) => {
@@ -112,8 +115,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
   const [selectedTag, setSelectedTag] = useState(null);
   const [tagSearchText, setTagSearchText] = useState('');
+  const [taskRepeatOption, setTaskRepeatOption] = useState('none');
+  const [isTaskRepeatDropdownOpen, setIsTaskRepeatDropdownOpen] = useState(false);
+  const [taskRepeatSeriesId, setTaskRepeatSeriesId] = useState(null);
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [editingTaskId, setEditingTaskId] = useState(null);
+  // State for custom task recurrence rule
+  const [taskRruleOptions, setTaskRruleOptions] = useState(null);
   // Separate state for editing
   const [draftTag, setDraftTag] = useState(null);
   const [tags, setTags] = useState(() => {
@@ -152,7 +160,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     isAllDay: false,
     color: '#808080',
     repeat: 'none',
-    seriesId: null
+    seriesId: null,
+    rruleOptions: null // Add rruleOptions to event state
   });
   const [hasChanges, setHasChanges] = useState(false);
   const [eventTitle, setEventTitle] = useState('New Event');
@@ -170,6 +179,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [showRepeatEditModal, setShowRepeatEditModal] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const animationTimeoutRef = useRef(null);
+  // State for recurrence modal
+  const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false);
 
   const containerRef = useRef(null);
   const repeatDropdownRef = useRef(null);
@@ -253,7 +264,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       isAllDay: false,
       color: '#808080',
       repeat: 'none',
-      seriesId: null
+      seriesId: null,
+      rruleOptions: null // Reset rruleOptions
     });
     setHasChanges(false);
     setIsAddingEvent(false);
@@ -265,6 +277,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTagSearchText('');
     setIsTagDropdownOpen(false);
     setIsRepeatDropdownOpen(false); // Reset repeat dropdown state
+    setTaskRepeatOption('none'); // Reset task repeat option
+    setIsTaskRepeatDropdownOpen(false); // Reset task repeat dropdown state
+    setTaskRepeatSeriesId(null); // Reset task repeat series ID
+    setTaskRruleOptions(null); // Reset task custom rule
+    setIsRecurrenceModalOpen(false); // Close recurrence modal if open
     
     onClose();
   }, [onClose]);
@@ -290,20 +307,22 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       color: eventCopy.color || '#808080',
       repeat: eventCopy.repeat || 'none',
       seriesId: eventCopy.seriesId || null,
+      rruleOptions: eventCopy.rruleOptions || null, // Load rruleOptions
       isRepeat: eventCopy.isRepeat || false,
-      id: eventCopy.id,
-      // Preserve all metadata flags
+      // Preserve all metadata flags from the original event
       _editScope: eventCopy._editScope || 'single',
       _seriesUpdate: eventCopy._seriesUpdate || false,
       _futureUpdate: eventCopy._futureUpdate || false,
-      _repeatChanged: eventCopy._repeatChanged || false,
+      _repeatChanged: eventCopy._repeatChanged || (!eventCopy?.repeat && eventState.repeat && eventState.repeat !== 'none'),
       _originalSeriesId: eventCopy._originalSeriesId || eventCopy.seriesId,
       _originalEvent: eventCopy._originalEvent || eventCopy,
-      _exactPosition: eventCopy._exactPosition || {
+      _exactPosition: {
         start: new Date(eventCopy.start),
         end: new Date(eventCopy.end)
       },
+      // Preserve repeat properties for series updates
       _preserveRepeat: eventCopy._preserveRepeat || false,
+      // Force series update if this is a series edit
       _forceSeriesUpdate: eventCopy._seriesUpdate || false
     };
 
@@ -359,6 +378,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       allDay: eventState.isAllDay,
       isAllDay: eventState.isAllDay, // Ensure both properties are set consistently
       repeat: eventState.repeat,
+      rruleOptions: eventState.rruleOptions, // Include rruleOptions
       seriesId: eventState.seriesId,
       color: eventState.color,
       // Ensure we keep the original repeat properties if this is a series update
@@ -399,6 +419,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setDraftTag(task.tag || null);
     setTagSearchText(''); // Don't set the tag search text when editing
     setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
+    setTaskRepeatOption(task.repeat || 'none');
+    setTaskRepeatSeriesId(task.seriesId || null);
+    setTaskRruleOptions(task.rruleOptions || null); // Load task rrule options
     setEditingTaskId(task.id);
     setTaskToEdit(task);
   }, []);
@@ -427,7 +450,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
-        id: eventId || createdEvent?.id
+        rruleOptions: null // Init rruleOptions for new event
       };
 
       setOriginalEventState(eventId ? { ...newEventData, id: eventId } : createdEvent);
@@ -461,7 +484,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
-        id: createdEvent.id
+        rruleOptions: null // Init rruleOptions for new event
       };
 
       setOriginalEventState(createdEvent);
@@ -553,6 +576,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const handleRepeatOptionSelect = useCallback((option) => {
     handleEventChange('repeat', option);
     setIsRepeatDropdownOpen(false);
+    if (option !== 'custom') {
+      handleEventChange('rruleOptions', null); // Clear custom rule if selecting preset
+    }
   }, [handleEventChange]);
 
   const handleAddEventClick = useCallback(() => {
@@ -570,7 +596,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       isAllDay: false,
       color: '#3B82F6',
       repeat: 'none',
-      seriesId: null
+      seriesId: null,
+      rruleOptions: null // Init rruleOptions for new event
     };
 
     setOriginalEventState(null);
@@ -603,6 +630,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         ...currentTasks
       };
       
+      // Check if the repeat option has changed for an existing task
+      const repeatChanged = taskToEdit && taskToEdit.repeat !== taskRepeatOption;
+      
+      // Generate a series ID for recurring tasks if needed
+      const seriesId = taskRepeatOption !== 'none' 
+        ? (taskRepeatSeriesId || `series_${Date.now().toString()}`)
+        : null;
+
       if (editingTaskId) {
         // Update existing task
         const updatedTask = {
@@ -612,7 +647,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           notes: taskNotes.trim(),
           tag: finalTag,
           scheduledDate: scheduledDate?.toISOString(),
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          repeat: taskRepeatOption,
+          rruleOptions: taskRruleOptions, // Include task rrule options
+          seriesId: seriesId,
+          isRepeat: false // Base task is never a repeat instance
         };
 
         // Update in all tasks
@@ -671,7 +710,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           tag: finalTag,
           scheduledDate: scheduledDate?.toISOString(),
           completed: false,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          repeat: taskRepeatOption,
+          rruleOptions: taskRruleOptions, // Include task rrule options
+          seriesId: seriesId,
+          isRepeat: false // Base task is never a repeat instance
         };
 
         // Add to all tasks
@@ -696,6 +739,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       // Save to localStorage and dispatch event
       localStorage.setItem('tasks', JSON.stringify(updatedTasks));
       dispatchTasksUpdated(updatedTasks);
+      
+      // Dispatch a custom event for in-app components to listen for
+      window.dispatchEvent(new CustomEvent('tasksUpdated', {
+        detail: { tasks: updatedTasks }
+      }));
+      
+      // Trigger a storage event to notify other components about the change
+      // This is particularly important for AgendaView to refresh recurring tasks
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'tasks',
+        newValue: JSON.stringify(updatedTasks),
+        url: window.location.href
+      }));
 
       // Reset form and states
       setTaskTitle('');
@@ -705,6 +761,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setDraftTag(null);
       setTagSearchText('');
       setScheduledDate(null);
+      setTaskRepeatOption('none');
+      setTaskRepeatSeriesId(null);
+      setTaskRruleOptions(null); // Reset task custom rule state
       setIsAddingTask(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
@@ -713,7 +772,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       console.error('Error saving task:', error);
       // You might want to show an error message to the user here
     }
-  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
+  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
@@ -745,7 +804,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     handleAddEventClick,
     isAddingEvent,
     isAddingTask,
-    isGoToDateMode
+    isGoToDateMode,
+    taskRruleOptions, // Add dependency
+    eventState.rruleOptions // Add dependency
   ]);
 
   useEffect(() => {
@@ -754,6 +815,45 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
+
+  // Handler for saving custom recurrence rule from modal
+  const handleSaveRecurrenceRule = useCallback((newOptions) => {
+    if (isAddingEvent) {
+      handleEventChange('repeat', 'custom');
+      handleEventChange('rruleOptions', newOptions);
+    } else if (isAddingTask) {
+      setTaskRepeatOption('custom');
+      setTaskRruleOptions(newOptions);
+    }
+    setIsRecurrenceModalOpen(false);
+  }, [isAddingEvent, isAddingTask, handleEventChange]);
+
+  // Function to get display text for repeat option
+  const getRepeatDisplayText = (repeatValue, rruleOptions) => {
+    if (repeatValue === 'custom' && rruleOptions) {
+      try {
+        // Clone options to avoid modifying original
+        const options = {...rruleOptions};
+        
+        // Convert weekday objects to RRule Weekday instances if needed
+        if (options.byweekday) {
+          options.byweekday = options.byweekday.map(day => {
+            if (day instanceof Weekday) return day;
+            if (typeof day === 'number') return new Weekday(day);
+            if (day.weekday !== undefined) return new Weekday(day.weekday);
+            return RRule[day]; // Fallback to RRule constants
+          });
+        }
+        
+        const rule = new RRule(options);
+        return rule.toText();
+      } catch (e) {
+        console.error("Error parsing rrule options:", e);
+        return "Custom"; // Fallback text
+      }
+    }
+    return REPEAT_OPTIONS.find(option => option.id === repeatValue)?.label || 'Does not repeat';
+  };
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
@@ -862,7 +962,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             }}
                             className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
-                            <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50 " />
+                            <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
                           </button>
                         </PopoverContent>
@@ -1142,12 +1242,82 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 <Pin className="w-4 h-4" />
                                 <span>Add a location</span>
                               </button>
-                              <button className="flex items-center justify-between px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
-                                <div className="flex items-center gap-2">
-                                  <Repeat className="w-4 h-4" />
-                                  <span>Repeat</span>
-                                </div>
-                              </button>
+                              <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer">
+                                <Popover open={isTaskRepeatDropdownOpen} onOpenChange={setIsTaskRepeatDropdownOpen}>
+                                  <PopoverTrigger className="flex items-center justify-between w-full">
+                                    <div className="flex items-center gap-2">
+                                      <Repeat className="w-4 h-4" />
+                                      <span className={`${taskRepeatOption === 'none' ? '' : 'text-light-text dark:text-dark-text'}`}>
+                                        {getRepeatDisplayText(taskRepeatOption, taskRruleOptions)}
+                                      </span>
+                                    </div>
+                                  </PopoverTrigger>
+                                  <PopoverContent 
+                                    className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                                    align="start"
+                                    side="top"
+                                  >
+                                    <div role="listbox" className="flex flex-col">
+                                      {REPEAT_OPTIONS.map((option) => {
+                                        let sublabel = option.sublabel;
+                                        
+                                        if (option.id === 'weekly' || option.id === 'biweekly') {
+                                          const date = scheduledDate || new Date(); // Use scheduledDate or fallback to today
+                                          const dayOfWeek = format(date, 'EEE');
+                                          sublabel = `on ${dayOfWeek}`;
+                                        } else if (option.id === 'monthly') {
+                                          const date = scheduledDate || new Date(); // Use scheduledDate or fallback to today
+                                          const dayOfMonth = format(date, 'do');
+                                          sublabel = `on the ${dayOfMonth}`;
+                                        } else if (option.id === 'monthlyWeekday') {
+                                          const date = scheduledDate || new Date(); // Use scheduledDate or fallback to today
+                                          const dayOfMonth = getDate(date);
+                                          const weekNum = Math.ceil(dayOfMonth / 7);
+                                          const dayOfWeek = format(date, 'EEE');
+                                          const ordinal = weekNum === 1 ? '1st' : weekNum === 2 ? '2nd' : weekNum === 3 ? '3rd' : `${weekNum}th`;
+                                          sublabel = `on the ${ordinal} ${dayOfWeek}`;
+                                        } else if (option.id === 'monthlyLastWeekday') {
+                                          const date = scheduledDate || new Date(); // Use scheduledDate or fallback to today
+                                          const dayOfWeek = format(date, 'EEE');
+                                          sublabel = `on the last ${dayOfWeek}`;
+                                        } else if (option.id === 'yearly') {
+                                          const date = scheduledDate || new Date(); // Use scheduledDate or fallback to today
+                                          const monthDay = format(date, 'MMM d');
+                                          sublabel = `on ${monthDay}`;
+                                        }
+                                        
+                                        return (
+                                          <button
+                                            key={option.id}
+                                            type="button"
+                                            className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskRepeatOption === option.id ? 'font-semibold' : ''}`}
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              if (option.id === 'custom') {
+                                                setIsRecurrenceModalOpen(true); // Open modal
+                                                setIsTaskRepeatDropdownOpen(false); // Close popover
+                                              } else {
+                                                setTaskRepeatOption(option.id);
+                                                setTaskRruleOptions(null); // Clear custom rule if selecting preset
+                                                setIsTaskRepeatDropdownOpen(false);
+                                              }
+                                            }}
+                                            role="option"
+                                            aria-selected={taskRepeatOption === option.id}
+                                          >
+                                            <div className="flex w-full justify-between items-center">
+                                              <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${taskRepeatOption === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
+                                              {sublabel && (
+                                                <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
+                                              )}
+                                            </div>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
                               <div className="flex items-center justify-end gap-2 px-4 py-4">
                           <button
                             onClick={handleClose}
@@ -1405,8 +1575,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <div className="flex flex-col gap-1">
                           <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
                             <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none" ref={repeatDropdownRef}>
-                              <span className={`text-sm font-medium text-light-text/50 dark:text-dark-text ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : ''}`}>
-                                {REPEAT_OPTIONS.find(option => option.id === eventState.repeat)?.label}
+                              <span className={`text-sm font-medium ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
+                                {getRepeatDisplayText(eventState.repeat, eventState.rruleOptions)}
                               </span>
                             </PopoverTrigger>
                             <PopoverContent 
@@ -1447,19 +1617,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     <button
                                       key={option.id}
                                       type="button"
-                                      className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
+                                      className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        handleEventChange('repeat', option.id);
-                                        setIsRepeatDropdownOpen(false);
+                                        if (option.id === 'custom') {
+                                          setIsRecurrenceModalOpen(true); // Open modal
+                                          setIsRepeatDropdownOpen(false); // Close popover
+                                        } else {
+                                          handleEventChange('repeat', option.id);
+                                          handleEventChange('rruleOptions', null); // Clear custom rule
+                                          setIsRepeatDropdownOpen(false);
+                                        }
                                       }}
                                       role="option"
                                       aria-selected={eventState.repeat === option.id}
                                     >
-                                      <div className="flex justify-between items-center">
+                                      <div className="flex w-full justify-between items-center">
                                         <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${eventState.repeat === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
                                         {sublabel && (
-                                          <span className="text-xs text-dark-text/30 dark:text-dark-text/30">{sublabel}</span>
+                                          <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
                                         )}
                                       </div>
                                     </button>
@@ -1587,16 +1763,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     )}
     </AnimatePresence>
 
-    {/* Render modals outside of LayoutGroup */}
-    {showRepeatEditModal && (
-      <RepeatEditModal 
-        isOpen={showRepeatEditModal}
-        onClose={() => setShowRepeatEditModal(false)}
-        onEditSingle={() => handleEditSeriesSelect('single')}
-        onEditFuture={() => handleEditSeriesSelect('future')}
-        onEditAll={() => handleEditSeriesSelect('all')}
-      />
-    )}
+    {/* Recurrence Modal */}
+    <RecurrenceModal
+      isOpen={isRecurrenceModalOpen}
+      onOpenChange={setIsRecurrenceModalOpen}
+      initialValue={isAddingEvent ? eventState.rruleOptions : taskRruleOptions}
+      onSave={handleSaveRecurrenceRule}
+      startDate={isAddingEvent ? parse(eventState.date, 'yyyy-MM-dd', new Date()) : scheduledDate || new Date()}
+    />
   </div>
 );
 

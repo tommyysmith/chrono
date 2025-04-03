@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { format, isToday, isTomorrow } from "date-fns";
+import { useTaskManagement } from "../hooks/useTaskManagement";
 // import ThemeToggle from '../components/ThemeToggle';
 import {
   ChevronDown,
@@ -54,6 +55,8 @@ export default function Sidebar({
   onDateSelect,
   setIsVisible,
 }) {
+  // Get task management functions
+  const { getTasksInSeries, getRecurringTaskInstances } = useTaskManagement();
   const [activeTab, setActiveTab] = useState(() => {
     // Try to load from localStorage first
     const savedTab = localStorage.getItem("activeTab");
@@ -434,6 +437,9 @@ export default function Sidebar({
     .filter(Array.isArray) // Filter out any non-array values
     .reduce((unique, group) => {
       group.forEach((task) => {
+        // Skip recurring task instances (only show the base task)
+        if (task.isRepeat) return;
+        
         // Use task.id as the key to ensure uniqueness
         unique[task.id] = task;
       });

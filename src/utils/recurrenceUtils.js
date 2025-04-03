@@ -16,41 +16,91 @@ export function eventToRRule(event) {
     dtstart: new Date(event.start), // Start with the event's start date
     until: addYears(new Date(), 1), // Default 1 year limit
   };
+  
+  return createRRuleFromRepeatPattern(event.repeat, options, event.start);
+}
 
-  switch (event.repeat) {
+/**
+ * Convert a task to an RRule
+ * @param {Object} task - The task with a repeat value
+ * @returns {RRule} The corresponding RRule object
+ */
+export function taskToRRule(task) {
+  if (!task.repeat || task.repeat === 'none') {
+    return null;
+  }
+  
+  // Use scheduledDate as the start date, or fallback to createdAt or current date
+  let startDate;
+  if (task.scheduledDate) {
+    startDate = new Date(task.scheduledDate);
+  } else if (task.createdAt) {
+    startDate = new Date(task.createdAt);
+  } else {
+    startDate = new Date();
+  }
+  
+  const options = {
+    dtstart: startDate,
+    until: addYears(new Date(), 1), // Default 1 year limit
+  };
+  
+  return createRRuleFromRepeatPattern(task.repeat, options, startDate);
+}
+
+/**
+ * Helper function to create an RRule from a repeat pattern
+ * @param {string} repeatPattern - The repeat pattern (daily, weekly, etc.)
+ * @param {Object} options - The base RRule options
+ * @param {Date} startDate - The start date to use for day-of-week calculations
+ * @returns {RRule} The corresponding RRule object
+ */
+function createRRuleFromRepeatPattern(repeatPattern, options, startDate) {
+  // Convert JavaScript's getDay() (0=Sunday, 6=Saturday) to RRule's weekday constants
+  // RRule uses: 0=Monday, 1=Tuesday, ..., 6=Sunday
+  function jsWeekdayToRRuleWeekday(jsWeekday) {
+    // Convert Sunday (0) to RRule.SU (6)
+    if (jsWeekday === 0) return RRule.SU;
+    // Convert Monday-Saturday (1-6) to RRule.MO-RRule.SA (0-5)
+    return jsWeekday - 1;
+  }
+
+  // Get the correct weekday constant for RRule
+  const weekday = jsWeekdayToRRuleWeekday(startDate.getDay());
+
+  switch (repeatPattern) {
     case 'daily':
       options.freq = RRule.DAILY;
       break;
     case 'weekday':
+    case 'weekdays':
       options.freq = RRule.WEEKLY;
       options.byweekday = [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR];
       break;
     case 'weekly':
       options.freq = RRule.WEEKLY;
-      // Keep the same day of week as the original event
-      options.byweekday = [event.start.getDay()];
+      // Keep the same day of week as the original date
+      options.byweekday = [weekday];
       break;
     case 'biweekly':
       options.freq = RRule.WEEKLY;
       options.interval = 2;
-      // Keep the same day of week as the original event
-      options.byweekday = [event.start.getDay()];
+      // Keep the same day of week as the original date
+      options.byweekday = [weekday];
       break;
     case 'monthly':
       options.freq = RRule.MONTHLY;
       // Either use the day of month (e.g., 15th of each month)
       // or the position in month (e.g., 3rd Tuesday)
       // We'll use the day of month for simplicity
-      options.bymonthday = [event.start.getDate()];
+      options.bymonthday = [startDate.getDate()];
       break;
     case 'yearly':
       options.freq = RRule.YEARLY;
+      // Set bymonth to ensure it repeats in the same month
+      options.bymonth = [startDate.getMonth() + 1]; // RRule months are 1-indexed
       break;
     default:
-      // For custom rrule strings, just parse them
-      if (event.rrule) {
-        return rrulestr(event.rrule);
-      }
       return null;
   }
 
@@ -157,6 +207,80 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
       rrule: rrule.toString(),
       // Add a reference to the original event ID
       originalEventId: baseEvent.id
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Generates all instances of a recurring task series using rrule.js
+ * @param {Object} baseTask - The base task to generate recurrences from
+ * @param {Date} [endDate] - Optional end date to limit recurrences
+ * @param {number} [maxInstances=52] - Maximum number of instances to generate
+ * @returns {Array} Array of task objects
+ */
+export function generateRecurringTasks(baseTask, endDate, maxInstances = 52) {
+  if (!baseTask.repeat || baseTask.repeat === 'none') {
+    return [baseTask]; // Not a recurring task
+  }
+
+  // Make sure we have a valid endDate
+  const limitDate = endDate instanceof Date ? endDate : addYears(new Date(), 1);
+  console.log('Generating recurring tasks with limit date:', limitDate);
+
+  // Create RRule from task's repeat pattern
+  let rrule;
+
+  // If the task already has an rrule string, use that
+  if (baseTask.rrule) {
+    rrule = rrulestr(baseTask.rrule);
+  } else {
+    // Otherwise, create a new rrule from the repeat value
+    rrule = taskToRRule(baseTask);
+  }
+
+  // If we couldn't create a valid rrule, just return the base task
+  if (!rrule) {
+    console.log('Could not create RRule for task:', baseTask.title);
+    return [baseTask];
+  }
+
+  // Set the until date for the rrule
+  rrule = new RRule({
+    ...rrule.options,
+    until: limitDate,
+    count: maxInstances
+  });
+
+  // Generate dates using RRule
+  const dates = rrule.all();
+  console.log(`Generated ${dates.length} dates for recurring task:`, baseTask.title);
+
+  // Get the base scheduled date
+  const baseDate = baseTask.scheduledDate ? new Date(baseTask.scheduledDate) : 
+                   baseTask.createdAt ? new Date(baseTask.createdAt) : new Date();
+  
+  // Initialize result array with recurring instances (not the base task)
+  const result = [];
+
+  // Create tasks for each date
+  for (let i = 0; i < dates.length; i++) {
+    const scheduledDate = dates[i];
+    
+    // Create a new instance for this date
+    result.push({
+      ...baseTask,
+      id: `${baseTask.id}_repeat_${i}`,
+      seriesId: baseTask.seriesId,
+      scheduledDate: scheduledDate.toISOString(),
+      isRepeat: true,
+      // Store the rrule string for future reference
+      rrule: rrule.toString(),
+      // Add a reference to the original task ID
+      originalTaskId: baseTask.id,
+      // Reset completion status for future instances
+      completed: false
     });
   }
 

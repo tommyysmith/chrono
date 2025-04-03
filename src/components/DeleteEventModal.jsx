@@ -81,7 +81,7 @@ const DeleteEventModal = ({ isOpen, eventTitle, onClose, onDelete }) => {
         <div className="flex px-8 pb-8 justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 h-[36px] font-medium bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-dark-bg-light dark:to-dark-bg-lighter dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:bg-white/5 dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+            className="flex items-center flex-row px-4 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
           >
             Cancel
           </button>

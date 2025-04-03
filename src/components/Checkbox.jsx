@@ -16,7 +16,8 @@ const checkVariants = {
 };
 
 export default function Checkbox({ checked, onChange }) {
-  const handleChange = () => {
+  const handleChange = (e) => {
+    e.stopPropagation();
     console.log('Checkbox clicked, current state:', checked);
     onChange?.();
   };

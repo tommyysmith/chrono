@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef } from "react";
 
 export function useContextMenu(
   events,
@@ -8,9 +8,9 @@ export function useContextMenu(
 ) {
   const [contextMenu, setContextMenu] = useState({
     show: false,
+    eventId: null,
     x: 0,
     y: 0,
-    eventId: null,
   });
 
   const contextMenuRef = useRef(null);
@@ -19,37 +19,11 @@ export function useContextMenu(
     e.preventDefault();
     e.stopPropagation();
 
-    // Get viewport dimensions
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    // Context menu dimensions (hardcoded since they're fixed in CSS)
-    const menuWidth = 280; // matches w-[280px] in CSS
-    const menuHeight = 180; // approximate height of context menu
-
-    // Calculate initial position
-    let x = e.clientX;
-    let y = e.clientY;
-
-    // Adjust position if menu would overflow right edge
-    if (x + menuWidth > viewportWidth) {
-      x = viewportWidth - menuWidth - 16; // 16px padding from edge
-    }
-
-    // Adjust position if menu would overflow bottom edge
-    if (y + menuHeight > viewportHeight) {
-      y = viewportHeight - menuHeight - 16; // 16px padding from edge
-    }
-
-    // Ensure menu doesn't go off the left or top edge
-    x = Math.max(16, x);
-    y = Math.max(16, y);
-
     setContextMenu({
       show: true,
-      x,
-      y,
       eventId,
+      x: e.clientX,
+      y: e.clientY,
     });
   }, []);
 
@@ -76,7 +50,7 @@ export function useContextMenu(
       }
 
       // Close the context menu
-      setContextMenu({ show: false, x: 0, y: 0, eventId: null });
+      setContextMenu({ show: false, eventId: null, x: 0, y: 0 });
     },
     [contextMenu.eventId, setEvents]
   );
@@ -95,7 +69,7 @@ export function useContextMenu(
       }
 
       // Close the context menu
-      setContextMenu({ show: false, x: 0, y: 0, eventId: null });
+      setContextMenu({ show: false, eventId: null, x: 0, y: 0 });
     },
     [contextMenu.eventId, events, handleDeleteEvent, setDeleteModalState]
   );
@@ -131,31 +105,12 @@ export function useContextMenu(
       }
 
       // Close the context menu
-      setContextMenu({ show: false, x: 0, y: 0, eventId: null });
+      setContextMenu({ show: false, eventId: null, x: 0, y: 0 });
     },
     [contextMenu.eventId, events, setEvents]
   );
 
-  // Click outside handler
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        contextMenu.show &&
-        contextMenuRef.current &&
-        !contextMenuRef.current.contains(event.target)
-      ) {
-        setContextMenu({ show: false, x: 0, y: 0, eventId: null });
-      }
-    };
-
-    if (contextMenu.show) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [contextMenu.show]);
+  // We don't need a click outside handler anymore as the popover handles this automatically
 
   return {
     contextMenu,

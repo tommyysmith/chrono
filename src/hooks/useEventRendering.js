@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { format, isSameDay, addDays } from "date-fns";
+import { RRule } from "rrule";
 import { Repeat } from "@/assets/icons/Repeat";
 import { ViewType } from "../constants/views";
 import { motion } from "framer-motion";
@@ -15,22 +16,70 @@ export function useEventRendering(
   handleEventContextMenu,
   handleResizeStart
 ) {
-  const renderEvents = useCallback(() => {
-    // --- DEBUG LOG: Check the specific event directly from the 'events' dependency
-    const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5";
-    const eventInRenderCallback = events.find(e => e.id === manipulatedEventId);
-    console.log(`[renderEvents Callback] Event ${manipulatedEventId} times:`, 
-      eventInRenderCallback ? { start: eventInRenderCallback.start, end: eventInRenderCallback.end } : "NOT FOUND"
-    );
-    // ---
- 
+  const expandRecurringEvents = useCallback((events, dateRangeStart, dateRangeEnd) => {
+  const expandedEvents = [];
+  
+  events.forEach(event => {
+    if (!event.rruleOptions && !event.seriesId) {
+      // Not a recurring event
+      expandedEvents.push(event);
+      return;
+    }
+    
+    try {
+      // For events with RRule options, expand the occurrences
+      if (event.rruleOptions) {
+        const rule = new RRule({
+          ...event.rruleOptions,
+          dtstart: new Date(event.start)
+        });
+        
+        const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
+        
+        occurrences.forEach((occurrenceDate, index) => {
+          const startDate = new Date(event.start);
+          const endDate = new Date(event.end);
+          
+          // Calculate duration to maintain it across occurrences
+          const duration = endDate - startDate;
+          
+          const occurrenceStart = occurrenceDate;
+          const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
+          
+          expandedEvents.push({
+            ...event,
+            id: `${event.id}_${index}`, // Unique ID for each occurrence
+            start: occurrenceStart,
+            end: occurrenceEnd,
+            isRecurring: true,
+            seriesId: event.seriesId || event.id
+          });
+        });
+      } else if (event.seriesId) {
+        // Handle simple repeat patterns (legacy)
+        expandedEvents.push(event);
+      }
+    } catch (error) {
+      console.error('Error expanding recurring event:', error);
+      expandedEvents.push(event); // Fallback to original event
+    }
+  });
+  
+  return expandedEvents;
+}, []);
+
+const renderEvents = useCallback(() => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
 
-      const filteredEvents = events.filter((event) => {
+      // First expand any recurring events
+      const expandedEvents = expandRecurringEvents(events, weekStart, weekEnd);
+
+      // Then filter for events in this week
+      const filteredEvents = expandedEvents.filter((event) => {
         const eventStart = new Date(event.start);
         // Check both allDay and isAllDay properties to ensure compatibility
         const isAllDayEvent = event.allDay || event.isAllDay;
@@ -41,7 +90,7 @@ export function useEventRendering(
 
       return filteredEvents.map((event) => {
         const overlappingEvents = findOverlappingGroup(event, filteredEvents);
-        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
+        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
@@ -99,7 +148,15 @@ export function useEventRendering(
       });
     } else {
       // Day view
-      const dayEvents = events.filter((event) => {
+      const dayStart = new Date(selectedDate);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayStart.getDate() + 1);
+      
+      // First expand any recurring events
+      const expandedEvents = expandRecurringEvents(events, dayStart, dayEnd);
+      
+      // Then filter for events on this day
+      const dayEvents = expandedEvents.filter((event) => {
         // Check both allDay and isAllDay properties to ensure compatibility
         const isAllDayEvent = event.allDay || event.isAllDay;
         return !isAllDayEvent && isSameDay(event.start, selectedDate);
@@ -107,7 +164,7 @@ export function useEventRendering(
 
       return dayEvents.map((event) => {
         const overlappingEvents = findOverlappingGroup(event, dayEvents);
-        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none");
+        const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (

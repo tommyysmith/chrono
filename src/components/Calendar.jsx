@@ -449,25 +449,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     });
   };
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (
-        contextMenu.show &&
-        contextMenuRef.current &&
-        !contextMenuRef.current.contains(event.target)
-      ) {
-        setContextMenu({ show: false, x: 0, y: 0, eventId: null });
-      }
-    };
-
-    if (contextMenu.show) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [contextMenu.show]);
+  // Context menu is now handled by the popover component
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -582,14 +564,24 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             )}
           </div>
         </div>
-        {/* Context menu */}
-        {contextMenu.show && (
-          <div
+        {/* Context menu using Popover */}
+        <Popover open={contextMenu.show} onOpenChange={(open) => !open && setContextMenu({ show: false, eventId: null, x: 0, y: 0 })}>
+          {/* Empty trigger positioned at the right-click location */}
+          <PopoverTrigger asChild>
+            <div 
+              className="fixed w-0 h-0 overflow-hidden" 
+              style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
+            />
+          </PopoverTrigger>
+          <PopoverContent 
             ref={contextMenuRef}
-            className="fixed bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px]"
-            style={{ top: contextMenu.y, left: contextMenu.x }}
+            className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px] p-0"
+            sideOffset={5}
+            align="start"
+            side="bottom"
+            forceMount
           >
-            <div className="">
+            <div>
               <div className="flex flex-wrap gap-2 pb-2 p-3">
                 {colors.map((color) => (
                   <motion.button
@@ -623,8 +615,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          </PopoverContent>
+        </Popover>
 
         <DeleteEventModal
           isOpen={deleteModalState.isOpen}

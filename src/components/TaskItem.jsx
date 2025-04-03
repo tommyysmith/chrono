@@ -2,16 +2,19 @@
 
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Pencil } from 'lucide-react';
+import { Pencil, CalendarClock } from 'lucide-react';
 import Checkbox from './Checkbox';
 import { format } from 'date-fns';
 import { Calendar } from '../assets/icons/Calendar';
 import { Trash } from '../assets/icons/Trash';
 import { Tag } from '../assets/icons/Tag';
 import { More } from '../assets/icons/More';
+import { Repeat } from '../assets/icons/Repeat';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked }) {
+  // If isRecurring is not explicitly passed, check the task properties
+  const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
@@ -56,7 +59,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     >
       <div className="checkbox flex-shrink-0 mt-0.5">
         <Checkbox 
-          checked={task.completed}
+          checked={checked !== undefined ? checked : task.completed}
           onChange={() => onComplete(task.id)}
         />
       </div>
@@ -71,6 +74,11 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             <span className="px-1">
             {format(new Date(task.scheduledDate), 'd MMM')}
             </span>
+          </div>
+        )}
+        {taskIsRecurring && (
+          <div className="inline-flex self-start mt-1 items-center px-1.5 h-[24px] text-xs rounded-[5px] bg-blue-500/10 text-blue-500">
+            <Repeat className="h-3 w-3" />
           </div>
         )}
         {!hideTag && task.tag && (
