@@ -51,6 +51,8 @@ const RepeatEditModal = ({
       repeat: editScope === 'single' ? 'none' : draggedEvent.repeat,
       // Keep original seriesId, detachment happens in updateSeriesEvents
       seriesId: draggedEvent.seriesId,
+      // Conditionally include rruleOptions if they exist and scope is not 'single'
+      ...(draggedEvent.repeat === 'custom' && draggedEvent.rruleOptions && editScope !== 'single' && { rruleOptions: draggedEvent.rruleOptions }),
       isRepeat: editScope !== 'single',
       // Operation metadata
       _editScope: editScope,

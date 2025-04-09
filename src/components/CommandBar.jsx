@@ -26,7 +26,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { RRule } from 'rrule'; // Import RRule
+import { RRule, Weekday } from 'rrule'; // Import RRule and Weekday
 import RecurrenceModal from './RecurrenceModal'; // Import RecurrenceModal
 
 const SCHEDULE_OPTIONS = [

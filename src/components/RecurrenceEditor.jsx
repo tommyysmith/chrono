@@ -204,7 +204,8 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
           const weekOfMonth = Math.ceil(dayOfMonth / 7); // Approximation
           const rruleDay = start.getDay(); // 0=Sun, 1=Mon...
           newOpts.bysetpos = weekOfMonth > 4 ? -1 : weekOfMonth; // Use -1 for last
-          newOpts.byweekday = [rruleDay];
+          // Convert raw day index to Weekday instance
+          newOpts.byweekday = [new Weekday(rruleDay === 0 ? 6 : rruleDay - 1)]; // Convert Sunday(0) to 6, others to n-1
         }
       }
       return newOpts;

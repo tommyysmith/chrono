@@ -60,6 +60,11 @@ export function useContextMenu(
       e.preventDefault();
       e.stopPropagation();
 
+      // --- NEW LOGGING ---
+      console.log(' [useContextMenu.handleEventDelete] Attempting delete for eventId:', contextMenu.eventId);
+      console.log(' [useContextMenu.handleEventDelete] Searching within events:', events.map(e => ({ id: e.id, title: e.title, start: e.start, repeat: e.repeat, seriesId: e.seriesId })));
+      // --- END NEW LOGGING ---
+
       // Find the event to delete
       const eventToDelete = events.find(
         (event) => event.id === contextMenu.eventId

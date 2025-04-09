@@ -123,9 +123,15 @@ export function useEventManagement(commandBarRef) {
     const isResizing = !!cleanEvent._isResizing;
     delete cleanEvent._isResizing;
     
+    // Extract rruleOptions if present, but DON'T delete it
+    // We need to keep rruleOptions attached to the event object for proper handling
+    const rruleOptions = cleanEvent.rruleOptions || null;
+    // Note: We are NOT deleting rruleOptions from cleanEvent as we need it for RRule functionality
+
     console.log('Processing update with options:', {
       editScope,
       timeChange,
+      rruleOptions,
       isDragging,
       isResizing
     });
@@ -182,6 +188,7 @@ export function useEventManagement(commandBarRef) {
         const newEventsState = updateSeriesEvents(prevEvents, cleanEvent, {
           editScope,
           timeChange,
+          rruleOptions,
           baseEvent,
           isDragging,
           isResizing
@@ -247,6 +254,17 @@ export function useEventManagement(commandBarRef) {
   }, [setEvents]);
 
   const handleDeleteEvent = useCallback((event, setDeleteModalState) => {
+    // --- NEW LOGGING ---
+    console.log(' [handleDeleteEvent] Received event:', {
+      id: event?.id,
+      title: event?.title,
+      start: event?.start,
+      seriesId: event?.seriesId,
+      repeat: event?.repeat,
+      rruleOptions: event?.rruleOptions, // Log rruleOptions too, just in case
+      isRepeat: event?.isRepeat
+    });
+    // --- END NEW LOGGING ---
     const isRepeatedEvent = event.repeat && event.repeat !== "none" && event.seriesId;
 
     if (isRepeatedEvent) {
@@ -268,29 +286,77 @@ export function useEventManagement(commandBarRef) {
   }, []);
 
   const handleDeleteSeriesEvents = useCallback((event, scope) => {
-    if (!event) return;
-    
+    if (!event || !event.seriesId) {
+      // If it's not a series event or event is missing, try deleting as single
+      console.warn('handleDeleteSeriesEvents called on non-series event or missing event:', event);
+      setEvents(prev => prev.filter(e => e.id !== event?.id));
+      return;
+    }
+
     setEvents((prevEvents) => {
+      // Find the base event (assuming the one with rruleOptions is canonical, or earliest start)
+      const seriesEvents = prevEvents.filter(e => e.seriesId === event.seriesId);
+      const baseEvent = seriesEvents.sort((a, b) => new Date(a.start) - new Date(b.start))[0]; // Find earliest
+
+      if (!baseEvent) {
+        console.error('Could not find base event for seriesId:', event.seriesId);
+        return prevEvents; // Return current state if base not found
+      }
+
       let updatedEvents;
-      
-      if (scope === 'all' && event.seriesId) {
-        // Delete all events in the series
+
+      if (scope === 'all') {
+        // Delete all events in the series (Correct - Keep as is)
         updatedEvents = prevEvents.filter(e => e.seriesId !== event.seriesId);
-      } else if (scope === 'single' && event.id) {
-        // Delete just this instance and any orphaned series events
-        updatedEvents = prevEvents.filter(e => {
-          if (e.id === event.id) return false;
-          if (event.seriesId && e.seriesId === event.seriesId) return false;
-          return true;
-        });
+      } else if (scope === 'single') {
+        // Add exception date (exdate) to the base event's rruleOptions
+        const dateToExclude = new Date(event.start);
+        const currentRRuleOptions = baseEvent.rruleOptions || {}; // Handle missing options
+        const existingExdates = (currentRRuleOptions.exdate || []).map(d => new Date(d)); // Ensure dates
+
+        // Only add if not already excluded
+        if (!existingExdates.some(d => d.getTime() === dateToExclude.getTime())) {
+          const updatedRRuleOptions = {
+            ...currentRRuleOptions,
+            exdate: [...existingExdates, dateToExclude]
+          };
+
+          updatedEvents = prevEvents.map(e => 
+            e.id === baseEvent.id 
+              ? { ...e, rruleOptions: updatedRRuleOptions } 
+              : e
+          );
+        } else {
+          updatedEvents = prevEvents; // No change needed if already excluded
+        }
+      } else if (scope === 'future') {
+        // Set the 'until' date on the base event's rruleOptions
+        const untilDate = new Date(event.start); // Stop recurrence *before* this instance starts
+        const currentRRuleOptions = baseEvent.rruleOptions || {}; // Handle missing options
+
+        const updatedRRuleOptions = {
+          ...currentRRuleOptions,
+          until: untilDate,
+          count: null // Remove count if setting until
+        };
+        // Remove count specifically if it exists
+        delete updatedRRuleOptions.count; 
+
+        updatedEvents = prevEvents.map(e => 
+          e.id === baseEvent.id 
+            ? { ...e, rruleOptions: updatedRRuleOptions } 
+            : e
+        );
+
       } else {
-        // If something's wrong with the event data, just return current state
+        // Unknown scope or issue, return current state
+        console.warn('Unknown scope or issue in handleDeleteSeriesEvents:', scope);
         return prevEvents;
       }
-      
+
       return updatedEvents;
     });
-  }, []);
+  }, [setEvents]);
 
   return {
     events,

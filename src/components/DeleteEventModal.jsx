@@ -3,9 +3,15 @@
 import React from 'react';
 
 const DeleteEventModal = ({ isOpen, eventTitle, onClose, onDelete }) => {
-  const [deleteAll, setDeleteAll] = React.useState(false);
+  // Use a state variable to store the selected scope
+  const [deleteScope, setDeleteScope] = React.useState('single'); // Default to 'single'
 
   if (!isOpen) return null;
+
+  // Handler for the Delete button
+  const handleDeleteConfirm = () => {
+    onDelete(deleteScope); // Pass the selected scope string
+  };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]">
@@ -28,24 +34,51 @@ const DeleteEventModal = ({ isOpen, eventTitle, onClose, onDelete }) => {
               type="radio"
               name="deleteScope"
               value="single"
-              checked={!deleteAll}
-              onChange={() => setDeleteAll(false)}
+              checked={deleteScope === 'single'}
+              onChange={() => setDeleteScope('single')}
               className="hidden"
             />
             <div 
               className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
-                ${!deleteAll 
+                ${deleteScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
                 }`}
-              onClick={() => setDeleteAll(false)}
+              onClick={() => setDeleteScope('single')}
             >
-              {!deleteAll && (
+              {deleteScope === 'single' && (
                 <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
               )}
             </div>
             <span className="text-light-text dark:text-dark-text text-xs">
               This event
+            </span>
+          </label>
+
+          {/* This and future events option */}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="deleteScope"
+              value="future"
+              checked={deleteScope === 'future'}
+              onChange={() => setDeleteScope('future')}
+              className="hidden"
+            />
+            <div 
+              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+                ${deleteScope === 'future' 
+                  ? 'border-primary bg-primary' 
+                  : 'border-light-border dark:border-dark-border'
+                }`}
+              onClick={() => setDeleteScope('future')}
+            >
+              {deleteScope === 'future' && (
+                <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
+              )}
+            </div>
+            <span className="text-light-text dark:text-dark-text text-xs">
+              This and future events
             </span>
           </label>
 
@@ -55,19 +88,19 @@ const DeleteEventModal = ({ isOpen, eventTitle, onClose, onDelete }) => {
               type="radio"
               name="deleteScope"
               value="all"
-              checked={deleteAll}
-              onChange={() => setDeleteAll(true)}
+              checked={deleteScope === 'all'}
+              onChange={() => setDeleteScope('all')}
               className="hidden"
             />
             <div 
               className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
-                ${deleteAll 
+                ${deleteScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
                 }`}
-              onClick={() => setDeleteAll(true)}
+              onClick={() => setDeleteScope('all')}
             >
-              {deleteAll && (
+              {deleteScope === 'all' && (
                 <div className="w-2 h-2 rounded-full bg-white dark:bg-dark-bg-lighter" />
               )}
             </div>
@@ -86,7 +119,7 @@ const DeleteEventModal = ({ isOpen, eventTitle, onClose, onDelete }) => {
             Cancel
           </button>
           <button
-            onClick={() => onDelete(deleteAll)}
+            onClick={handleDeleteConfirm} // Use the new handler
             className="px-4 h-[36px] bg-red-500 text-xs bg-gradient-to-b from-red-500 to-red-600 hover:bg-gradient-to-b hover:from-red-600 hover:to-red-700 rounded-[5px] items-center gap-2"
           >
             <span className="font-semibold font-['Inter'] text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)]">

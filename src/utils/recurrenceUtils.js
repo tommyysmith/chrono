@@ -151,42 +151,79 @@ export function rruleToEventRepeat(rrule) {
  * @returns {Array} Array of event objects
  */
 export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
-  if (!baseEvent.repeat || baseEvent.repeat === 'none') {
+  // Check if this is a valid recurring event
+  if ((!baseEvent.repeat || baseEvent.repeat === 'none') && !baseEvent.rruleOptions) {
+    console.log('Not a recurring event - returning baseEvent only');
     return [baseEvent]; // Not a recurring event
   }
 
-  // Always include the original event in the result
-  const result = [baseEvent];
+  console.log('Generating recurring events for:', {
+    id: baseEvent.id,
+    repeat: baseEvent.repeat,
+    hasRRuleOptions: !!baseEvent.rruleOptions,
+    start: baseEvent.start,
+  });
+
+  // Don't add the base event directly to avoid duplication
+  // Instead, we'll generate it properly through the RRule occurrences
+  const result = [];
 
   // Default limit to 1 year if no end date is provided
   const limitDate = endDate || addYears(new Date(), 1);
 
-  // Create RRule from event's repeat pattern
+  // Create RRule from event's pattern
   let rrule;
 
+  // If the event has custom rruleOptions, use those
+  if (baseEvent.rruleOptions) {
+    console.log('Using rruleOptions for event:', baseEvent.id);
+    // Create a new rule with the event start as dtstart
+    // Ensure we have a clean copy of the options
+    const ruleOptions = JSON.parse(JSON.stringify(baseEvent.rruleOptions));
+    rrule = new RRule({
+      ...ruleOptions,
+      dtstart: new Date(baseEvent.start)
+    });
+  } 
   // If the event already has an rrule string, use that
-  if (baseEvent.rrule) {
+  else if (baseEvent.rrule) {
+    console.log('Using rrule string for event:', baseEvent.id);
     rrule = rrulestr(baseEvent.rrule);
-  } else {
-    // Otherwise, create a new rrule from the repeat value
+  } 
+  // Otherwise, create a new rrule from the predefined repeat pattern
+  else {
+    console.log('Creating rrule from repeat pattern for event:', baseEvent.id);
     rrule = eventToRRule(baseEvent);
   }
 
   // If we couldn't create a valid rrule, just return the base event
-  if (!rrule) return [baseEvent];
+  if (!rrule) {
+    console.log('Could not create valid rrule - returning baseEvent only');
+    return [baseEvent];
+  }
 
-  // Set the until date for the rrule
-  rrule = new RRule({
-    ...rrule.options,
-    until: limitDate,
-    count: maxInstances
-  });
+  // Set the until date for the rrule but don't override existing options
+  const ruleOptions = { ...rrule.options };
+  
+  // Only set until if not already specified in options
+  if (!ruleOptions.until && !ruleOptions.count) {
+    ruleOptions.until = limitDate;
+  }
+  
+  // Only set count as a fallback if neither until nor count is specified
+  if (!ruleOptions.until && !ruleOptions.count) {
+    ruleOptions.count = maxInstances;
+  }
+  
+  // Create final rule with merged options
+  rrule = new RRule(ruleOptions);
 
   // Calculate the duration of the base event
   const duration = baseEvent.end.getTime() - baseEvent.start.getTime();
 
   // Generate dates using RRule
   const dates = rrule.all();
+  console.log(`Generated ${dates.length} occurrences for event:`, baseEvent.id);
 
   // Skip the first date if it's the same as the base event
   const startIndex = isSameDateTime(dates[0], baseEvent.start) ? 1 : 0;
@@ -196,17 +233,17 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
     const start = dates[i];
     const end = new Date(start.getTime() + duration);
 
+      // Create a new event for this occurrence
     result.push({
       ...baseEvent,
       id: generateEventId(),
-      seriesId: baseEvent.seriesId,
+      seriesId: baseEvent.id, // Always use the base event's ID as the seriesId for consistency
       start: new Date(start),
       end: new Date(end),
       isRepeat: true,
-      // Store the rrule string for future reference
-      rrule: rrule.toString(),
-      // Add a reference to the original event ID
-      originalEventId: baseEvent.id
+      // Store the rrule string for future reference but don't include rruleOptions in children
+      // Only the base event should have rruleOptions
+      rrule: rrule.toString()
     });
   }
 
@@ -472,7 +509,8 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         seriesId: null,
         repeat: 'none',
         isRepeat: false,
-        rrule: null
+        rrule: null,
+        rruleOptions: null // Explicitly clear rruleOptions too
       };
 
       console.log('[CASE SINGLE] Final detached event:', {
@@ -511,12 +549,14 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
       const pastEvents = sortedEvents.slice(0, editedIndex);
       eventsWithoutSeries.push(...pastEvents);
 
-      // Create new series for future events
+      // Create a new series for future events
       const futureBaseEvent = {
         ...updatedEvent,
         id: generateEventId(),
         seriesId: generateEventId(),
-        isRepeat: true
+        isRepeat: true,
+        // Preserve rruleOptions if present
+        rruleOptions: updatedEvent.rruleOptions || options.rruleOptions
       };
 
       // Store the manipulated event's exact time and ID
@@ -526,6 +566,19 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         end: new Date(updatedEvent.end.getTime())
       };
 
+      // Make sure futureBaseEvent has either rruleOptions or repeat for generation
+      if (!futureBaseEvent.rruleOptions && (!futureBaseEvent.repeat || futureBaseEvent.repeat === 'none')) {
+        console.warn('[CASE FUTURE] futureBaseEvent has neither valid rruleOptions nor repeat pattern');
+        // If neither is present, resort to 'daily' as a fallback to prevent data loss
+        futureBaseEvent.repeat = futureBaseEvent.repeat || 'daily';
+      }
+      
+      console.log('[CASE FUTURE] Generating new recurring events with future base event:', {
+        baseEventId: futureBaseEvent.id,
+        hasRRuleOptions: !!futureBaseEvent.rruleOptions,
+        repeat: futureBaseEvent.repeat
+      });
+      
       // Generate new future events
       const futureEvents = generateRecurringEvents(futureBaseEvent);
 
@@ -597,6 +650,12 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
          console.warn("[CASE ALL] options.timeChange not provided. Deltas will be 0.");
        }
        console.log('[CASE ALL] Using Deltas from options.timeChange:', { startDelta, endDelta });
+       
+       // Log rruleOptions if present in the event or options
+       console.log('[CASE ALL] rruleOptions present:', { 
+         inUpdatedEvent: !!updatedEvent.rruleOptions,
+         inOptions: !!options.rruleOptions
+       });
 
        // Filter out the old series events and prepare to add new ones
        const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
@@ -605,7 +664,35 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
        const seriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId);
        const updatedSeriesEvents = [];
        const manipulatedId = options.manipulatedId || updatedEvent.id; // ID of the event actually dragged/resized
-       const originalBaseEvent = seriesEvents.find(e => e.id === manipulatedId);
+       
+       // Find the best candidate for the base event - prioritize events with rruleOptions
+       let originalBaseEvent = seriesEvents.find(e => e.rruleOptions && e.id === manipulatedId) || 
+                              seriesEvents.find(e => e.id === manipulatedId);
+       
+       // If we can't find the manipulated event, look for any event with rruleOptions as a fallback
+       if (!originalBaseEvent || !originalBaseEvent.rruleOptions) {
+         const eventWithRRule = seriesEvents.find(e => e.rruleOptions);
+         if (eventWithRRule) {
+           console.log('[CASE ALL] Found event with rruleOptions to use as base:', eventWithRRule.id);
+           // Still use manipulatedId's event as base, but borrow rruleOptions
+           if (originalBaseEvent) {
+             originalBaseEvent.rruleOptions = eventWithRRule.rruleOptions;
+           } else {
+             originalBaseEvent = eventWithRRule;
+           }
+         }
+       }
+
+       // Create a new base event with changes from the updated event
+       const baseEvent = {
+         ...originalBaseEvent,
+         title: updatedEvent.title || originalBaseEvent.title,
+         description: updatedEvent.description || originalBaseEvent.description,
+         color: updatedEvent.color || originalBaseEvent.color,
+         isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : originalBaseEvent.isAllDay,
+         // Ensure rruleOptions is preserved
+         rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+       };
 
        seriesEvents.forEach(event => {
          let eventToPush;
@@ -617,12 +704,14 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
              description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
              color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
              isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-             start: updatedEvent.start, // Use exact final time
-             end: updatedEvent.end,     // Use exact final time
+             start: new Date(updatedEvent.start.getTime()),
+             end: new Date(updatedEvent.end.getTime()),
              seriesId: event.seriesId,
              isRepeat: true,
              repeat: event.repeat,
-             rrule: originalBaseEvent.rrule
+             rrule: originalBaseEvent.rrule,
+             // Preserve rruleOptions from original base event or from options if available
+             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
            };
            console.log('[CASE ALL] Processing manipulated event:', {id: event.id, newStart: eventToPush.start, newEnd: eventToPush.end});
          } else {
@@ -670,7 +759,9 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
              seriesId: event.seriesId,
              isRepeat: true,
              repeat: originalBaseEvent.repeat,
-             rrule: originalBaseEvent.rrule
+             rrule: originalBaseEvent.rrule,
+             // Preserve rruleOptions from original base event or from options if available
+             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
            };
          }
          updatedSeriesEvents.push(eventToPush);
