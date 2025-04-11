@@ -553,7 +553,7 @@ export default function Sidebar({
 
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
-    <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg overflow-y-auto relative flex flex-col">
+    <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
         <div className="flex p-2">
           <TooltipProvider delayDuration={500}>
@@ -617,7 +617,7 @@ export default function Sidebar({
                     Upcoming
                   </button>
                 </div>
-                <nav className="flex-1 overflow-auto">
+                <nav className="flex-1 overflow-auto border-t border-light-border dark:border-dark-border pt-2 rounded-t-[13px] bg-light-bg dark:bg-dark-bg">
                   <div className="space-y-1 flex flex-col gap-2">
                     {selectedView === "all" ? (
                       sections.map((section) => (
@@ -888,7 +888,11 @@ export default function Sidebar({
                     events={events}
                     tasks={allTasksArray}
                     selectedDate={selectedDate}
-                    onDateSelect={onDateSelect}
+                    onDateSelect={(date) => {
+                      console.log('Sidebar: AgendaView date selected:', date);
+                      // Ensure we're passing a fresh date object to prevent reference issues
+                      onDateSelect(new Date(date));
+                    }}
                     onTaskComplete={handleCompleteTask}
                     onTaskDelete={handleDeleteTask}
                     onTaskEdit={handleEditTask}

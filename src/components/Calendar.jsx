@@ -170,6 +170,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   // Sync with selectedDate prop
   useEffect(() => {
+    console.log('Calendar: selectedDate prop changed to:', selectedDate);
     setCurrentDate(selectedDate);
   }, [selectedDate]);
 
@@ -181,10 +182,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
 
     return (
-      <div className="flex items-center justify-between px-2 py-2 border-b border-light-border dark:border-dark-border">
+      <div className={`flex items-center justify-between bg-light-bg-light dark:bg-dark-bg-light px-4 py-4 border-b border-light-border dark:border-dark-border`}>
         <div className="flex items-center gap-2">
           {!isSidebarVisible && (
-            <motion.div layout className="flex items-center gap-0.5">
+            <motion.div layout className="flex items-center gap-2">
             <TooltipProvider delayDuration={500}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -203,7 +204,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             </motion.div>
           )}
           <div className="flex items-center">
-            <h1 className="text-xl font-semibold">
+            <h1 className={`text-xl font-semibold ${isSidebarVisible ? 'ml-0' : 'ml-2'}`}>
               {selectedDate.toLocaleString("en-US", { month: "long" })}
             </h1>
             <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
@@ -216,7 +217,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             <Popover>
               <PopoverTrigger asChild>
                 <div
-                  className="flex items-center bg-light-bg shadow-sm border border-light-border dark:border-dark-border dark:bg-dark-bg gap-1 cursor-pointer p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-light rounded-[7px]"
+                  className="flex items-center cursor-pointer flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                 >
                   <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
                     {viewType === ViewType.DAY
@@ -226,7 +227,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                       : "Month"}
                   </span>
                   <svg
-                    className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 transition-transform"
+                    className="w-4 h-4 ml-2 text-light-text/50 dark:text-dark-text/50 transition-transform"
                     viewBox="0 0 24 24"
                     fill="none"
                   >
@@ -491,8 +492,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               <Sidebar
                 commandBarRef={commandBarRef}
                 events={events}
-                selectedDate={currentDate}
-                onDateSelect={setCurrentDate}
+                selectedDate={selectedDate}
+                onDateSelect={(date) => {
+                  // Update local state
+                  setCurrentDate(date);
+                  // Propagate to parent
+                  if (onDateSelect) {
+                    console.log('Calendar: Propagating date selection to parent:', date);
+                    onDateSelect(date);
+                  }
+                }}
                 setIsVisible={setIsSidebarVisible}
               />
             </div>

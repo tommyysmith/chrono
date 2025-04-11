@@ -269,8 +269,21 @@ export function generateRecurringTasks(baseTask, endDate, maxInstances = 52) {
   // Create RRule from task's repeat pattern
   let rrule;
 
+  // If the task has custom rruleOptions, use those
+  if (baseTask.rruleOptions) {
+    console.log('Using rruleOptions for task:', baseTask.id);
+    // Create a new rule with the task scheduledDate as dtstart
+    // Ensure we have a clean copy of the options
+    const ruleOptions = JSON.parse(JSON.stringify(baseTask.rruleOptions));
+    const startDate = baseTask.scheduledDate ? new Date(baseTask.scheduledDate) : 
+                     baseTask.createdAt ? new Date(baseTask.createdAt) : new Date();
+    rrule = new RRule({
+      ...ruleOptions,
+      dtstart: startDate
+    });
+  }
   // If the task already has an rrule string, use that
-  if (baseTask.rrule) {
+  else if (baseTask.rrule) {
     rrule = rrulestr(baseTask.rrule);
   } else {
     // Otherwise, create a new rrule from the repeat value

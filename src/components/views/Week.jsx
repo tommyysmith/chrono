@@ -73,7 +73,7 @@ export default function Week({
       {/* Time grid */}
       <div
         ref={timeGridRef}
-        className="flex-1 overflow-y-scroll scrollbar-hide relative"
+        className="flex-1 overflow-y-scroll scrollbar-hide relative "
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}

@@ -17,7 +17,7 @@ import 'react-day-picker/dist/style.css';
 const dayPickerStyles = {
   day_today: "!bg-primary hover:!text-light-text dark:hover:!text-dark-text !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
   day: "!h-7 !w-7 !p-0 !font-normal !text-light-text dark:!text-dark-text [&:not(.rdp-day_today)]:hover:!bg-black/10 [&:not(.rdp-day_today)]:dark:hover:!bg-white/5 !rounded-[5px]",
-  day_selected: "!bg-dark-bg-lighter hover:!text-light-text dark:hover:!text-dark-text dark:!bg-white/15 !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text hover:bg-primary rounded-[5px]",
+  day_selected: "!bg-dark-bg-lighter  hover:!text-light-text dark:hover:!text-dark-text dark:!bg-white/15 !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text rounded-[5px]",
 };
 
 const EventItem = memo(({ event }) => {
@@ -104,9 +104,12 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
 
   // Sync with selectedDate prop
   useEffect(() => {
-    setCurrentDate(selectedDate);
-    setMonth(selectedDate);
-  }, [selectedDate]);
+    // Only update if the dates are different to prevent loops
+    if (!isSameDay(currentDate, selectedDate)) {
+      setCurrentDate(selectedDate);
+      setMonth(selectedDate);
+    }
+  }, [selectedDate, currentDate]);
 
   const isDateInSelectedWeek = useCallback((date) => {
     if (!isWeekView) return false;
@@ -151,7 +154,9 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   const handleDateSelect = useCallback((date) => {
     if (date) {
       setCurrentDate(date);
-      onDateSelect?.(date);
+      // Create a new Date object to ensure we're not passing references
+      onDateSelect?.(new Date(date));
+      console.log('handleDateSelect called with date:', date);
     }
   }, [onDateSelect]);
 
@@ -232,15 +237,22 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   }, [filteredEvents.length, filteredTasks.length]);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex bg-light-bg h-full rounded-t-[13px] border-t border-light-border dark:border-dark-border dark:bg-dark-bg flex-col gap-4">
       <TooltipProvider delayDuration={750}>
-        <div className='bg-light-bg-light dark:bg-dark-bg-light'>
+        <div className="flex flex-col">
         <div className="flex px-3 mt-2 justify-center">
           <DayPicker
             mode="single"
             selected={currentDate}
             month={month}
-            onSelect={handleDateSelect}
+            onSelect={(date) => {
+              if (date) {
+                setCurrentDate(date);
+                // Ensure we're passing a new Date object to prevent reference issues
+                onDateSelect?.(new Date(date));
+                console.log('AgendaView date selected:', date);
+              }
+            }}
             onMonthChange={setMonth}
             className="rounded-md w-[260px] [--week-bg:rgba(0,0,0,0.05)] dark:[--week-bg:rgba(255,255,255,0.05)]"
             showOutsideDays={true}
@@ -279,7 +291,10 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                       onClick={() => {
                         const today = new Date();
                         setMonth(today);
-                        handleDateSelect(today);
+                        // Use the inline handler to be consistent
+                        setCurrentDate(today);
+                        onDateSelect?.(new Date(today));
+                        console.log('Today button clicked:', today);
                       }}
                       className="absolute top-[15px] right-[70px] p-1 rounded hover:text-light-text dark:hover:text-dark-text text-light-text/50 dark:text-dark-text/50"
                       aria-label="Return to today"
@@ -300,9 +315,9 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
           </h2>
           
           {showSelector && (
-            <div className="flex gap-1 mt-2 mb-2 bg-white border border-light-border dark:border-dark-border shadow-sm dark:bg-white/5 rounded-[9px] p-1 w-fit">
+            <div className="flex group gap-1 mt-2 mb-2 bg-white border border-light-border dark:border-dark-border shadow-sm dark:bg-white/5 rounded-[9px] p-1 w-fit">
               <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'events' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
+                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'events' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text'}`}
                 onClick={() => setViewMode('events')}
               >
                 <CalendarIcon className="w-4 h-4" />
@@ -311,7 +326,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                 </span>
               </button>
               <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'tasks' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text shadow-sm' : 'text-light-text/50 dark:text-dark-text/50'}`}
+                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'tasks' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text'}`}
                 onClick={() => setViewMode('tasks')}
               >
                 <Task className="w-4 h-4" />

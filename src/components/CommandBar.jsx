@@ -1072,7 +1072,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <div className="flex items-center gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border cursor-pointer">
                               <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                                 <PopoverTrigger asChild>
-                                <div className="flex items-center w-full gap-2">
+                                <div className="flex items-center hover:!text-light-text dark:hover:!text-dark-text w-full gap-2">
                                   <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
                                   <span className="text-light-text/50 dark:text-dark-text/50 text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
                                 </div>
@@ -1238,11 +1238,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 </div>
                               </div>
                             </div>
-                              <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors">
+                              <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors">
                                 <Pin className="w-4 h-4" />
                                 <span>Add a location</span>
                               </button>
-                              <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-colors cursor-pointer">
+                              <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
                                 <Popover open={isTaskRepeatDropdownOpen} onOpenChange={setIsTaskRepeatDropdownOpen}>
                                   <PopoverTrigger className="flex items-center justify-between w-full">
                                     <div className="flex items-center gap-2">
