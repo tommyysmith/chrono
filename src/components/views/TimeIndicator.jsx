@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { isSameWeek } from "date-fns";
 
-export default function TimeIndicator({ viewType }) {
+export default function TimeIndicator({ viewType, selectedDate }) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
@@ -31,7 +32,8 @@ export default function TimeIndicator({ viewType }) {
   const todayIndex = currentTime.getDay();
   const columnWidth = `${100 / 7}%`;
   const leftOffset = `${(todayIndex * 100) / 7}%`;
-  const isCurrentWeek = viewType === "week";
+  // Check if the current date falls within the selected week
+  const isCurrentWeek = viewType === "week" && selectedDate && isSameWeek(currentTime, selectedDate);
 
   return (
     <div

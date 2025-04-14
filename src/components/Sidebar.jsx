@@ -585,7 +585,7 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex rounded-[9px] py-4 px-2">
+                <div className="flex rounded-[9px] py-2 px-2">
                   <button
                     className={`flex w-auto px-3 py-2 text-xs rounded-[5px] ${
                       selectedView === "all"

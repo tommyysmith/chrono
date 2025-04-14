@@ -99,7 +99,7 @@ export default function Day({
       >
         <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
           {/* Time indicator */}
-          <TimeIndicator />
+          <TimeIndicator viewType="day" selectedDate={selectedDate} />
 
           {/* Time labels */}
           <div className="flex flex-col pointer-events-none">

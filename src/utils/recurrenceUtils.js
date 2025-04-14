@@ -177,21 +177,42 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
   // If the event has custom rruleOptions, use those
   if (baseEvent.rruleOptions) {
     console.log('Using rruleOptions for event:', baseEvent.id);
-    // Create a new rule with the event start as dtstart
-    // Ensure we have a clean copy of the options
+    // Ensure we have a clean copy of the options and parse dates if needed
     const ruleOptions = JSON.parse(JSON.stringify(baseEvent.rruleOptions));
-    rrule = new RRule({
-      ...ruleOptions,
-      dtstart: new Date(baseEvent.start)
-    });
-  } 
+
+    // Ensure dtstart and until are Date objects if they exist
+    if (ruleOptions.dtstart) ruleOptions.dtstart = new Date(ruleOptions.dtstart);
+    if (ruleOptions.until) ruleOptions.until = new Date(ruleOptions.until);
+
+    // ---> Explicitly set dtstart from baseEvent.start <---
+    // This ensures the RRule starts at the time specified in CommandBar
+    // when creating a new event with custom recurrence.
+    if (baseEvent.start instanceof Date && !isNaN(baseEvent.start)) {
+        ruleOptions.dtstart = new Date(baseEvent.start); // Use a clean copy
+        console.log(`[generateRecurringEvents] Explicitly setting dtstart in ruleOptions to: ${ruleOptions.dtstart.toISOString()}`);
+    } else {
+        console.warn(`[generateRecurringEvents] baseEvent.start is not a valid Date for event ${baseEvent.id}. RRule might use default start time.`);
+        // Consider falling back to a default or handling the error if baseEvent.start is invalid
+        ruleOptions.dtstart = new Date(); // Fallback to now, but log warning
+    }
+
+    // Create the RRule. The dtstart from ruleOptions should now be correct.
+    // We previously assumed ruleOptions.dtstart was sufficient, but for new custom events,
+    // baseEvent.start dictates the initial time.
+    try {
+      rrule = new RRule(ruleOptions);
+      console.log('[generateRecurringEvents] RRule created with final dtstart:', rrule.options.dtstart);
+    } catch (error) {
+        console.error("[generateRecurringEvents] Error creating RRule from options:", error, ruleOptions);
+        rrule = null; // Prevent errors downstream
+    }
+  }
   // If the event already has an rrule string, use that
   else if (baseEvent.rrule) {
     console.log('Using rrule string for event:', baseEvent.id);
     rrule = rrulestr(baseEvent.rrule);
-  } 
-  // Otherwise, create a new rrule from the predefined repeat pattern
-  else {
+  } else {
+    // Otherwise, create a new rrule from the predefined repeat pattern
     console.log('Creating rrule from repeat pattern for event:', baseEvent.id);
     rrule = eventToRRule(baseEvent);
   }
@@ -225,11 +246,13 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
   const dates = rrule.all();
   console.log(`Generated ${dates.length} occurrences for event:`, baseEvent.id);
 
-  // Skip the first date if it's the same as the base event
-  const startIndex = isSameDateTime(dates[0], baseEvent.start) ? 1 : 0;
+  // Remove startIndex logic: Always process all generated dates.
+  // The calling function (e.g., handleCreateEvent/handleUpdateEvent) should manage
+  // how the original baseEvent relates to the generated series.
+  // const startIndex = isSameDateTime(dates[0], baseEvent.start) ? 1 : 0;
 
-  // Create events for each date
-  for (let i = startIndex; i < dates.length; i++) {
+  // Create events for each date, starting from the first one (index 0)
+  for (let i = 0; i < dates.length; i++) {
     const start = dates[i];
     const end = new Date(start.getTime() + duration);
 
@@ -642,154 +665,152 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
     }
 
     case 'all': {
-      console.log('[CASE ALL] Handling ALL events update - Complete rewrite');
+      // Find the event that was being manipulated
+      const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
+      // --- DEBUG LOGGING: Log the original manipulated event found ---
+      console.log('[CASE ALL - DEBUG] Found original manipulatedEvent:',
+        manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
+      );
+      if (!manipulatedEvent) {
+        console.error('Could not find the manipulated event in the series');
+        return allEvents;
+      }
 
-       // Find the event that was being manipulated
-       const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
-       // --- DEBUG LOGGING: Log the original manipulated event found ---
-       console.log('[CASE ALL - DEBUG] Found original manipulatedEvent:',
-         manipulatedEvent ? { id: manipulatedEvent.id, start: manipulatedEvent.start, end: manipulatedEvent.end } : 'NOT FOUND'
-       );
-       if (!manipulatedEvent) {
-         console.error('Could not find the manipulated event in the series');
-         return allEvents;
-       }
+      // Use the delta calculated from the actual user interaction passed in options
+      const startDelta = options.timeChange?.startDiff || 0;
+      const endDelta = options.timeChange?.endDiff || 0;
 
-       // Use the delta calculated from the actual user interaction passed in options
-       const startDelta = options.timeChange?.startDiff || 0;
-       const endDelta = options.timeChange?.endDiff || 0;
-
-       if (!options.timeChange) {
-         console.warn("[CASE ALL] options.timeChange not provided. Deltas will be 0.");
-       }
-       console.log('[CASE ALL] Using Deltas from options.timeChange:', { startDelta, endDelta });
+      if (!options.timeChange) {
+        console.warn("[CASE ALL] options.timeChange not provided. Deltas will be 0.");
+      }
+      console.log('[CASE ALL] Using Deltas from options.timeChange:', { startDelta, endDelta });
        
-       // Log rruleOptions if present in the event or options
-       console.log('[CASE ALL] rruleOptions present:', { 
-         inUpdatedEvent: !!updatedEvent.rruleOptions,
-         inOptions: !!options.rruleOptions
-       });
+      // Log rruleOptions if present in the event or options
+      console.log('[CASE ALL] rruleOptions present:', { 
+        inUpdatedEvent: !!updatedEvent.rruleOptions,
+        inOptions: !!options.rruleOptions
+      });
 
-       // Filter out the old series events and prepare to add new ones
-       const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
+      // Filter out the old series events and prepare to add new ones
+      const eventsWithoutSeries = allEvents.filter(e => e.seriesId !== updatedEvent.seriesId);
 
-       // Process all events from the ORIGINAL series
-       const seriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId);
-       const updatedSeriesEvents = [];
-       const manipulatedId = options.manipulatedId || updatedEvent.id; // ID of the event actually dragged/resized
+      // Process all events from the ORIGINAL series
+      const seriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId);
+      const updatedSeriesEvents = [];
+      const manipulatedId = options.manipulatedId || updatedEvent.id; // ID of the event actually dragged/resized
        
-       // Find the best candidate for the base event - prioritize events with rruleOptions
-       let originalBaseEvent = seriesEvents.find(e => e.rruleOptions && e.id === manipulatedId) || 
+      // Find the best candidate for the base event - prioritize events with rruleOptions
+      let originalBaseEvent = seriesEvents.find(e => e.rruleOptions && e.id === manipulatedId) || 
                               seriesEvents.find(e => e.id === manipulatedId);
        
-       // If we can't find the manipulated event, look for any event with rruleOptions as a fallback
-       if (!originalBaseEvent || !originalBaseEvent.rruleOptions) {
-         const eventWithRRule = seriesEvents.find(e => e.rruleOptions);
-         if (eventWithRRule) {
-           console.log('[CASE ALL] Found event with rruleOptions to use as base:', eventWithRRule.id);
-           // Still use manipulatedId's event as base, but borrow rruleOptions
-           if (originalBaseEvent) {
-             originalBaseEvent.rruleOptions = eventWithRRule.rruleOptions;
-           } else {
-             originalBaseEvent = eventWithRRule;
-           }
-         }
-       }
+      // If we can't find the manipulated event, look for any event with rruleOptions as a fallback
+      if (!originalBaseEvent || !originalBaseEvent.rruleOptions) {
+        const eventWithRRule = seriesEvents.find(e => e.rruleOptions);
+        if (eventWithRRule) {
+          console.log('[CASE ALL] Found event with rruleOptions to use as base:', eventWithRRule.id);
+          // Still use manipulatedId's event as base, but borrow rruleOptions
+          if (originalBaseEvent) {
+            originalBaseEvent.rruleOptions = eventWithRRule.rruleOptions;
+          } else {
+            originalBaseEvent = eventWithRRule;
+          }
+        }
+      }
 
-       // Create a new base event with changes from the updated event
-       const baseEvent = {
-         ...originalBaseEvent,
-         title: updatedEvent.title || originalBaseEvent.title,
-         description: updatedEvent.description || originalBaseEvent.description,
-         color: updatedEvent.color || originalBaseEvent.color,
-         isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : originalBaseEvent.isAllDay,
-         // Ensure rruleOptions is preserved
-         rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-       };
+      // Create a new base event with changes from the updated event
+      const baseEvent = {
+        ...originalBaseEvent,
+        title: updatedEvent.title || originalBaseEvent.title,
+        description: updatedEvent.description || originalBaseEvent.description,
+        color: updatedEvent.color || originalBaseEvent.color,
+        isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : originalBaseEvent.isAllDay,
+        // Ensure rruleOptions is preserved
+        rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+      };
 
-       seriesEvents.forEach(event => {
-         let eventToPush;
-         if (event.id === manipulatedId) {
-           // For the manipulated event, use the exact final times from updatedEvent
-           eventToPush = {
-             ...event,
-             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
-             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
-             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
-             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-             start: new Date(updatedEvent.start.getTime()),
-             end: new Date(updatedEvent.end.getTime()),
-             seriesId: event.seriesId,
-             isRepeat: true,
-             repeat: event.repeat,
-             rrule: originalBaseEvent.rrule,
-             // Preserve rruleOptions from original base event or from options if available
-             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-           };
-           console.log('[CASE ALL] Processing manipulated event:', {id: event.id, newStart: eventToPush.start, newEnd: eventToPush.end});
-         } else {
-           // For other events, apply the manipulated event's TIME to the original event's DATE
-           const originalEventDate = new Date(event.start); // Date component from the original event
+      seriesEvents.forEach(event => {
+        let eventToPush;
+        if (event.id === manipulatedId) {
+          // For the manipulated event, use the exact final times from updatedEvent
+          eventToPush = {
+            ...event,
+            title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+            description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+            color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+            isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+            start: new Date(updatedEvent.start.getTime()),
+            end: new Date(updatedEvent.end.getTime()),
+            seriesId: event.seriesId,
+            isRepeat: true,
+            repeat: event.repeat,
+            rrule: originalBaseEvent.rrule,
+            // Preserve rruleOptions from original base event or from options if available
+            rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+          };
+          console.log('[CASE ALL] Processing manipulated event:', {id: event.id, newStart: eventToPush.start, newEnd: eventToPush.end});
+        } else {
+          // For other events, apply the manipulated event's TIME to the original event's DATE
+          const originalEventDate = new Date(event.start); // Date component from the original event
 
-           // Get the target time components from the updated (manipulated) event
-           const targetStartHours = updatedEvent.start.getHours();
-           const targetStartMinutes = updatedEvent.start.getMinutes();
-           const targetStartSeconds = updatedEvent.start.getSeconds();
-           const targetEndHours = updatedEvent.end.getHours();
-           const targetEndMinutes = updatedEvent.end.getMinutes();
-           const targetEndSeconds = updatedEvent.end.getSeconds();
+          // Get the target time components from the updated (manipulated) event
+          const targetStartHours = updatedEvent.start.getHours();
+          const targetStartMinutes = updatedEvent.start.getMinutes();
+          const targetStartSeconds = updatedEvent.start.getSeconds();
+          const targetEndHours = updatedEvent.end.getHours();
+          const targetEndMinutes = updatedEvent.end.getMinutes();
+          const targetEndSeconds = updatedEvent.end.getSeconds();
 
-           // Construct the new start date/time
-           const newEventStart = new Date(originalEventDate);
-           newEventStart.setHours(targetStartHours, targetStartMinutes, targetStartSeconds, 0);
+          // Construct the new start date/time
+          const newEventStart = new Date(originalEventDate);
+          newEventStart.setHours(targetStartHours, targetStartMinutes, targetStartSeconds, 0);
 
-           // Construct the new end date/time
-           const newEventEnd = new Date(originalEventDate);
-           newEventEnd.setHours(targetEndHours, targetEndMinutes, targetEndSeconds, 0);
+          // Construct the new end date/time
+          const newEventEnd = new Date(originalEventDate);
+          newEventEnd.setHours(targetEndHours, targetEndMinutes, targetEndSeconds, 0);
 
-           // Handle cases where the event might cross midnight
-           if (newEventEnd <= newEventStart) {
-             newEventEnd.setDate(newEventEnd.getDate() + 1);
-           }
+          // Handle cases where the event might cross midnight
+          if (newEventEnd <= newEventStart) {
+            newEventEnd.setDate(newEventEnd.getDate() + 1);
+          }
 
-           console.log(`[CASE ALL - Other Event ${event.id}] Time Construction:`, {
-             originalStart: event.start,
-             originalEnd: event.end,
-             targetStartTime: `${targetStartHours}:${targetStartMinutes}`,
-             targetEndTime: `${targetEndHours}:${targetEndMinutes}`,
-             constructedNewStart: newEventStart,
-             constructedNewEnd: newEventEnd,
-           });
+          console.log(`[CASE ALL - Other Event ${event.id}] Time Construction:`, {
+            originalStart: event.start,
+            originalEnd: event.end,
+            targetStartTime: `${targetStartHours}:${targetStartMinutes}`,
+            targetEndTime: `${targetEndHours}:${targetEndMinutes}`,
+            constructedNewStart: newEventStart,
+            constructedNewEnd: newEventEnd,
+          });
 
-           eventToPush = {
-             ...event,
-             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
-             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
-             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
-             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-             start: newEventStart, // Apply newly constructed date/time
-             end: newEventEnd,       // Apply newly constructed date/time
-             seriesId: event.seriesId,
-             isRepeat: true,
-             repeat: originalBaseEvent.repeat,
-             rrule: originalBaseEvent.rrule,
-             // Preserve rruleOptions from original base event or from options if available
-             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-           };
-         }
-         updatedSeriesEvents.push(eventToPush);
-       });
+          eventToPush = {
+            ...event,
+            title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+            description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+            color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+            isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+            start: newEventStart, // Apply newly constructed date/time
+            end: newEventEnd,       // Apply newly constructed date/time
+            seriesId: event.seriesId,
+            isRepeat: true,
+            repeat: originalBaseEvent.repeat,
+            rrule: originalBaseEvent.rrule,
+            // Preserve rruleOptions from original base event or from options if available
+            rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+          };
+        }
+        updatedSeriesEvents.push(eventToPush);
+      });
 
-       // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
-       console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):',
-         updatedSeriesEvents.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
-       );
+      // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
+      console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):',
+        updatedSeriesEvents.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
+      );
 
-       // Add all updated series events to the final result
-       return [...eventsWithoutSeries, ...updatedSeriesEvents];
-       console.log(`[CASE ALL] Added ${updatedSeriesEvents.length} updated series events to result`);
-       break;
-     }
+      // Add all updated series events to the final result
+      return [...eventsWithoutSeries, ...updatedSeriesEvents];
+      console.log(`[CASE ALL] Added ${updatedSeriesEvents.length} updated series events to result`);
+      break;
+    }
 
     default:
       return allEvents;

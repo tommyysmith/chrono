@@ -142,21 +142,21 @@ export function useEventManagement(commandBarRef) {
         // Find the existing event and the base event
         const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
         const seriesEvents = prevEvents.filter(e => e.seriesId === cleanEvent.seriesId);
-        const baseEvent = seriesEvents.reduce((earliest, event) => 
-          event.start < earliest.start ? event : earliest, 
-          seriesEvents[0]
-        );
+        const baseEvent = seriesEvents.sort((a, b) => new Date(a.start) - new Date(b.start))[0]; // Find earliest
         
-        // Check if the repeat pattern has changed
-        if (existingEvent && 
-            existingEvent.repeat !== cleanEvent.repeat && 
-            cleanEvent.repeat && 
-            cleanEvent.repeat !== 'none') {
-          
-          console.log('Recurring pattern changed for recurring event:', {
+        // Check if the repeat pattern (preset OR custom rrule) has changed
+        const presetRepeatChanged = existingEvent && existingEvent.repeat !== cleanEvent.repeat && cleanEvent.repeat && cleanEvent.repeat !== 'none';
+        const customRuleChanged = existingEvent && 
+                                  cleanEvent.repeat === 'custom' && 
+                                  JSON.stringify(existingEvent.rruleOptions) !== JSON.stringify(cleanEvent.rruleOptions);
+
+        if (presetRepeatChanged || customRuleChanged) {          
+          console.log('Recurring pattern changed (preset or custom) for event:', {
             eventId: cleanEvent.id,
-            oldRepeatRule: existingEvent.repeat,
-            newRepeatRule: cleanEvent.repeat
+            oldRepeat: existingEvent?.repeat,
+            newRepeat: cleanEvent.repeat,
+            oldRRule: JSON.stringify(existingEvent?.rruleOptions),
+            newRRule: JSON.stringify(cleanEvent.rruleOptions)
           });
           
           // Keep the same series ID for consistency

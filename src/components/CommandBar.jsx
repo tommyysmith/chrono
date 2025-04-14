@@ -340,7 +340,34 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const handleEventChange = useCallback((field, value) => {
     setEventState(prev => {
-      const newState = { ...prev, [field]: value };
+      let processedValue = value;
+      // Round time values if the field is startTime or endTime
+      if (field === 'startTime' || field === 'endTime') {
+        processedValue = roundToNearest15Min(value);
+      }
+      
+      // Ensure minimum 15-min gap if changing times
+      let newStartTime = field === 'startTime' ? processedValue : prev.startTime;
+      let newEndTime = field === 'endTime' ? processedValue : prev.endTime;
+      
+      if (field === 'startTime') {
+        newEndTime = ensureMinimumGap(newStartTime, newEndTime);
+      } else if (field === 'endTime') {
+        // If setting endTime earlier than startTime + 15 min, adjust startTime?
+        // Or just rely on ensureMinimumGap called when startTime changes?
+        // For now, let ensureMinimumGap handle it when startTime is set.
+        // We might need more robust logic if users can directly set end time before start + 15.
+      }
+      
+      // Update the state
+      const newState = { 
+          ...prev, 
+          [field]: processedValue, 
+          // Also update the potentially adjusted opposite time field
+          ...(field === 'startTime' && { endTime: newEndTime }),
+          ...(field === 'endTime' && { startTime: newStartTime }) // Keep startTime if endTime adjusted it
+      };
+
       // Compare with original state to determine if there are changes
       const hasChanges = Object.keys(newState).some(key => {
         // Skip internal properties starting with _
@@ -364,7 +391,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setHasChanges(hasChanges);
       return newState;
     });
-  }, [originalEventState]);
+  }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
   const handleSaveChanges = useCallback(() => {
     if (!hasChanges) return;
@@ -1069,12 +1096,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   />
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border cursor-pointer">
+                              <div className="flex items-center text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border cursor-pointer">
                               <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
                                 <PopoverTrigger asChild>
-                                <div className="flex items-center hover:!text-light-text dark:hover:!text-dark-text w-full gap-2">
-                                  <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                                  <span className="text-light-text/50 dark:text-dark-text/50 text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
+                                <div className="flex items-center w-full gap-2">
+                                  <CalendarIcon className="w-4 h-4" />
+                                  <span className="text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
                                 </div>
                                 </PopoverTrigger>
                                 <PopoverContent 

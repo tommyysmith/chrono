@@ -29,13 +29,13 @@ const defaultOptions = {
 };
 
 const WEEKDAYS = [
-  { label: 'Su', value: RRule.SU },
-  { label: 'Mo', value: RRule.MO },
-  { label: 'Tu', value: RRule.TU },
-  { label: 'We', value: RRule.WE },
-  { label: 'Th', value: RRule.TH },
-  { label: 'Fr', value: RRule.FR },
-  { label: 'Sa', value: RRule.SA },
+  { label: 'Su', value: RRule.SU, weekday: 6 }, // RRule.SU.weekday is 6
+  { label: 'Mo', value: RRule.MO, weekday: 0 }, // RRule.MO.weekday is 0
+  { label: 'Tu', value: RRule.TU, weekday: 1 }, // RRule.TU.weekday is 1
+  { label: 'We', value: RRule.WE, weekday: 2 }, // RRule.WE.weekday is 2
+  { label: 'Th', value: RRule.TH, weekday: 3 }, // RRule.TH.weekday is 3
+  { label: 'Fr', value: RRule.FR, weekday: 4 }, // RRule.FR.weekday is 4
+  { label: 'Sa', value: RRule.SA, weekday: 5 }, // RRule.SA.weekday is 5
 ];
 
 // Function to capitalize the first letter of a string
@@ -96,7 +96,10 @@ const generatePreviewParts = (options, startDate) => {
   }
   // Add Yearly logic if needed later
 
-   parts[0].text = capitalizeFirstLetter(parts[0].text); // Capitalize the first part
+   // Ensure parts array is not empty before accessing index 0
+   if (parts.length > 0) {
+     parts[0].text = capitalizeFirstLetter(parts[0].text); // Capitalize the first part
+   }
 
   // --- End Condition ---
   if (options.until) {
@@ -122,8 +125,12 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
      if (options.bysetpos) return 'dayOfWeek';
      return 'dayOfMonth'; // Default if neither is set
   });
+  // Store numeric weekdays (0=MO, 6=SU) for easier comparison in ToggleGroup
   const [selectedWeekdays, setSelectedWeekdays] = useState(() => {
-    if (options.byweekday) return options.byweekday;
+    if (options.freq === RRule.WEEKLY && Array.isArray(options.byweekday)) {
+      // Map Weekday objects to their numeric values
+      return options.byweekday.map(wd => wd.weekday).sort((a, b) => a - b);
+    }
     return [];
   });
 
@@ -141,7 +148,10 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
       return 'dayOfMonth'; // Default if neither is set
     });
     setSelectedWeekdays(() => {
-      if (value?.byweekday) return value.byweekday;
+      if (value?.freq === RRule.WEEKLY && Array.isArray(value.byweekday)) {
+        // Map Weekday objects to their numeric values
+        return value.byweekday.map(wd => wd.weekday).sort((a, b) => a - b);
+      }
       return [];
     });
   }, [value]);
@@ -221,11 +231,11 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
         if (prev.length <= 1) return prev;
         newSelection = prev.filter(day => day !== weekdayValue);
       } else {
-        newSelection = [...prev, weekdayValue].sort((a, b) => a.weekday - b.weekday); // Keep sorted
+        newSelection = [...prev, weekdayValue].sort((a, b) => a - b); // Keep sorted
       }
 
       // Update the main options state directly
-      handleOptionChange('byweekday', newSelection);
+      handleOptionChange('byweekday', newSelection.length > 0 ? newSelection.map(num => new Weekday(num)) : undefined);
       return newSelection;
     });
   };
@@ -282,15 +292,26 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
           <div className="flex justify-start gap-2">
             {WEEKDAYS.map(day => (
               <Button
-                key={day.value.weekday} // Use weekday property as key
+                key={day.label}
                 variant="outline"
                 size="icon"
                 className={cn(
                   "h-8 w-8 rounded-[5px] text-xs bg-light-bg dark:bg-white/5 shadow-sm text-light-text dark:text-dark-text border border-light-border dark:border-dark-border", // Make them circular and smaller
-                  selectedWeekdays.includes(day.value) && "bg-primary dark:bg-primary text-dark-text border-none dark:text-dark-text hover:dark:bg-primary/90 hover:bg-primary/90"
+                  selectedWeekdays.includes(day.weekday) && "bg-primary dark:bg-primary text-dark-text border-none dark:text-dark-text hover:dark:bg-primary/90 hover:bg-primary/90"
                 )}
-                onClick={() => handleWeekdayToggle(day.value)}
-                aria-pressed={selectedWeekdays.includes(day.value)}
+                onClick={() => {
+                  // Toggle the weekday in the selectedWeekdays array
+                  const newSelectedWeekdays = selectedWeekdays.includes(day.weekday)
+                    ? selectedWeekdays.filter(wd => wd !== day.weekday)
+                    : [...selectedWeekdays, day.weekday].sort((a, b) => a - b);
+                  
+                  setSelectedWeekdays(newSelectedWeekdays);
+                  
+                  // Convert numbers back to RRule.Weekday objects for the options state
+                  const rruleWeekdays = newSelectedWeekdays.map(num => new Weekday(num));
+                  handleOptionChange('byweekday', rruleWeekdays.length > 0 ? rruleWeekdays : undefined);
+                }}
+                aria-pressed={selectedWeekdays.includes(day.weekday)}
               >
                 {day.label}
               </Button>
@@ -358,7 +379,7 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
                     {options.until ? format(options.until instanceof Date ? options.until : parseISO(options.until), "PPP") : <span>Pick a date</span>}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-light-bg dark:bg-dark-bg shadow-lg rounded-[9px] border border-light-border dark:border-dark-border" align="start">
+                <PopoverContent className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] border border-light-border dark:border-dark-border" align="start">
                   <Calendar
                     mode="single"
                     selected={options.until instanceof Date ? options.until : (options.until ? parseISO(options.until) : undefined)}
