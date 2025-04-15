@@ -542,6 +542,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 renderEvents={renderEvents}
                 renderAllDayEvents={renderAllDayEvents}
                 timeGridRef={timeGridRef}
+                commandBarRef={commandBarRef}
               />
             )}
             {viewType === ViewType.DAY && (
@@ -561,6 +562,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 getColumnFromMousePosition={getColumnFromMousePosition}
                 renderEvents={renderEvents}
                 timeGridRef={timeGridRef}
+                commandBarRef={commandBarRef}
               />
             )}
             {viewType === ViewType.MONTH && (

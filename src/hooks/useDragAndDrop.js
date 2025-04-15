@@ -383,8 +383,8 @@ export function useDragAndDrop({
                 const start = isReverse ? adjustedCurrentTime : initialTime;
                 const end = isReverse ? initialTime : adjustedCurrentTime;
 
-                // Ensure minimum 30 minute duration
-                const minDuration = 30 * 60 * 1000; // 30 minutes in milliseconds
+                // Ensure minimum 15 minute duration
+                const minDuration = 15 * 60 * 1000; // 15 minutes in milliseconds
                 const duration = end.getTime() - start.getTime();
 
                 if (duration < minDuration) {
@@ -419,13 +419,20 @@ export function useDragAndDrop({
           const finalEndTime =
             initialTime < currentEndTime ? currentEndTime : initialTime;
 
-          // Ensure minimum duration of 30 minutes
-          const minDuration = 30 * 60 * 1000;
+          // Ensure minimum duration of 15 minutes
+          const minDuration = 15 * 60 * 1000; // 15 minutes in milliseconds
           const duration = finalEndTime.getTime() - finalStartTime.getTime();
-          const adjustedEndTime =
+          let adjustedEndTime =
             duration < minDuration
               ? new Date(finalStartTime.getTime() + minDuration)
               : finalEndTime;
+
+          // Cap end time at 23:59:59 of the start day
+          const endOfDay = new Date(finalStartTime);
+          endOfDay.setHours(23, 59, 59, 999);
+          if (adjustedEndTime > endOfDay) {
+            adjustedEndTime = endOfDay;
+          }
 
           // Update the event's final position
           requestAnimationFrame(() => {

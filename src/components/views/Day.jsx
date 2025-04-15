@@ -20,6 +20,7 @@ export default function Day({
   getColumnFromMousePosition,
   renderEvents,
   timeGridRef,
+  commandBarRef,
 }) {
   return (
     <div className="flex-1 flex flex-col h-full">
@@ -150,9 +151,6 @@ export default function Day({
             {/* Interaction layer */}
             <div
               onDoubleClick={(e) => {
-                // Don't create events if context menu is open
-                if (contextMenu.show) return;
-
                 const container = e.currentTarget.closest(".calendar-grid");
                 if (!container) return;
 

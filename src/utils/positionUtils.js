@@ -11,33 +11,30 @@ export const getTimeFromMousePosition = (
   containerRect,
   currentDate
 ) => {
-  const hourHeight = 64;
+  const hourHeight = 80; 
   const scrollTop = window.scrollY || document.documentElement.scrollTop;
   const relativeY = mouseY + scrollTop - containerRect.top;
   const totalHours = relativeY / hourHeight;
 
-  // Calculate minutes, allowing selection past 23:00
-  const totalMinutes = Math.min(totalHours * 60, 24 * 60);
-  const roundedMinutes = Math.round(totalMinutes / 15) * 15;
+  // Ensure calculations are based on the provided currentDate's day
+  const date = new Date(currentDate);
+  
+  // Calculate total minutes based on position
+  const totalMinutes = totalHours * 60;
+  
+  // Snap to the nearest 15 minutes
+  let snappedMinutesTotal = Math.round(totalMinutes / 15) * 15;
 
-  const hours = Math.floor(roundedMinutes / 60);
-  const minutes = roundedMinutes % 60;
+  // Clamp total snapped minutes to the range 0 - 1439 (00:00 to 23:59)
+  snappedMinutesTotal = Math.max(0, Math.min(23 * 60 + 59, snappedMinutesTotal));
 
-  // Create date at the exact time
-  const time = new Date(currentDate);
-  if (hours === 24) {
-    // Handle midnight case
-    const nextDay = new Date(currentDate);
-    nextDay.setDate(nextDay.getDate() + 1);
-    nextDay.setHours(0, 0, 0, 0);
-    return nextDay;
-  } else {
-    time.setHours(hours);
-    time.setMinutes(minutes);
-    time.setSeconds(0);
-    time.setMilliseconds(0);
-    return time;
-  }
+  // Calculate final hours and minutes from the clamped snapped value
+  const hours = Math.floor(snappedMinutesTotal / 60);
+  const minutes = snappedMinutesTotal % 60;
+
+  date.setHours(hours, minutes, 0, 0);
+
+  return date;
 };
 
 /**

@@ -20,7 +20,7 @@ export default function TimeIndicator({ viewType, selectedDate }) {
     const minutes = currentTime.getHours() * 60 + currentTime.getMinutes();
     const hour = Math.floor(minutes / 60);
     const minuteOffset = (minutes % 60) / 60;
-    const hourHeight = 64; // h-16 = 4rem = 64px
+    const hourHeight = 80; // Updated from 64
 
     // Position is based on the hour block plus the minute offset within that hour
     return hour * hourHeight + minuteOffset * hourHeight - 10; // -10px to align with hour markers

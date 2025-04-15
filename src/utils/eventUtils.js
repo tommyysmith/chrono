@@ -90,14 +90,16 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
   } else {
     if (event.start) {
       const minutes = event.start.getHours() * 60 + event.start.getMinutes();
-      style.top = `${minutes * (64 / 60)}px`;
+      style.top = `${minutes * (80 / 60)}px`;
     }
 
     if (event.end) {
       const startMinutes =
         event.start.getHours() * 60 + event.start.getMinutes();
       const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
-      style.height = `${(endMinutes - startMinutes) * (64 / 60) - 2}px`;
+      const calculatedHeight = (endMinutes - startMinutes) * (80 / 60);
+      const minHeight = 15; // Minimum height in pixels
+      style.height = `${Math.max(calculatedHeight - 2, minHeight - 2)}px`;
     }
   }
 

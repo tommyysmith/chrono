@@ -75,14 +75,14 @@ export default function Week({
         ref={timeGridRef}
         className="flex-1 overflow-y-scroll scrollbar-hide relative "
       >
-        <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
+        <div className="grid grid-cols-[60px_1fr] h-[2000px] relative w-full calendar-grid">
           {/* Time indicator */}
           <TimeIndicator viewType="week" selectedDate={selectedDate} />
 
           {/* Time labels */}
           <div className="flex flex-col pointer-events-none">
             {HOURS.map((hour) => (
-              <div key={hour} className="h-16 pr-2 relative">
+              <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'} pr-2 relative`}>
                 <span className="absolute right-2 top-[-10px] text-xs text-gray-500">
                   {hour.toString().padStart(2, "0")}:00
                 </span>
@@ -95,7 +95,7 @@ export default function Week({
             {/* Background grid lines */}
             <div className="absolute inset-0">
               {HOURS.map((hour) => (
-                <div key={hour} className="h-16">
+                <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'}`}>
                   <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
                 </div>
               ))}
@@ -122,8 +122,8 @@ export default function Week({
                   style={{
                     left: `${(pendingEventCell.column / 7) * 100}%`,
                     width: `${100 / 7}%`,
-                    top: `${pendingEventCell.startTime.getHours() * 64}px`,
-                    height: "64px",
+                    top: `${pendingEventCell.startTime.getHours() * 80 + pendingEventCell.startTime.getMinutes() * (80/60)}px`, // Use 80px/hour
+                    height: "80px", // Default height for pending cell (can be adjusted)
                     backgroundColor: "rgba(var(--primary-rgb), 0.1)",
                     border: "2px dashed rgba(var(--primary-rgb), 0.3)",
                   }}
@@ -134,9 +134,6 @@ export default function Week({
             {/* Interaction layer */}
             <div
               onDoubleClick={(e) => {
-                // Don't create events if context menu is open
-                if (contextMenu.show) return;
-
                 const container = e.currentTarget.closest(".calendar-grid");
                 if (!container) return;
 
