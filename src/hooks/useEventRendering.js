@@ -266,66 +266,190 @@ const renderEvents = useCallback(() => {
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
 
+      // Process multi-day events to determine their span across the week
+      const processedEvents = [];
+      const multiDayEvents = [];
+      
+      // First, identify multi-day events that span across days
+      events.forEach(event => {
+        // Check both allDay and isAllDay properties to ensure compatibility
+        const isAllDayEvent = event.allDay || event.isAllDay;
+        const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
+        
+        if (isAllDayEvent || isMultiDayEvent) {
+          const eventStart = new Date(event.start);
+          const eventEnd = new Date(event.end);
+          
+          // Check if the event overlaps with our week view
+          if (eventEnd >= weekStart && eventStart < weekEnd) {
+            // Calculate the day index where this event starts and ends in our week view
+            const startDayIndex = Math.max(0, Math.floor((eventStart - weekStart) / (24 * 60 * 60 * 1000)));
+            const endDayIndex = Math.min(6, Math.floor((eventEnd - weekStart) / (24 * 60 * 60 * 1000)));
+            
+            multiDayEvents.push({
+              ...event,
+              startDayIndex,
+              endDayIndex,
+              span: endDayIndex - startDayIndex + 1
+            });
+          }
+        }
+      });
+      
+      // Group multi-day events by row to avoid overlaps
+      const eventRows = [];
+      
+      // Sort multi-day events by duration (longest first) to optimize layout
+      multiDayEvents.sort((a, b) => b.span - a.span);
+      
+      // Assign each event to a row where it fits
+      multiDayEvents.forEach(event => {
+        let rowIndex = 0;
+        let placed = false;
+        
+        while (!placed) {
+          // Create new row if needed
+          if (!eventRows[rowIndex]) {
+            eventRows[rowIndex] = [];
+          }
+          
+          // Check if event can be placed in this row
+          const canPlaceInRow = !eventRows[rowIndex].some(existingEvent => {
+            return (event.startDayIndex <= existingEvent.endDayIndex && 
+                    event.endDayIndex >= existingEvent.startDayIndex);
+          });
+          
+          if (canPlaceInRow) {
+            eventRows[rowIndex].push(event);
+            placed = true;
+          } else {
+            rowIndex++;
+          }
+        }
+      });
+      
+      // Calculate the total minimum height needed for the all-day section
+      const numRows = eventRows.length > 0 ? eventRows.length : 1; // Ensure at least 1 row
+
       return (
-        <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
+        <div className="grid grid-cols-[60px_1fr] border-t border-b border-light-border dark:border-dark-border">
           <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
             All-day
           </div>
-          <div className="relative grid grid-cols-7">
+          {/* Use explicit grid-template-rows based on calculated rows */}
+          <div 
+            className="relative grid grid-cols-7" 
+            style={{ gridTemplateRows: `repeat(${numRows}, minmax(24px, auto))` }}
+          >
+            {/* Render the grid background cells - ensure it has a base height */}
+            {Array.from({ length: 7 * numRows }).map((_, index) => (
+              <div
+                key={`bg-cell-${index}`}
+                className={`border-l border-light-border dark:border-dark-border ${index < 7 ? '' : 'border-t'}`}
+                style={{ gridColumn: (index % 7) + 1, gridRow: Math.floor(index / 7) + 1 }}
+              />
+            ))}
+
+            {/* First render the single-day all-day events within their respective columns (assuming they fit in row 1 for now) */}
             {Array.from({ length: 7 }).map((_, dayIndex) => {
               const currentDate = addDays(weekStart, dayIndex);
               const dayEvents = events.filter((event) => {
-                // Check both allDay and isAllDay properties to ensure compatibility
                 const isAllDayEvent = event.allDay || event.isAllDay;
-                return isAllDayEvent && isSameDay(event.start, currentDate);
+                const eventStart = new Date(event.start);
+                const eventEnd = new Date(event.end);
+                // Check if it's a single day event (or spans less than a day but marked allDay) and starts on the current dayIndex
+                const isSingleDay = isSameDay(eventStart, eventEnd) || (eventEnd.getTime() - eventStart.getTime() < 24 * 60 * 60 * 1000);
+                return isAllDayEvent && isSingleDay && isSameDay(eventStart, currentDate) && !multiDayEvents.some(e => e.id === event.id);
               });
 
               return (
                 <div
-                  key={dayIndex}
-                  className="relative border-l border-light-border dark:border-dark-border min-h-[32px]"
+                  key={`day-col-${dayIndex}`}
+                  className="relative p-1 flex flex-col gap-1 overflow-hidden z-10" // Added z-10
+                  style={{ gridColumn: dayIndex + 1, gridRow: 1 }} // Place single day events in the first row of their column
                 >
-                  <div className="flex flex-col gap-1 p-1">
-                    {dayEvents.map((event) => {
-                      const now = new Date();
-                      const isPastEvent = new Date(event.end) < now;
+                  {dayEvents.map((event) => {
+                    const now = new Date();
+                    const isPastEvent = new Date(event.end) < now;
 
-                      return (
+                    return (
+                      <div
+                        key={event.id}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleEventClick(event);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onContextMenu={(e) =>
+                          handleEventContextMenu(e, event.id)
+                        }
+                        className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                        style={{
+                          backgroundColor: event.color
+                            ? `${event.color}20`
+                            : "#80808020",
+                          opacity: isPastEvent ? 0.5 : 1,
+                        }}
+                      >
                         <div
-                          key={event.id}
-                          onDoubleClick={(e) => {
-                            e.stopPropagation();
-                            handleEventClick(event);
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                          onContextMenu={(e) =>
-                            handleEventContextMenu(e, event.id)
-                          }
-                          className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
-                          style={{
-                            backgroundColor: event.color
-                              ? `${event.color}20`
-                              : "#80808020",
-                            opacity: isPastEvent ? 0.5 : 1,
-                          }}
-                        >
-                          <div
-                            className="w-1 self-stretch"
-                            style={{ backgroundColor: event.color || "#808080" }}
-                          />
-                          <div className="px-2 py-1">
-                            <div className="font-medium text-xs">
-                              {event.title}
-                            </div>
+                          className="w-1 self-stretch"
+                          style={{ backgroundColor: event.color || "#808080" }}
+                        />
+                        <div className="px-2 py-1 truncate">
+                          <div className="font-medium text-xs truncate">
+                            {event.title}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
+            })}
+
+            {/* Then render the multi-day events spanning across columns */}
+            {eventRows.map((row, rowIndex) => {
+              return row.map((event) => {
+                const now = new Date();
+                const isPastEvent = new Date(event.end) < now;
+                // Use grid column/row properties instead of absolute positioning
+                const eventStyle = {
+                  gridColumnStart: event.startDayIndex + 1,
+                  gridColumnEnd: event.endDayIndex + 2, // Span includes the end day
+                  gridRowStart: rowIndex + 1,
+                  backgroundColor: event.color ? `${event.color}20` : '#80808020',
+                  opacity: isPastEvent ? 0.5 : 1,
+                };
+
+                return (
+                  <div
+                    key={event.id}
+                    className="relative flex items-center text-xs m-px cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Added z-10 and margin
+                    style={eventStyle}
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      handleEventClick(event);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent triggering cell click
+                    }}
+                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                  >
+                    <div
+                      className="w-1 self-stretch"
+                      style={{ backgroundColor: event.color || "#808080" }}
+                    />
+                    <div className="px-2 py-1 truncate">
+                      <div className="font-medium text-xs truncate">
+                        {event.title}
+                      </div>
+                    </div>
+                    {/* Add resize handles if needed in the future */}
+                  </div>
+                );
+              });
             })}
           </div>
         </div>
@@ -341,8 +465,22 @@ const renderEvents = useCallback(() => {
           <div className="flex flex-col gap-1 p-1">
             {events
               .filter(
-                (event) =>
-                  event.isAllDay && isSameDay(event.start, selectedDate)
+                (event) => {
+                  // Check both allDay and isAllDay properties to ensure compatibility
+                  const isAllDayEvent = event.allDay || event.isAllDay;
+                  const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
+                  
+                  // Include both all-day events and multi-day events that overlap with the selected date
+                  const eventStart = new Date(event.start);
+                  const eventEnd = new Date(event.end);
+                  const selectedDateObj = new Date(selectedDate);
+                  const nextDay = new Date(selectedDate);
+                  nextDay.setDate(nextDay.getDate() + 1);
+                  
+                  return (isAllDayEvent || isMultiDayEvent) && 
+                         eventEnd >= selectedDateObj && 
+                         eventStart < nextDay;
+                }
               )
               .map((event) => {
                 const now = new Date();
@@ -373,6 +511,11 @@ const renderEvents = useCallback(() => {
                     />
                     <div className="px-3 py-1">
                       <div className="font-medium text-xs">{event.title}</div>
+                      {event.isMultiDay && (
+                        <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                          {format(new Date(event.start), "MMM d")} - {format(new Date(event.end), "MMM d")}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

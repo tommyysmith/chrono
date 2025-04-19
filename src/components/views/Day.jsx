@@ -157,7 +157,9 @@ export default function Day({
                 const containerRect = container.getBoundingClientRect();
                 const clickedTime = getTimeFromMousePosition(
                   e.clientY,
-                  containerRect
+                  containerRect,
+                  selectedDate,
+                  80
                 );
                 const column = 0;
 

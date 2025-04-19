@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate } from 'date-fns';
+import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
@@ -99,11 +99,26 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   };
 
   const formatDateToNatural = (dateStr) => {
-    const date = new Date(dateStr);
-    if (isToday(date)) return 'Today';
-    if (isTomorrow(date)) return 'Tomorrow';
-    if (isYesterday(date)) return 'Yesterday';
-    return format(date, 'EEEE, MMMM d');
+    console.log('formatDateToNatural input:', dateStr);
+    if (!dateStr) {
+      console.error('Invalid date string provided to formatDateToNatural');
+      return 'Invalid date';
+    }
+    try {
+      const date = new Date(dateStr);
+      console.log('Parsed date:', date);
+      if (isNaN(date.getTime())) {
+        console.error('Invalid date object created from:', dateStr);
+        return 'Invalid date';
+      }
+      if (isToday(date)) return 'Today';
+      if (isTomorrow(date)) return 'Tomorrow';
+      if (isYesterday(date)) return 'Yesterday';
+      return format(date, 'EEEE, MMMM d');
+    } catch (error) {
+      console.error('Error in formatDateToNatural:', error);
+      return 'Invalid date';
+    }
   };
 
   const [isAddingEvent, setIsAddingEvent] = useState(false);
@@ -155,9 +170,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     title: '',
     description: '',
     date: format(new Date(), 'yyyy-MM-dd'),
+    endDate: format(new Date(), 'yyyy-MM-dd'), // Add end date for multi-day events
     startTime: '09:00',
     endTime: '10:00',
     isAllDay: false,
+    isMultiDay: false, // Add multi-day flag
     color: '#808080',
     repeat: 'none',
     seriesId: null,
@@ -259,9 +276,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       title: '',
       description: '',
       date: format(new Date(), 'yyyy-MM-dd'),
+      endDate: format(new Date(), 'yyyy-MM-dd'), // Reset end date
       startTime: '09:00',
       endTime: '10:00',
       isAllDay: false,
+      isMultiDay: false, // Reset multi-day flag
       color: '#808080',
       repeat: 'none',
       seriesId: null,
@@ -301,9 +320,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       title: eventCopy.title || '',
       description: eventCopy.description || '',
       date: format(eventCopy.start, 'yyyy-MM-dd'),
+      endDate: format(eventCopy.end, 'yyyy-MM-dd'), // Load end date
       startTime: format(eventCopy.start, 'HH:mm'),
       endTime: format(eventCopy.end, 'HH:mm'),
       isAllDay: isAllDayEvent,
+      isMultiDay: !isSameDay(eventCopy.start, eventCopy.end), // Determine if it's a multi-day event
       color: eventCopy.color || '#808080',
       repeat: eventCopy.repeat || 'none',
       seriesId: eventCopy.seriesId || null,
@@ -339,6 +360,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, []);
 
   const handleEventChange = useCallback((field, value) => {
+    console.log(`handleEventChange: ${field} = ${value}`);
     setEventState(prev => {
       let processedValue = value;
       // Round time values if the field is startTime or endTime
@@ -359,6 +381,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         // We might need more robust logic if users can directly set end time before start + 15.
       }
       
+      // If toggling isMultiDay on, ensure endDate is set
+      if (field === 'isMultiDay' && value === true && (!prev.endDate || prev.endDate === 'Invalid Date')) {
+        console.log('Setting endDate in handleEventChange to match date:', prev.date);
+        processedValue = true;
+        // Make sure endDate is at least the same as the start date
+        prev = { ...prev, endDate: prev.date };
+      }
+      
       // Update the state
       const newState = { 
           ...prev, 
@@ -367,6 +397,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           ...(field === 'startTime' && { endTime: newEndTime }),
           ...(field === 'endTime' && { startTime: newStartTime }) // Keep startTime if endTime adjusted it
       };
+
+      console.log('New event state:', newState);
 
       // Compare with original state to determine if there are changes
       const hasChanges = Object.keys(newState).some(key => {
@@ -400,12 +432,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       id: originalEventState?.id,
       title: eventState.title.trim(),
       description: eventState.description,
-      start: parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
-      end: parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()),
-      allDay: eventState.isAllDay,
-      isAllDay: eventState.isAllDay, // Ensure both properties are set consistently
+      start: eventState.isAllDay || eventState.isMultiDay ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+      end: eventState.isMultiDay 
+        ? (eventState.isAllDay ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.endDate} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
+        : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date())),
+      allDay: eventState.isAllDay || eventState.isMultiDay,
+      isAllDay: eventState.isAllDay || eventState.isMultiDay,
+      isMultiDay: eventState.isMultiDay,
       repeat: eventState.repeat,
-      rruleOptions: eventState.rruleOptions, // Include rruleOptions
+      rruleOptions: eventState.rruleOptions,
       seriesId: eventState.seriesId,
       color: eventState.color,
       // Ensure we keep the original repeat properties if this is a series update
@@ -418,8 +453,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       _originalSeriesId: originalEventState?._originalSeriesId || originalEventState?.seriesId,
       _originalEvent: originalEventState?._originalEvent || originalEventState,
       _exactPosition: {
-        start: parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
-        end: parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date())
+        start: eventState.isAllDay || eventState.isMultiDay ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+        end: eventState.isMultiDay 
+          ? (eventState.isAllDay ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.endDate} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
+          : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
       },
       // Preserve repeat properties for series updates
       _preserveRepeat: originalEventState?._preserveRepeat || false,
@@ -471,9 +508,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         title: 'New Event',
         description: '',
         date: format(startTime, 'yyyy-MM-dd'),
+        endDate: format(startTime, 'yyyy-MM-dd'), // Initialize end date
         startTime: format(startTime, 'HH:mm'),
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
+        isMultiDay: false, // Initialize multi-day flag
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
@@ -505,9 +544,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         title: 'New Event',
         description: '',
         date: format(roundedTime, 'yyyy-MM-dd'),
+        endDate: format(roundedTime, 'yyyy-MM-dd'), // Initialize end date
         startTime: roundedTimeStr,
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
+        isMultiDay: false, // Initialize multi-day flag
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
@@ -618,9 +659,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       title: 'New Event',
       description: '',
       date: format(now, 'yyyy-MM-dd'),
+      endDate: format(now, 'yyyy-MM-dd'), // Initialize end date to same as start date
       startTime: roundedTimeStr,
       endTime: format(endTime, 'HH:mm'),
       isAllDay: false,
+      isMultiDay: false, // Initialize multi-day flag
       color: '#3B82F6',
       repeat: 'none',
       seriesId: null,
@@ -1147,6 +1190,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   <div className="absolute w-0 h-0 overflow-hidden" />
                                 </PopoverTrigger>
                                 <PopoverContent 
+                                
                                   className="w-auto ml-4 mt-3 p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border shadow-lg"
                                   align="start"
                                 >
@@ -1557,40 +1601,109 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 checked={eventState.isAllDay}
                                 onChange={(e) => handleEventChange('isAllDay', e.target.checked)}
                               />
-                              <div className="w-9 h-5 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                              <div className="w-7 h-4 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:shadow-sm after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
                             </label>
-                            <span className="text-sm text-light-text/50 dark:text-dark-text/50">All day</span>
+                            <span className="text-xs text-light-text/50 dark:text-dark-text/50">All day</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Date Section */}
                       <div className="flex items-top gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <div className="w-5 h-5 flex items-center justify-center cursor-pointer">
-                              <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                            </div>
-                          </PopoverTrigger>
-                          <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
-                            <Calendar
+                        <div className="w-5 h-5 flex items-center justify-center">
+                          <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                        </div>
+                        <div className="flex flex-col gap-1 w-full">
+                          {/* Date inputs row */}
+                          <div className="flex items-center h-[24px] gap-2">
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <div className="flex items-center cursor-pointer">
+                                  <input
+                                    type="date"
+                                    value={eventState.date}
+                                    onChange={(e) => handleEventChange('date', e.target.value)}
+                                    className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-auto cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                  />
+                                </div>
+                              </PopoverTrigger>
+                              <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
+                                <Calendar
                                   mode="single"
                                   selected={new Date(eventState.date)}
                                   onSelect={(date) => date && handleEventChange('date', format(date, 'yyyy-MM-dd'))}
                                   initialFocus
                                 />
-                          </PopoverContent>
-                        </Popover>
-                        <div className="flex flex-col gap-1">
-                          <input
-                            type="date"
-                            value={eventState.date}
-                            onChange={(e) => handleEventChange('date', e.target.value)}
-                            className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-auto cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
-                          />
-                          <span className="text-sm text-light-text/50 dark:text-dark-text/50">
-                            {formatDateToNatural(eventState.date)}
-                          </span>
+                              </PopoverContent>
+                            </Popover>
+                            
+                            {/* Only show arrow and end date when multi-day is enabled */}
+                            {eventState.isMultiDay && (
+                              <>
+                                <span className="text-light-text/50 dark:text-dark-text/50">→</span>
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <div className="flex items-center cursor-pointer">
+                                      <input
+                                        type="date"
+                                        value={eventState.endDate || eventState.date}
+                                        onChange={(e) => handleEventChange('endDate', e.target.value)}
+                                        className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-auto cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                      />
+                                    </div>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
+                                    <Calendar
+                                      mode="single"
+                                      selected={new Date(eventState.endDate || eventState.date)}
+                                      onSelect={(date) => date && handleEventChange('endDate', format(date, 'yyyy-MM-dd'))}
+                                      initialFocus
+                                    />
+                                  </PopoverContent>
+                                </Popover>
+                              </>
+                            )}
+                          </div>
+                          
+                          {/* Date labels row */}
+                          <div className="flex items-center h-[24px] gap-2">
+                            <span className="text-sm text-light-text/50 dark:text-dark-text/50">
+                              {formatDateToNatural(eventState.date)}
+                            </span>
+                            
+                            {/* Only show end date label when multi-day is enabled */}
+                            {eventState.isMultiDay && (
+                              <>
+                                <span className="text-light-text/50 dark:text-dark-text/50 mx-1">-</span>
+                                <span className="text-sm text-light-text/50 dark:text-dark-text/50">
+                                  {formatDateToNatural(eventState.endDate || eventState.date)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                          
+                          {/* Multi-day toggle */}
+                          <div className="flex items-center h-[24px] gap-2">
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={eventState.isMultiDay}
+                                onChange={(e) => {
+                                  console.log('Multi-day toggle changed:', e.target.checked);
+                                  console.log('Current eventState:', eventState);
+                                  // Ensure endDate is valid when enabling multi-day
+                                  if (e.target.checked && (!eventState.endDate || eventState.endDate === 'Invalid Date')) {
+                                    console.log('Setting endDate to match start date');
+                                    handleEventChange('endDate', eventState.date);
+                                  }
+                                  handleEventChange('isMultiDay', e.target.checked);
+                                }}
+                              />
+                              <div className="w-7 h-4 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:shadow-sm after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+                            </label>
+                            <span className="text-xs text-light-text/50 dark:text-dark-text/50">Multi-day</span>
+                          </div>
                         </div>
                       </div>
                       {/* Repeat Section */}

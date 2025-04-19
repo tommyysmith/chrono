@@ -19,6 +19,7 @@ export default function Week({
   renderEvents,
   renderAllDayEvents,
   timeGridRef,
+  commandBarRef,
 }) {
   const weekStart = new Date(selectedDate);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -140,7 +141,9 @@ export default function Week({
                 const containerRect = container.getBoundingClientRect();
                 const clickedTime = getTimeFromMousePosition(
                   e.clientY,
-                  containerRect
+                  containerRect,
+                  selectedDate,
+                  80
                 );
                 const column = getColumnFromMousePosition(
                   e.clientX,

@@ -69,6 +69,8 @@ export function useDragAndDrop({
       // Track the final dragged position
       let finalDraggedEvent = null;
 
+      console.log('[DragDebug] handleDragStart event:', JSON.parse(JSON.stringify(event))); // Log initial event
+
       const handleMove = (moveEvent) => {
         moveEvent.preventDefault();
         if (!container) return;
@@ -85,6 +87,7 @@ export function useDragAndDrop({
             start: new Date(event.start.getTime()),
             end: new Date(event.end.getTime()),
           };
+          console.log('[DragDebug] handleDragStart dragStartOriginalEvent (set on first move):', JSON.parse(JSON.stringify(dragStartOriginalEvent)));
         }
 
         if (!hasMoved) return;
@@ -92,7 +95,8 @@ export function useDragAndDrop({
         const currentTime = getTimeFromMousePosition(
           moveEvent.clientY,
           containerRect,
-          currentDate
+          currentDate,
+          80
         );
 
         // Adjust current time based on column in week view
@@ -110,12 +114,14 @@ export function useDragAndDrop({
             getTimeFromMousePosition(
               moveEvent.clientY,
               containerRect,
-              currentDate
+              currentDate,
+              80
             ).getHours(),
             getTimeFromMousePosition(
               moveEvent.clientY,
               containerRect,
-              currentDate
+              currentDate,
+              80
             ).getMinutes(),
             0,
             0
@@ -123,6 +129,7 @@ export function useDragAndDrop({
         } else {
           adjustedCurrentTime = currentTime;
         }
+        console.log('[DragDebug] handleMove adjustedCurrentTime:', adjustedCurrentTime);
 
         // Update the event position
         setEvents((prev) =>
@@ -130,17 +137,33 @@ export function useDragAndDrop({
             if (e.id === event.id) {
               const duration =
                 originalEvent.end.getTime() - originalEvent.start.getTime();
-              const newStart = adjustedCurrentTime;
-              const newEnd = new Date(newStart.getTime() + duration);
 
-              // Store the dragged event details for later use
+              console.log(`[DragDebug] handleMove Before Constraint: duration=${duration}, adjustedCurrentTime=${adjustedCurrentTime}`);
+
+              // --- Revised Constraint Logic ---
+              let finalStartTime = new Date(adjustedCurrentTime.getTime());
+              let finalEndTime = new Date(finalStartTime.getTime() + duration);
+
+              const endOfDay = new Date(finalStartTime);
+              endOfDay.setHours(23, 59, 59, 999); // End of the day for the start time
+
+              if (finalEndTime > endOfDay) {
+                // If the calculated end time exceeds the end of the day,
+                // keep the start time derived from mouse position and cap the end time.
+                finalEndTime = endOfDay;
+              }
+              console.log(`[DragDebug] handleMove Final Times: start=${finalStartTime}, end=${finalEndTime}`);
+              // --- End Revised Constraint Logic ---
+
+              // Store the constrained dragged event details for later use in handleUp
               finalDraggedEvent = {
                 ...e,
-                start: new Date(newStart.getTime()),
-                end: new Date(newEnd.getTime()),
+                start: new Date(finalStartTime.getTime()), // Use final start
+                end: new Date(finalEndTime.getTime()),   // Use final end
               };
+              console.log('[DragDebug] handleMove finalDraggedEvent (being set):', JSON.parse(JSON.stringify(finalDraggedEvent)));
 
-              return finalDraggedEvent;
+              return finalDraggedEvent; // Update the preview
             }
             return e;
           })
@@ -253,7 +276,8 @@ export function useDragAndDrop({
       let initialTime = getTimeFromMousePosition(
         e.clientY,
         containerRect,
-        currentDate
+        currentDate,
+        80
       );
       if (viewType === ViewType.WEEK) {
         const weekStart = new Date(selectedDate);
@@ -270,12 +294,14 @@ export function useDragAndDrop({
           getTimeFromMousePosition(
             e.clientY,
             containerRect,
-            currentDate
+            currentDate,
+            80
           ).getHours(),
           getTimeFromMousePosition(
             e.clientY,
             containerRect,
-            currentDate
+            currentDate,
+            80
           ).getMinutes(),
           0,
           0
@@ -354,12 +380,14 @@ export function useDragAndDrop({
             getTimeFromMousePosition(
               moveEvent.clientY,
               containerRect,
-              currentDate
+              currentDate,
+              80
             ).getHours(),
             getTimeFromMousePosition(
               moveEvent.clientY,
               containerRect,
-              currentDate
+              currentDate,
+              80
             ).getMinutes(),
             0,
             0
@@ -368,7 +396,8 @@ export function useDragAndDrop({
           adjustedCurrentTime = getTimeFromMousePosition(
             moveEvent.clientY,
             containerRect,
-            currentDate
+            currentDate,
+            80
           );
         }
 
@@ -524,7 +553,7 @@ export function useDragAndDrop({
         if (!container) return;
 
         // Get the new time while preserving the original day
-        const newTimeOnCurrentDay = getTimeFromMousePosition(moveEvent.clientY, containerRect, currentDate);
+        const newTimeOnCurrentDay = getTimeFromMousePosition(moveEvent.clientY, containerRect, currentDate, 80);
         const newTime = new Date(event.start);
         newTime.setHours(newTimeOnCurrentDay.getHours());
         newTime.setMinutes(newTimeOnCurrentDay.getMinutes());

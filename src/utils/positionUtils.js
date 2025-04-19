@@ -4,17 +4,34 @@
  * @param {number} mouseY - The mouse Y coordinate
  * @param {DOMRect} containerRect - The bounding rectangle of the container
  * @param {Date} currentDate - The reference date to use for the time
+ * @param {number} [hourHeight=80] - The height of an hour in pixels
  * @returns {Date} A date object representing the calculated time
  */
 export const getTimeFromMousePosition = (
   mouseY,
   containerRect,
-  currentDate
+  currentDate,
+  hourHeight = 80
 ) => {
-  const hourHeight = 80; 
   const scrollTop = window.scrollY || document.documentElement.scrollTop;
-  const relativeY = mouseY + scrollTop - containerRect.top;
-  const totalHours = relativeY / hourHeight;
+  const relativeY = Math.max(0, mouseY + scrollTop - containerRect.top); // Ensure relativeY is not negative
+
+  // --- Handle variable last slot height ---
+  const standardGridHeight = 23 * hourHeight; // Height up to 23:00
+  const lastSlotHeight = 2 * hourHeight;     // Height of the 23:00 slot (assuming double)
+
+  let totalHours;
+  if (relativeY <= standardGridHeight) {
+    // Click is within the standard 00:00 - 22:59 range
+    totalHours = relativeY / hourHeight;
+  } else {
+    // Click is within the 23:00 - 23:59 range (double height slot)
+    const yInLastSlot = relativeY - standardGridHeight;
+    // Calculate fraction within the double-height slot, clamp to prevent > 1
+    const fractionInLastSlot = Math.min(1, Math.max(0, yInLastSlot / lastSlotHeight));
+    totalHours = 23 + fractionInLastSlot;
+  }
+  // --- End variable slot height handling ---
 
   // Ensure calculations are based on the provided currentDate's day
   const date = new Date(currentDate);
