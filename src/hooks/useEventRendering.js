@@ -345,7 +345,7 @@ const renderEvents = useCallback(() => {
             {Array.from({ length: 7 * numRows }).map((_, index) => (
               <div
                 key={`bg-cell-${index}`}
-                className={`border-l border-light-border dark:border-dark-border ${index < 7 ? '' : 'border-t'}`}
+                className={`border-l border-light-border dark:border-dark-border`}
                 style={{ gridColumn: (index % 7) + 1, gridRow: Math.floor(index / 7) + 1 }}
               />
             ))}
@@ -426,7 +426,7 @@ const renderEvents = useCallback(() => {
                 return (
                   <div
                     key={event.id}
-                    className="relative flex items-center text-xs m-px cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Added z-10 and margin
+                    className="relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Changed m-px to m-1
                     style={eventStyle}
                     onDoubleClick={(e) => {
                       e.stopPropagation();
