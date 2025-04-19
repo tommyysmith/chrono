@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay } from 'date-fns';
+// Add addDays, isBefore, isEqual imports
+import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
@@ -362,41 +363,74 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const handleEventChange = useCallback((field, value) => {
     console.log(`handleEventChange: ${field} = ${value}`);
     setEventState(prev => {
+      let newState = { ...prev };
       let processedValue = value;
+
       // Round time values if the field is startTime or endTime
       if (field === 'startTime' || field === 'endTime') {
         processedValue = roundToNearest15Min(value);
       }
-      
+      newState[field] = processedValue;
+
       // Ensure minimum 15-min gap if changing times
-      let newStartTime = field === 'startTime' ? processedValue : prev.startTime;
-      let newEndTime = field === 'endTime' ? processedValue : prev.endTime;
-      
+      let newStartTime = field === 'startTime' ? processedValue : newState.startTime;
+      let newEndTime = field === 'endTime' ? processedValue : newState.endTime;
+
       if (field === 'startTime') {
         newEndTime = ensureMinimumGap(newStartTime, newEndTime);
+        newState.endTime = newEndTime; // Update endTime if startTime caused it to change
       } else if (field === 'endTime') {
-        // If setting endTime earlier than startTime + 15 min, adjust startTime?
-        // Or just rely on ensureMinimumGap called when startTime changes?
-        // For now, let ensureMinimumGap handle it when startTime is set.
-        // We might need more robust logic if users can directly set end time before start + 15.
+        // If end time is set earlier than start time on the same day, startTime needs adjustment
+        // This is mostly handled by ensureMinimumGap when startTime is modified,
+        // but we should prevent startTime from being >= endTime if date === endDate.
+        if (newState.date === newState.endDate) {
+           const startTotalMinutes = parseInt(newStartTime.split(':')[0]) * 60 + parseInt(newStartTime.split(':')[1]);
+           const endTotalMinutes = parseInt(newEndTime.split(':')[0]) * 60 + parseInt(newEndTime.split(':')[1]);
+           if (startTotalMinutes >= endTotalMinutes) {
+               // Reset startTime to be 15 mins before endTime if they become invalid on the same day
+               const newStartTotalMinutes = endTotalMinutes - 15;
+               const newStartHours = Math.max(0, Math.floor(newStartTotalMinutes / 60)); // Ensure non-negative hours
+               const newStartMinutes = Math.max(0, newStartTotalMinutes % 60); // Ensure non-negative minutes
+               newStartTime = `${String(newStartHours).padStart(2, '0')}:${String(newStartMinutes).padStart(2, '0')}`;
+               newState.startTime = newStartTime;
+           }
+        }
       }
-      
-      // If toggling isMultiDay on, ensure endDate is set
-      if (field === 'isMultiDay' && value === true && (!prev.endDate || prev.endDate === 'Invalid Date')) {
-        console.log('Setting endDate in handleEventChange to match date:', prev.date);
-        processedValue = true;
-        // Make sure endDate is at least the same as the start date
-        prev = { ...prev, endDate: prev.date };
+
+      // --- Multi-Day Date Handling Logic ---
+      if (field === 'isMultiDay') {
+        if (processedValue === true) { // Toggling ON
+          const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
+          let targetEndDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
+
+          // If endDate is invalid or same/before startDate, set it to one day after startDate
+          if (isNaN(targetEndDate.getTime()) || isEqual(targetEndDate, startDate) || isBefore(targetEndDate, startDate)) {
+            targetEndDate = addDays(startDate, 1);
+          }
+          newState.endDate = format(targetEndDate, 'yyyy-MM-dd');
+        } else { // Toggling OFF
+          newState.endDate = newState.date; // Reset endDate when turning off multi-day
+        }
+      } else if (newState.isMultiDay) { // Only apply date logic if multi-day is already active
+        if (field === 'date') { // Start date changed
+          const startDate = parse(processedValue, 'yyyy-MM-dd', new Date());
+          const endDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
+
+          // If endDate is now before or same as the new startDate, update endDate
+          if (isEqual(endDate, startDate) || isBefore(endDate, startDate)) {
+            newState.endDate = format(addDays(startDate, 1), 'yyyy-MM-dd');
+          }
+        } else if (field === 'endDate') { // End date changed
+          const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
+          const endDate = parse(processedValue, 'yyyy-MM-dd', new Date());
+
+          // If new endDate is before or same as startDate, reset it to one day after startDate
+          if (isEqual(endDate, startDate) || isBefore(endDate, startDate)) {
+            newState.endDate = format(addDays(startDate, 1), 'yyyy-MM-dd');
+          }
+        }
       }
-      
-      // Update the state
-      const newState = { 
-          ...prev, 
-          [field]: processedValue, 
-          // Also update the potentially adjusted opposite time field
-          ...(field === 'startTime' && { endTime: newEndTime }),
-          ...(field === 'endTime' && { startTime: newStartTime }) // Keep startTime if endTime adjusted it
-      };
+      // --- End Multi-Day Date Handling ---
 
       console.log('New event state:', newState);
 
@@ -404,20 +438,40 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const hasChanges = Object.keys(newState).some(key => {
         // Skip internal properties starting with _
         if (key.startsWith('_')) return false;
-        // Handle date comparison specially
-        if (key === 'date') {
-          const prevDate = format(originalEventState?.start || new Date(), 'yyyy-MM-dd');
-          return newState[key] !== prevDate;
+
+        // Handle specific comparisons
+        if (key === 'date' || key === 'endDate') {
+            const originalDateKey = key === 'date' ? 'start' : 'end';
+            const originalDateValue = originalEventState?.[originalDateKey];
+            // If original state exists and has a valid date for this key
+            if (originalEventState && originalDateValue) {
+                // Compare formatted dates
+                try {
+                    return newState[key] !== format(new Date(originalDateValue), 'yyyy-MM-dd');
+                } catch (e) {
+                    // Handle invalid date in original state if necessary, maybe fallback
+                    return true; // Assume change if original date is invalid
+                }
+            } else {
+                // If no original state or original date, compare against default or assume change
+                // This comparison might need refinement based on initial state defaults
+                return true; 
+            }
         }
-        // Handle time comparison specially
-        if (key === 'startTime') {
-          const prevTime = format(originalEventState?.start || new Date(), 'HH:mm');
-          return newState[key] !== prevTime;
+        if (key === 'startTime' || key === 'endTime') {
+            const originalTimeKey = key === 'startTime' ? 'start' : 'end';
+            const originalTimeValue = originalEventState?.[originalTimeKey];
+            if (originalEventState && originalTimeValue) {
+                try {
+                    return newState[key] !== format(new Date(originalTimeValue), 'HH:mm');
+                } catch (e) {
+                    return true; // Assume change if original time is invalid
+                }
+            } else {
+                return true;
+            }
         }
-        if (key === 'endTime') {
-          const prevTime = format(originalEventState?.end || new Date(), 'HH:mm');
-          return newState[key] !== prevTime;
-        }
+        // Default comparison for other keys
         return newState[key] !== (originalEventState?.[key] || '');
       });
       setHasChanges(hasChanges);
@@ -625,7 +679,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const { width, height } = containerRef.current.getBoundingClientRect();
       previousSizeRef.current = { width, height };
     }
-  }, [isOpen, isAddingEvent, isAddingTask]);
+    
+    // Track state changes for animation coordination
+    const prevState = prevStateRef.current;
+    if (prevState && (prevState.isGoToDateMode !== isGoToDateMode || prevState.isAddingEvent !== isAddingEvent || prevState.isAddingTask !== isAddingTask)) {
+      setIsAnimating(true);
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsAnimating(false);
+      }, 25); // Short delay to allow animation to start
+    }
+    prevStateRef.current = {
+      isGoToDateMode,
+      isAddingEvent,
+      isAddingTask
+    };
+  }, [isOpen, isAddingEvent, isAddingTask, isGoToDateMode]);
 
   // Fix layout animation state tracking
   useEffect(() => {
@@ -1623,7 +1691,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     type="date"
                                     value={eventState.date}
                                     onChange={(e) => handleEventChange('date', e.target.value)}
-                                    className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-auto cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                    style={{ padding: '0' }} // Explicitly remove padding
+                                    className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-fit max-w-[85px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
                                   />
                                 </div>
                               </PopoverTrigger>
@@ -1648,7 +1717,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                         type="date"
                                         value={eventState.endDate || eventState.date}
                                         onChange={(e) => handleEventChange('endDate', e.target.value)}
-                                        className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-auto cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                        style={{ padding: '0' }} // Explicitly remove padding
+                                        className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-fit max-w-[110px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
                                       />
                                     </div>
                                   </PopoverTrigger>
@@ -1666,7 +1736,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           </div>
                           
                           {/* Date labels row */}
-                          <div className="flex items-center h-[24px] gap-2">
+                          <div className="flex items-center h-[24px] gap-1">
                             <span className="text-sm text-light-text/50 dark:text-dark-text/50">
                               {formatDateToNatural(eventState.date)}
                             </span>
@@ -1694,7 +1764,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   console.log('Current eventState:', eventState);
                                   // Ensure endDate is valid when enabling multi-day
                                   if (e.target.checked && (!eventState.endDate || eventState.endDate === 'Invalid Date')) {
-                                    console.log('Setting endDate to match start date');
+                                    console.log('Setting endDate to match date:', eventState.date);
                                     handleEventChange('endDate', eventState.date);
                                   }
                                   handleEventChange('isMultiDay', e.target.checked);
