@@ -84,8 +84,8 @@ export default function Week({
           <div className="flex flex-col pointer-events-none">
             {HOURS.map((hour) => (
               <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'} pr-2 relative`}>
-                <span className="absolute right-2 top-[-10px] text-xs text-gray-500">
-                  {hour.toString().padStart(2, "0")}:00
+                <span className="absolute right-2 top-[-10px] text-[10px] mt-0.5 text-light-text/50 dark:text-dark-text/50">
+                  {`${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}${hour < 12 ? 'AM' : 'PM'}`}
                 </span>
               </div>
             ))}

@@ -50,6 +50,55 @@ const REPEAT_OPTIONS = [
   { id: 'custom', label: 'Custom...' } // Add Custom option
 ];
 
+// Helper function to generate time options in 15-minute intervals
+const generateTimeOptions = () => {
+  const options = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const date = new Date();
+      date.setHours(h, m);
+      const value = format(date, 'HH:mm'); // 24-hour format for internal value
+      const label = format(date, 'h:mm a'); // 12-hour format for display
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const ALL_TIME_OPTIONS = generateTimeOptions();
+
+// Helper to parse flexible time input
+const parseTimeString = (timeStr) => {
+  if (!timeStr) return null;
+  try {
+    // Attempt parsing common formats
+    let parsedDate = parse(timeStr, 'h:mm a', new Date()); // 1:30 PM
+    if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+    parsedDate = parse(timeStr, 'ha', new Date()); // 1PM
+    if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+    parsedDate = parse(timeStr, 'h a', new Date()); // 1 PM
+     if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+    parsedDate = parse(timeStr, 'HH:mm', new Date()); // 13:30
+    if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+    parsedDate = parse(timeStr, 'H:mm', new Date()); // 3:30
+     if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+     parsedDate = parse(timeStr, 'H', new Date()); // 3
+     if (!isNaN(parsedDate)) return format(parsedDate, 'HH:mm');
+
+    // Add more formats if needed
+
+    return null; // Return null if parsing fails
+  } catch (e) {
+    console.error("Error parsing time string:", e);
+    return null;
+  }
+};
+
 const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose, onDateSelect }, ref) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
@@ -199,6 +248,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const animationTimeoutRef = useRef(null);
   // State for recurrence modal
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false);
+  // State for time pickers
+  const [isStartTimePickerOpen, setIsStartTimePickerOpen] = useState(false);
+  const [isEndTimePickerOpen, setIsEndTimePickerOpen] = useState(false);
+  const [startTimeSearch, setStartTimeSearch] = useState('');
+  const [endTimeSearch, setEndTimeSearch] = useState('');
 
   const containerRef = useRef(null);
   const repeatDropdownRef = useRef(null);
@@ -993,6 +1047,39 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     return REPEAT_OPTIONS.find(option => option.id === repeatValue)?.label || 'Does not repeat';
   };
 
+  // Filtered time options based on search
+  const filteredStartTimeOptions = useMemo(() => {
+    if (!startTimeSearch) return ALL_TIME_OPTIONS;
+    const lowerSearch = startTimeSearch.toLowerCase();
+    return ALL_TIME_OPTIONS.filter(({ label }) => 
+      label.toLowerCase().includes(lowerSearch)
+    );
+  }, [startTimeSearch]);
+
+  const filteredEndTimeOptions = useMemo(() => {
+    // Calculate start time in minutes once
+    const [startH, startM] = eventState.startTime.split(':').map(Number);
+    const startTotalMinutes = startH * 60 + startM;
+
+    // Filter all options to be strictly after the start time (+15 min minimum gap)
+    let timeFilteredOptions = ALL_TIME_OPTIONS.filter(({ value }) => {
+      const [optH, optM] = value.split(':').map(Number);
+      const optTotalMinutes = optH * 60 + optM;
+      return optTotalMinutes >= startTotalMinutes + 15;
+    });
+
+    // If there's a search term, filter the time-filtered options further
+    if (endTimeSearch) {
+      const lowerSearch = endTimeSearch.toLowerCase();
+      return timeFilteredOptions.filter(({ label }) => 
+        label.toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    // Otherwise, return the time-filtered options
+    return timeFilteredOptions;
+  }, [endTimeSearch, eventState.startTime]);
+
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
@@ -1474,7 +1561,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                               : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
                           >
-                            <span className="flex items-center pl-1 pr-3">{editingTaskId ? 'Edit task' : 'Add task'}</span>
+                            <span className="text-xs pl-1 pr-3 ">
+                          
+                            {editingTaskId ? 'Edit task' : 'Add task'}
+                        
+                            </span>
                             <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                               <Return className="w-3 h-3" />
                             </div>
@@ -1573,95 +1664,141 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </div>
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
-                            <div className="flex items-center">
-                              <input
-                                type="number"
-                                min="0"
-                                max="23"
-                                value={eventState.startTime.split(':')[0]}
-                                onChange={(e) => {
-                                  const hours = e.target.value.padStart(2, '0');
-                                  const newStartTime = `${hours}:${eventState.startTime.split(':')[1]}`;
-                                  handleEventChange('startTime', newStartTime);
-                                  handleEventChange('endTime', ensureMinimumGap(newStartTime, eventState.endTime));
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                    const newStartTime = adjustHour(eventState.startTime, e.key === 'ArrowUp');
-                                    handleEventChange('startTime', newStartTime);
-                                    handleEventChange('endTime', ensureMinimumGap(newStartTime, eventState.endTime));
-                                  }
-                                }}
-                                className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[2ch] text-right cursor-pointer focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              />
-                              <span className="px-[1px]">:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max="59"
-                                value={eventState.startTime.split(':')[1]}
-                                onChange={(e) => {
-                                  const minutes = e.target.value.padStart(2, '0');
-                                  const newStartTime = `${eventState.startTime.split(':')[0]}:${minutes}`;
-                                  handleEventChange('startTime', newStartTime);
-                                  handleEventChange('endTime', ensureMinimumGap(newStartTime, eventState.endTime));
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                    const newStartTime = adjustMinutes(eventState.startTime, e.key === 'ArrowUp');
-                                    handleEventChange('startTime', newStartTime);
-                                    handleEventChange('endTime', ensureMinimumGap(newStartTime, eventState.endTime));
-                                  }
-                                }}
-                                className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[2ch] cursor-pointer focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              />
-                            </div>
+                            {/* Start Time Popover Input */}
+                            <Popover open={isStartTimePickerOpen} onOpenChange={setIsStartTimePickerOpen}>
+                              <PopoverTrigger asChild>
+                                <input
+                                  type="text"
+                                  placeholder="Start"
+                                  value={startTimeSearch || format(parse(eventState.startTime, 'HH:mm', new Date()), 'h:mm a')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setStartTimeSearch(''); // Clear search on focus to show all
+                                  }}
+                                  onChange={(e) => {
+                                    const inputText = e.target.value;
+                                    setStartTimeSearch(inputText); // Update search term for filtering
+                                    const parsedTime = parseTimeString(inputText);
+                                    if (parsedTime) {
+                                      // Only update if valid parse - popover selection handles other cases
+                                      handleEventChange('startTime', parsedTime);
+                                      handleEventChange('endTime', ensureMinimumGap(parsedTime, eventState.endTime));
+                                    } 
+                                  }}
+                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[65px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent 
+                                className="w-[160px] max-h-[200px] overflow-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full  [&::-webkit-scrollbar-thumb]:bg-white/20 dark:[&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20"
+                                align="start"
+                                side="top"
+                                onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus stealing
+                              >
+                                <div role="listbox" className="flex flex-col">
+                                  {filteredStartTimeOptions.map((option) => (
+                                    <button
+                                      key={`start-${option.value}`}
+                                      type="button"
+                                      className={`text-left px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${eventState.startTime === option.value ? 'bg-white/15 dark:bg-white/10 font-semibold text-dark-text dark:text-dark-text' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEventChange('startTime', option.value);
+                                        handleEventChange('endTime', ensureMinimumGap(option.value, eventState.endTime));
+                                        setIsStartTimePickerOpen(false);
+                                        setStartTimeSearch(''); // Reset search
+                                      }}
+                                      role="option"
+                                      aria-selected={eventState.startTime === option.value}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+
                             <span className="text-light-text/50 dark:text-dark-text/50">→</span>
-                            <div className="flex items-center">
-                              <input
-                                type="number"
-                                min="0"
-                                max="23"
-                                value={eventState.endTime.split(':')[0]}
-                                onChange={(e) => {
-                                  const hours = e.target.value.padStart(2, '0');
-                                  const newEndTime = `${hours}:${eventState.endTime.split(':')[1]}`;
-                                  handleEventChange('endTime', ensureMinimumGap(eventState.startTime, newEndTime));
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                    const newEndTime = adjustHour(eventState.endTime, e.key === 'ArrowUp');
-                                    handleEventChange('endTime', ensureMinimumGap(eventState.startTime, newEndTime));
-                                  }
-                                }}
-                                className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[2ch] text-right cursor-pointer focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              />
-                              <span className="px-[1px]">:</span>
-                              <input
-                                type="number"
-                                min="0"
-                                max="59"
-                                value={eventState.endTime.split(':')[1]}
-                                onChange={(e) => {
-                                  const minutes = e.target.value.padStart(2, '0');
-                                  const newEndTime = `${eventState.endTime.split(':')[0]}:${minutes}`;
-                                  handleEventChange('endTime', ensureMinimumGap(eventState.startTime, newEndTime));
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                                    e.preventDefault();
-                                    const newEndTime = adjustMinutes(eventState.endTime, e.key === 'ArrowUp');
-                                    handleEventChange('endTime', ensureMinimumGap(eventState.startTime, newEndTime));
-                                  }
-                                }}
-                                className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[2ch] cursor-pointer focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              />
-                            </div>
+
+                            {/* End Time Popover Input */}
+                            <Popover open={isEndTimePickerOpen} onOpenChange={setIsEndTimePickerOpen}>
+                              <PopoverTrigger asChild>
+                                 <input
+                                  type="text"
+                                  placeholder="End"
+                                  value={endTimeSearch || format(parse(eventState.endTime, 'HH:mm', new Date()), 'h:mm a')}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    setEndTimeSearch(''); // Clear search on focus
+                                  }}
+                                  onChange={(e) => {
+                                    const inputText = e.target.value;
+                                    setEndTimeSearch(inputText);
+                                    const parsedTime = parseTimeString(inputText);
+                                     if (parsedTime) {
+                                        // Only update if valid parse
+                                       handleEventChange('endTime', ensureMinimumGap(eventState.startTime, parsedTime));
+                                     }
+                                  }}
+                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[65px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent 
+                                className="w-[160px] max-h-[200px] overflow-y-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:pr-1 [&::-webkit-scrollbar-thumb]:bg-white/20 dark:[&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20"
+                                align="start"
+                                side="top"
+                                onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus stealing
+                              >
+                                <div role="listbox" className="flex flex-col">
+                                  {filteredEndTimeOptions.map((option) => {
+                                    // Calculate duration
+                                    const [startH, startM] = eventState.startTime.split(':').map(Number);
+                                    const [endH, endM] = option.value.split(':').map(Number);
+                                    const startTotalMinutes = startH * 60 + startM;
+                                    const endTotalMinutes = endH * 60 + endM;
+                                    const diffMinutes = endTotalMinutes - startTotalMinutes;
+                                    
+                                    let durationStr = '';
+                                    if (diffMinutes >= 0) { // Ensure non-negative duration
+                                      if (diffMinutes >= 60) {
+                                        const hours = Math.floor(diffMinutes / 60);
+                                        const minutes = diffMinutes % 60;
+                                        durationStr = `${hours}h`;
+                                        if (minutes > 0) {
+                                          durationStr += ` ${minutes}m`;
+                                        }
+                                      } else {
+                                        durationStr = `${diffMinutes}m`;
+                                      }
+                                    }
+
+                                    return (
+                                      <button
+                                        key={`end-${option.value}`}
+                                        type="button"
+                                        className={`flex justify-between items-center text-left px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${eventState.endTime === option.value ? 'bg-white/15 dark:bg-white/10 font-semibold text-dark-text dark:text-dark-text ' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEventChange('endTime', ensureMinimumGap(eventState.startTime, option.value));
+                                          setIsEndTimePickerOpen(false);
+                                          setEndTimeSearch(''); // Reset search
+                                        }}
+                                        role="option"
+                                        aria-selected={eventState.endTime === option.value}
+                                      >
+                                        <span>{option.label}</span>
+                                        {durationStr && (
+                                          <span className="text-xs text-dark-text/30 dark:text-dark-text/40 ml-2">
+                                            ({durationStr})
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 mt-1"> { /* Add margin-top */}
                             <label className="relative inline-flex items-center cursor-pointer">
                               <input
                                 type="checkbox"

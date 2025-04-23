@@ -63,10 +63,18 @@ export default {
       addUtilities({
         '.scrollbar-hide': {
           /* Firefox */
-          'scrollbar-width': 'none',
+          'scrollbar-width': '4px',
           /* Safari and Chrome */
-          '&::-webkit-scrollbar': {
+          
+          '&::-webkit-scrollbar-track': {
             display: 'none'
+          },
+          '&::-webkit-scrollbar-thumb': {
+            display: 'none',
+            width: '4px',
+            height: '4px',
+            background: 'rgba(255, 255, 255, 0.1)'
+
           }
         }
       })
