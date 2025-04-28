@@ -98,17 +98,19 @@ export default function Day({
         ref={timeGridRef}
         className="flex-1 overflow-y-scroll scrollbar-hide relative"
       >
-        <div className="grid grid-cols-[60px_1fr] h-[1600px] relative w-full calendar-grid">
+        <div className="grid grid-cols-[60px_1fr] h-[2000px] relative w-full calendar-grid">
           {/* Time indicator */}
           <TimeIndicator viewType="day" selectedDate={selectedDate} />
 
           {/* Time labels */}
           <div className="flex flex-col pointer-events-none">
             {HOURS.map((hour) => (
-              <div key={hour} className="h-16 pr-2 relative">
-                <span className="absolute right-2 top-[-10px] text-xs text-gray-500">
-                  {hour.toString().padStart(2, "0")}:00
-                </span>
+              <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'} pr-2 relative`}>
+                {hour !== 0 && (
+                  <span className="absolute right-2 top-[-10px] text-[10px] mt-0.5 text-light-text/50 dark:text-dark-text/50">
+                    {`${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}${hour < 12 ? 'AM' : 'PM'}`}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -118,8 +120,10 @@ export default function Day({
             {/* Background grid lines */}
             <div className="absolute inset-0">
               {HOURS.map((hour) => (
-                <div key={hour} className="h-16">
-                  <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
+                <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'}`}>
+                  {hour !== 0 && (
+                    <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
+                  )}
                 </div>
               ))}
               <div className="absolute inset-0">
@@ -139,8 +143,8 @@ export default function Day({
                   style={{
                     left: `${(pendingEventCell.column / 7) * 100}%`,
                     width: `${100 / 7}%`,
-                    top: `${pendingEventCell.startTime.getHours() * 64}px`,
-                    height: "64px",
+                    top: `${pendingEventCell.startTime.getHours() * 80 + pendingEventCell.startTime.getMinutes() * (80/60)}px`,
+                    height: "80px",
                     backgroundColor: "rgba(var(--primary-rgb), 0.1)",
                     border: "2px dashed rgba(var(--primary-rgb), 0.3)",
                   }}

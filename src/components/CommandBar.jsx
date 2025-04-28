@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 // Add addDays, isBefore, isEqual imports
-import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual } from 'date-fns';
+import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual, differenceInMilliseconds, add } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
@@ -149,14 +149,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   };
 
   const formatDateToNatural = (dateStr) => {
-    console.log('formatDateToNatural input:', dateStr);
     if (!dateStr) {
       console.error('Invalid date string provided to formatDateToNatural');
       return 'Invalid date';
     }
     try {
       const date = new Date(dateStr);
-      console.log('Parsed date:', date);
       if (isNaN(date.getTime())) {
         console.error('Invalid date object created from:', dateStr);
         return 'Invalid date';
@@ -415,45 +413,54 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, []);
 
   const handleEventChange = useCallback((field, value) => {
-    console.log(`handleEventChange: ${field} = ${value}`);
     setEventState(prev => {
       let newState = { ...prev };
-      let processedValue = value;
-
-      // Round time values if the field is startTime or endTime
-      if (field === 'startTime' || field === 'endTime') {
-        processedValue = roundToNearest15Min(value);
-      }
-      newState[field] = processedValue;
-
-      // Ensure minimum 15-min gap if changing times
-      let newStartTime = field === 'startTime' ? processedValue : newState.startTime;
-      let newEndTime = field === 'endTime' ? processedValue : newState.endTime;
 
       if (field === 'startTime') {
-        newEndTime = ensureMinimumGap(newStartTime, newEndTime);
-        newState.endTime = newEndTime; // Update endTime if startTime caused it to change
-      } else if (field === 'endTime') {
-        // If end time is set earlier than start time on the same day, startTime needs adjustment
-        // This is mostly handled by ensureMinimumGap when startTime is modified,
-        // but we should prevent startTime from being >= endTime if date === endDate.
-        if (newState.date === newState.endDate) {
-           const startTotalMinutes = parseInt(newStartTime.split(':')[0]) * 60 + parseInt(newStartTime.split(':')[1]);
-           const endTotalMinutes = parseInt(newEndTime.split(':')[0]) * 60 + parseInt(newEndTime.split(':')[1]);
-           if (startTotalMinutes >= endTotalMinutes) {
-               // Reset startTime to be 15 mins before endTime if they become invalid on the same day
-               const newStartTotalMinutes = endTotalMinutes - 15;
-               const newStartHours = Math.max(0, Math.floor(newStartTotalMinutes / 60)); // Ensure non-negative hours
-               const newStartMinutes = Math.max(0, newStartTotalMinutes % 60); // Ensure non-negative minutes
-               newStartTime = `${String(newStartHours).padStart(2, '0')}:${String(newStartMinutes).padStart(2, '0')}`;
-               newState.startTime = newStartTime;
-           }
+        const newStartTimeStr = value;
+        const currentEndTimeStr = prev.endTime;
+        
+        // Parse times with a common base date for calculation
+        const baseDate = new Date(); 
+        const currentStartDate = parse(prev.startTime, 'HH:mm', baseDate);
+        const currentEndDate = parse(currentEndTimeStr, 'HH:mm', baseDate);
+        const newStartDate = parse(newStartTimeStr, 'HH:mm', baseDate);
+        
+        // Check if parsing was successful before calculating
+        if (!isNaN(currentStartDate) && !isNaN(currentEndDate) && !isNaN(newStartDate)) {
+          const durationMs = differenceInMilliseconds(currentEndDate, currentStartDate);
+          
+          // Ensure duration is at least 15 minutes
+          const minDurationMs = 15 * 60 * 1000;
+          const effectiveDurationMs = Math.max(durationMs, minDurationMs);
+          
+          const newEndDate = new Date(newStartDate.getTime() + effectiveDurationMs);
+          const newEndTimeStr = format(newEndDate, 'HH:mm');
+          
+          newState = { ...newState, startTime: newStartTimeStr, endTime: newEndTimeStr };
+        } else {
+          // Handle parsing error - maybe just update start time?
+          newState = { ...newState, startTime: newStartTimeStr };
         }
+      } else if (field === 'endTime') {
+        // When endTime is explicitly changed, update it and ensure minimum gap
+        const newEndTime = ensureMinimumGap(prev.startTime, value);
+        newState = { ...newState, endTime: newEndTime };
+      } else {
+        // For all other fields, just update the value
+        newState = { ...newState, [field]: value };
+      }
+
+      // Update multi-day status based on dates
+      if (field === 'date' || field === 'endDate') {
+        const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
+        const endDate = parse(newState.endDate || newState.date, 'yyyy-MM-dd', new Date());
+        newState.isMultiDay = !isSameDay(startDate, endDate);
       }
 
       // --- Multi-Day Date Handling Logic ---
       if (field === 'isMultiDay') {
-        if (processedValue === true) { // Toggling ON
+        if (value === true) { // Toggling ON
           const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
           let targetEndDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
 
@@ -467,7 +474,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         }
       } else if (newState.isMultiDay) { // Only apply date logic if multi-day is already active
         if (field === 'date') { // Start date changed
-          const startDate = parse(processedValue, 'yyyy-MM-dd', new Date());
+          const startDate = parse(value, 'yyyy-MM-dd', new Date());
           const endDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
 
           // If endDate is now before or same as the new startDate, update endDate
@@ -476,7 +483,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           }
         } else if (field === 'endDate') { // End date changed
           const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
-          const endDate = parse(processedValue, 'yyyy-MM-dd', new Date());
+          const endDate = parse(value, 'yyyy-MM-dd', new Date());
 
           // If new endDate is before or same as startDate, reset it to one day after startDate
           if (isEqual(endDate, startDate) || isBefore(endDate, startDate)) {
@@ -485,8 +492,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         }
       }
       // --- End Multi-Day Date Handling ---
-
-      console.log('New event state:', newState);
 
       // Compare with original state to determine if there are changes
       const hasChanges = Object.keys(newState).some(key => {
@@ -1187,7 +1192,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             }}
                             className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
-                            <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                            <CalendarIcon className="w-4 h-4" />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
                           </button>
                         </PopoverContent>
@@ -1268,7 +1273,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <div className="flex-1">
                           <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
                             <div className="flex flex-col">
-                              <div className="flex px-4 py-4 flex-row border-b border-light-border dark:border-dark-border">
+                              <div className="flex items-center gap-2 px-4 py-4 border-b border-light-border dark:border-dark-border">
                                 <Task
                                   className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
                                 />
@@ -1479,7 +1484,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     </div>
                                   </PopoverTrigger>
                                   <PopoverContent 
-                                    className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                                    className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
+                                      scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
                                     align="start"
                                     side="top"
                                   >
@@ -1672,7 +1678,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   placeholder="Start"
                                   value={startTimeSearch || format(parse(eventState.startTime, 'HH:mm', new Date()), 'h:mm a')}
                                   onFocus={(e) => {
-                                    e.target.select();
+                                    setTimeout(() => e.target.select(), 0);
                                     setStartTimeSearch(''); // Clear search on focus to show all
                                   }}
                                   onChange={(e) => {
@@ -1682,14 +1688,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     if (parsedTime) {
                                       // Only update if valid parse - popover selection handles other cases
                                       handleEventChange('startTime', parsedTime);
-                                      handleEventChange('endTime', ensureMinimumGap(parsedTime, eventState.endTime));
                                     } 
                                   }}
-                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[65px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-[64px] p-0 cursor-pointer focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
                                 />
                               </PopoverTrigger>
                               <PopoverContent 
-                                className="w-[160px] max-h-[200px] overflow-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full  [&::-webkit-scrollbar-thumb]:bg-white/20 dark:[&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20"
+                                className="w-[160px] max-h-[200px] overflow-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
+                                  scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
                                 align="start"
                                 side="top"
                                 onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus stealing
@@ -1703,7 +1709,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         handleEventChange('startTime', option.value);
-                                        handleEventChange('endTime', ensureMinimumGap(option.value, eventState.endTime));
                                         setIsStartTimePickerOpen(false);
                                         setStartTimeSearch(''); // Reset search
                                       }}
@@ -1727,7 +1732,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   placeholder="End"
                                   value={endTimeSearch || format(parse(eventState.endTime, 'HH:mm', new Date()), 'h:mm a')}
                                   onFocus={(e) => {
-                                    e.target.select();
+                                    setTimeout(() => e.target.select(), 0);
                                     setEndTimeSearch(''); // Clear search on focus
                                   }}
                                   onChange={(e) => {
@@ -1739,11 +1744,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                        handleEventChange('endTime', ensureMinimumGap(eventState.startTime, parsedTime));
                                      }
                                   }}
-                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 w-[65px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-[64px] p-0 cursor-pointer focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
                                 />
                               </PopoverTrigger>
                               <PopoverContent 
-                                className="w-[160px] max-h-[200px] overflow-y-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:pr-1 [&::-webkit-scrollbar-thumb]:bg-white/20 dark:[&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-white/20"
+                                className="w-[160px] max-h-[200px] overflow-y-auto p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
+                                  scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
                                 align="start"
                                 side="top"
                                 onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus stealing
@@ -1820,18 +1826,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </div>
                         <div className="flex flex-col gap-1 w-full">
                           {/* Date inputs row */}
-                          <div className="flex items-center h-[24px] gap-2">
+                          <div className="flex items-center h-[24px] gap-2 w-fit"> {/* <-- Add w-fit */}
                             <Popover>
                               <PopoverTrigger asChild>
-                                <div className="flex items-center cursor-pointer">
-                                  <input
-                                    type="date"
-                                    value={eventState.date}
-                                    onChange={(e) => handleEventChange('date', e.target.value)}
-                                    style={{ padding: '0' }} // Explicitly remove padding
-                                    className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-fit max-w-[85px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
-                                  />
-                                </div>
+                                <span
+                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 cursor-pointer focus:ring-0 focus:outline-none whitespace-nowrap"
+                                >
+                                  {format(parse(eventState.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}
+                                </span>
                               </PopoverTrigger>
                               <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
                                 <Calendar
@@ -1849,15 +1851,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 <span className="text-light-text/50 dark:text-dark-text/50">→</span>
                                 <Popover>
                                   <PopoverTrigger asChild>
-                                    <div className="flex items-center cursor-pointer">
-                                      <input
-                                        type="date"
-                                        value={eventState.endDate || eventState.date}
-                                        onChange={(e) => handleEventChange('endDate', e.target.value)}
-                                        style={{ padding: '0' }} // Explicitly remove padding
-                                        className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-fit max-w-[110px] cursor-pointer focus:ring-0 focus:outline-none [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
-                                      />
-                                    </div>
+                                    <span
+                                      className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 cursor-pointer focus:ring-0 focus:outline-none whitespace-nowrap"
+                                    >
+                                      {format(parse(eventState.endDate || eventState.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}
+                                    </span>
                                   </PopoverTrigger>
                                   <PopoverContent className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
                                     <Calendar
@@ -1897,13 +1895,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 className="sr-only peer"
                                 checked={eventState.isMultiDay}
                                 onChange={(e) => {
-                                  console.log('Multi-day toggle changed:', e.target.checked);
-                                  console.log('Current eventState:', eventState);
-                                  // Ensure endDate is valid when enabling multi-day
-                                  if (e.target.checked && (!eventState.endDate || eventState.endDate === 'Invalid Date')) {
-                                    console.log('Setting endDate to match date:', eventState.date);
-                                    handleEventChange('endDate', eventState.date);
-                                  }
                                   handleEventChange('isMultiDay', e.target.checked);
                                 }}
                               />
@@ -1927,7 +1918,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </span>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                              className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
+                                scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
                               align="start"
                               side="top"
                             >
@@ -2043,7 +2035,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     <div className="flex-1">
                       <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
                         <div className="flex flex-col">
-                          <div className="flex px-4 py-4 flex-row items-center border-b border-light-border dark:border-dark-border">
+                          <div className="flex items-center gap-2 px-4 py-4 border-b border-light-border dark:border-dark-border">
                             <div 
                               className="cursor-pointer flex items-center mr-2"
                               onClick={() => {

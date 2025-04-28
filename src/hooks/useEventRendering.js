@@ -5,6 +5,12 @@ import { Repeat } from "@/assets/icons/Repeat";
 import { ViewType } from "../constants/views";
 import { motion } from "framer-motion";
 import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import EventTooltipContent from "@/components/EventTooltipContent";
 
 export function useEventRendering(
   events,
@@ -17,84 +23,84 @@ export function useEventRendering(
   handleResizeStart
 ) {
   const expandRecurringEvents = useCallback((events, dateRangeStart, dateRangeEnd) => {
-  const expandedEvents = [];
-  
-  events.forEach(event => {
-    // Direct pass-through for non-recurring events
-    if (!event.rruleOptions && !event.seriesId) {
-      expandedEvents.push(event);
-      return;
-    }
-    
-    try {
-      // Handle both types of recurring events: pre-defined (seriesId) and custom (rruleOptions)
-      
-      // CASE 1: Events with seriesId that were already generated
-      // These should be passed through directly
-      if (event.seriesId) {
-        // Check if this event falls within our date range
-        const eventStart = new Date(event.start);
-        if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
-          expandedEvents.push(event);
-        }
+    const expandedEvents = [];
+
+    events.forEach(event => {
+      // Direct pass-through for non-recurring events
+      if (!event.rruleOptions && !event.seriesId) {
+        expandedEvents.push(event);
         return;
       }
-      
-      // CASE 2: Root events with rruleOptions that need to be expanded
-      // These are the template events that define the recurrence pattern
-      if (event.rruleOptions) {
-        const rule = new RRule({
-          ...event.rruleOptions,
-          dtstart: new Date(event.start)
-        });
-        
-        // Generate occurrences within the date range
-        const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
-        
-        // If no occurrences found but this is within our range, include it anyway
-        if (occurrences.length === 0) {
+
+      try {
+        // Handle both types of recurring events: pre-defined (seriesId) and custom (rruleOptions)
+
+        // CASE 1: Events with seriesId that were already generated
+        // These should be passed through directly
+        if (event.seriesId) {
+          // Check if this event falls within our date range
           const eventStart = new Date(event.start);
           if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
             expandedEvents.push(event);
           }
           return;
         }
-        
-        // For each occurrence, create an event instance
-        occurrences.forEach((occurrenceDate, index) => {
-          const startDate = new Date(event.start);
-          const endDate = new Date(event.end);
-          
-          // Calculate duration to maintain it across occurrences
-          const duration = endDate - startDate;
-          
-          const occurrenceStart = occurrenceDate;
-          const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
-          
-          // CRITICAL: For the *first real occurrence* (index 0), use the original ID
-          // This ensures the base event can be manipulated
-          const isFirstOccurrence = index === 0;
-          
-          expandedEvents.push({
-            ...event,
-            id: isFirstOccurrence ? event.id : `${event.id}_${index}`,
-            start: occurrenceStart,
-            end: occurrenceEnd,
-            isRecurring: true,
-            seriesId: event.id // The base event itself becomes the series ID
-          });
-        });
-      }
-    } catch (error) {
-      console.error('Error expanding recurring event:', error);
-      expandedEvents.push(event); // Fallback to original event
-    }
-  });
-  
-  return expandedEvents;
-}, []);
 
-const renderEvents = useCallback(() => {
+        // CASE 2: Root events with rruleOptions that need to be expanded
+        // These are the template events that define the recurrence pattern
+        if (event.rruleOptions) {
+          const rule = new RRule({
+            ...event.rruleOptions,
+            dtstart: new Date(event.start)
+          });
+
+          // Generate occurrences within the date range
+          const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
+
+          // If no occurrences found but this is within our range, include it anyway
+          if (occurrences.length === 0) {
+            const eventStart = new Date(event.start);
+            if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
+              expandedEvents.push(event);
+            }
+            return;
+          }
+
+          // For each occurrence, create an event instance
+          occurrences.forEach((occurrenceDate, index) => {
+            const startDate = new Date(event.start);
+            const endDate = new Date(event.end);
+
+            // Calculate duration to maintain it across occurrences
+            const duration = endDate - startDate;
+
+            const occurrenceStart = occurrenceDate;
+            const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
+
+            // CRITICAL: For the *first real occurrence* (index 0), use the original ID
+            // This ensures the base event can be manipulated
+            const isFirstOccurrence = index === 0;
+
+            expandedEvents.push({
+              ...event,
+              id: isFirstOccurrence ? event.id : `${event.id}_${index}`,
+              start: occurrenceStart,
+              end: occurrenceEnd,
+              isRecurring: true,
+              seriesId: event.id // The base event itself becomes the series ID
+            });
+          });
+        }
+      } catch (error) {
+        console.error('Error expanding recurring event:', error);
+        expandedEvents.push(event); // Fallback to original event
+      }
+    });
+
+    return expandedEvents;
+  }, []);
+
+  const renderEvents = useCallback(() => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -120,56 +126,62 @@ const renderEvents = useCallback(() => {
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
-          <motion.div
-            key={event.id}
-            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer select-none ${
-              event.isEditing || dragState.eventId === event.id
-                ? "bg-primary/30"
-                : "bg-primary/10"
-            } event-item ${repeatClass}`}
-            style={getEventStyle(event, overlappingEvents, viewType)}
-            onMouseDown={(e) => {
-              if (e.button === 0 && !e.target.closest(".resize-handle")) {
-                handleDragStart(e, event);
-              }
-            }}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              handleEventClick(event);
-            }}
-            onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-          >
-            <div
-              className="absolute left-0 top-0 bottom-0 w-1"
-              style={{ backgroundColor: event.color || "#808080" }}
-            />
-            {/* Resize handles */}
-            <div
-              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                handleResizeStart(e, event.id, "top");
-              }}
-            />
-            <div
-              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                handleResizeStart(e, event.id, "bottom");
-              }}
-            />
-            <div className="px-3 py-1">
-              <div className="font-medium text-xs">{event.title}</div>
-              <div className="text-xs text-light-text/30 dark:text-dark-text/30">
-                {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
-              </div>
-              {isRepeatEvent && (
-                <div className="absolute bottom-1 right-1">
-                  <Repeat className="w-3 h-3" />
+          <Tooltip key={event.id}>
+            <TooltipTrigger asChild>
+              <motion.div
+                className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer select-none ${
+                  event.isEditing || dragState.eventId === event.id
+                    ? "bg-primary/30"
+                    : "bg-primary/10"
+                } event-item ${repeatClass}`}
+                style={getEventStyle(event, overlappingEvents, viewType)}
+                onMouseDown={(e) => {
+                  if (e.button === 0 && !e.target.closest(".resize-handle")) {
+                    handleDragStart(e, event);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  handleEventClick(event);
+                }}
+                onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+              >
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ backgroundColor: event.color || "#808080" }}
+                />
+                {/* Resize handles */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleResizeStart(e, event.id, "top");
+                  }}
+                />
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleResizeStart(e, event.id, "bottom");
+                  }}
+                />
+                <div className="px-3 py-1">
+                  <div className="font-medium text-xs">{event.title}</div>
+                  <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                    {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
+                  </div>
+                  {isRepeatEvent && (
+                    <div className="absolute bottom-1 right-1">
+                      <Repeat className="w-3 h-3" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </motion.div>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="start">
+              <EventTooltipContent event={event} />
+            </TooltipContent>
+          </Tooltip>
         );
       });
     } else {
@@ -177,10 +189,10 @@ const renderEvents = useCallback(() => {
       const dayStart = new Date(selectedDate);
       const dayEnd = new Date(dayStart);
       dayEnd.setDate(dayStart.getDate() + 1);
-      
+
       // First expand any recurring events
       const expandedEvents = expandRecurringEvents(events, dayStart, dayEnd);
-      
+
       // Then filter for events on this day
       const dayEvents = expandedEvents.filter((event) => {
         // Check both allDay and isAllDay properties to ensure compatibility
@@ -194,55 +206,60 @@ const renderEvents = useCallback(() => {
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
-          <motion.div
-            key={event.id}
-            whileTap={{ scale: 0.95 }}
-            className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
-              dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
-            } ${repeatClass}`}
-            style={getEventStyle(event, overlappingEvents, viewType)}
-            onMouseDown={(e) => {
-              if (e.button === 0 && !e.target.closest(".resize-handle")) {
-                handleDragStart(e, event);
-              }
-            }}
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              handleEventClick(event);
-            }}
-            onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-          >
-            <div
-              className="absolute left-0 top-0 bottom-0 w-1"
-              style={{ backgroundColor: event.color || "#808080" }}
-            />
-            {/* Resize handles */}
-            <div
-              className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                handleResizeStart(e, event.id, "top");
-              }}
-            />
-            <div
-              className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                handleResizeStart(e, event.id, "bottom");
-              }}
-            />
-            <div className="px-2 py-1">
-              <div className="font-medium text-sm">{event.title}</div>
-              <div className="text-xs text-light-text/30 dark:text-dark-text/30">
-                {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
-              </div>
-              {isRepeatEvent && (
-                <div className="absolute bottom-1 right-1">
-                  <Repeat className="w-3 h-3" />
+          <Tooltip key={event.id}>
+            <TooltipTrigger asChild>
+              <motion.div
+                className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
+                  dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
+                } ${repeatClass}`}
+                style={getEventStyle(event, overlappingEvents, viewType)}
+                onMouseDown={(e) => {
+                  if (e.button === 0 && !e.target.closest(".resize-handle")) {
+                    handleDragStart(e, event);
+                  }
+                }}
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  handleEventClick(event);
+                }}
+                onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+              >
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-1"
+                  style={{ backgroundColor: event.color || "#808080" }}
+                />
+                {/* Resize handles */}
+                <div
+                  className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleResizeStart(e, event.id, "top");
+                  }}
+                />
+                <div
+                  className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleResizeStart(e, event.id, "bottom");
+                  }}
+                />
+                <div className="px-3 py-1">
+                  <div className="font-medium text-xs">{event.title}</div>
+                  <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                    {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
+                  </div>
+                  {isRepeatEvent && (
+                    <div className="absolute bottom-1 right-1">
+                      <Repeat className="w-3 h-3" />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </motion.div>
+              </motion.div>
+            </TooltipTrigger>
+            <TooltipContent side="right" align="start">
+              <EventTooltipContent event={event} />
+            </TooltipContent>
+          </Tooltip>
         );
       });
     }
@@ -257,8 +274,6 @@ const renderEvents = useCallback(() => {
     handleResizeStart,
   ]);
 
-
-
   const renderAllDayEvents = () => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
@@ -269,23 +284,23 @@ const renderEvents = useCallback(() => {
       // Process multi-day events to determine their span across the week
       const processedEvents = [];
       const multiDayEvents = [];
-      
+
       // First, identify multi-day events that span across days
       events.forEach(event => {
         // Check both allDay and isAllDay properties to ensure compatibility
         const isAllDayEvent = event.allDay || event.isAllDay;
         const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
-        
+
         if (isAllDayEvent || isMultiDayEvent) {
           const eventStart = new Date(event.start);
           const eventEnd = new Date(event.end);
-          
+
           // Check if the event overlaps with our week view
           if (eventEnd >= weekStart && eventStart < weekEnd) {
             // Calculate the day index where this event starts and ends in our week view
             const startDayIndex = Math.max(0, Math.floor((eventStart - weekStart) / (24 * 60 * 60 * 1000)));
             const endDayIndex = Math.min(6, Math.floor((eventEnd - weekStart) / (24 * 60 * 60 * 1000)));
-            
+
             multiDayEvents.push({
               ...event,
               startDayIndex,
@@ -295,30 +310,30 @@ const renderEvents = useCallback(() => {
           }
         }
       });
-      
+
       // Group multi-day events by row to avoid overlaps
       const eventRows = [];
-      
+
       // Sort multi-day events by duration (longest first) to optimize layout
       multiDayEvents.sort((a, b) => b.span - a.span);
-      
+
       // Assign each event to a row where it fits
       multiDayEvents.forEach(event => {
         let rowIndex = 0;
         let placed = false;
-        
+
         while (!placed) {
           // Create new row if needed
           if (!eventRows[rowIndex]) {
             eventRows[rowIndex] = [];
           }
-          
+
           // Check if event can be placed in this row
           const canPlaceInRow = !eventRows[rowIndex].some(existingEvent => {
             return (event.startDayIndex <= existingEvent.endDayIndex && 
                     event.endDayIndex >= existingEvent.startDayIndex);
           });
-          
+
           if (canPlaceInRow) {
             eventRows[rowIndex].push(event);
             placed = true;
@@ -327,7 +342,7 @@ const renderEvents = useCallback(() => {
           }
         }
       });
-      
+
       // Calculate the total minimum height needed for the all-day section
       const numRows = eventRows.length > 0 ? eventRows.length : 1; // Ensure at least 1 row
 
@@ -469,14 +484,14 @@ const renderEvents = useCallback(() => {
                   // Check both allDay and isAllDay properties to ensure compatibility
                   const isAllDayEvent = event.allDay || event.isAllDay;
                   const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
-                  
+
                   // Include both all-day events and multi-day events that overlap with the selected date
                   const eventStart = new Date(event.start);
                   const eventEnd = new Date(event.end);
                   const selectedDateObj = new Date(selectedDate);
                   const nextDay = new Date(selectedDate);
                   nextDay.setDate(nextDay.getDate() + 1);
-                  
+
                   return (isAllDayEvent || isMultiDayEvent) && 
                          eventEnd >= selectedDateObj && 
                          eventStart < nextDay;

@@ -474,7 +474,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   return (
     <div className="flex h-full relative isolate">
-      <TooltipProvider delayDuration={400} skipDelayDuration={0}>
+      <TooltipProvider delayDuration={1000}>
       <AnimatePresence initial={false} mode="sync">
         {isSidebarVisible && (
           <motion.div

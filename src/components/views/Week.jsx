@@ -84,9 +84,11 @@ export default function Week({
           <div className="flex flex-col pointer-events-none">
             {HOURS.map((hour) => (
               <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'} pr-2 relative`}>
-                <span className="absolute right-2 top-[-10px] text-[10px] mt-0.5 text-light-text/50 dark:text-dark-text/50">
-                  {`${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}${hour < 12 ? 'AM' : 'PM'}`}
-                </span>
+                {hour !== 0 && (
+                  <span className="absolute right-2 top-[-10px] text-[10px] mt-0.5 text-light-text/50 dark:text-dark-text/50">
+                    {`${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}${hour < 12 ? 'AM' : 'PM'}`}
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -97,7 +99,9 @@ export default function Week({
             <div className="absolute inset-0">
               {HOURS.map((hour) => (
                 <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'}`}>
-                  <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
+                  {hour !== 0 && (
+                    <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
+                  )}
                 </div>
               ))}
               <div className="absolute inset-0 grid grid-cols-7 h-full">
