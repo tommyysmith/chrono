@@ -1192,7 +1192,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             }}
                             className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
-                            <CalendarIcon className="w-4 h-4" />
+                            <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
                           </button>
                         </PopoverContent>
@@ -1273,11 +1273,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <div className="flex-1">
                           <div className="flex flex-col divide-y divide-light-border dark:divide-dark-border">
                             <div className="flex flex-col">
-                              <div className="flex items-center gap-2 px-4 py-4 border-b border-light-border dark:border-dark-border">
+                              <div className="flex items-start gap-2 px-4 py-4 border-b border-light-border dark:border-dark-border">
                                 <Task
                                   className="w-5 h-5 text-light-text/50 dark:text-dark-text/50 rounded-[5px] mt-[5px]"
                                 />
-                                <div className="flex-1 flex-col gap-1 px-4">
+                                <div className="flex-1 flex-col gap-1 px-2">
                                   <input
                                     type="text"
                                     placeholder="Task title"
@@ -1475,10 +1475,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </button>
                               <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
                                 <Popover open={isTaskRepeatDropdownOpen} onOpenChange={setIsTaskRepeatDropdownOpen}>
-                                  <PopoverTrigger className="flex items-center justify-between w-full">
+                                  <PopoverTrigger className="flex group items-center justify-between w-full">
                                     <div className="flex items-center gap-2">
-                                      <Repeat className="w-4 h-4" />
-                                      <span className={`${taskRepeatOption === 'none' ? '' : 'text-light-text dark:text-dark-text'}`}>
+                                      <Repeat className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                                      <span className={`${taskRepeatOption === 'none' ? '' : 'group-hover:text-light-text dark:group-hover:text-dark-text'}`}>
                                         {getRepeatDisplayText(taskRepeatOption, taskRruleOptions)}
                                       </span>
                                     </div>
@@ -1905,15 +1905,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </div>
                       </div>
                       {/* Repeat Section */}
-                      <div className="flex items-top gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
+                      <div className="flex items-top group gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
                         <div className="w-5 h-5 flex items-center justify-center">
-                          <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                          <Repeat className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
                         </div>
 
                         <div className="flex flex-col gap-1">
                           <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
                             <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none" ref={repeatDropdownRef}>
-                              <span className={`text-sm font-medium ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
+                              <span className={`text-sm font-medium ${eventState.repeat === 'none' ? 'group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
                                 {getRepeatDisplayText(eventState.repeat, eventState.rruleOptions)}
                               </span>
                             </PopoverTrigger>
