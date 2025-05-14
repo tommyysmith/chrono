@@ -1194,7 +1194,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 ease: exitingRef.current || isAnimating ? "linear" : "easeInOut"
               }
             }}
-            className="bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] border border-light-border dark:border-dark-border px-4"
+            className="bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border px-4"
           >
             <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}>
               <motion.div 

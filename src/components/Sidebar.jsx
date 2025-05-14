@@ -634,23 +634,9 @@ export default function Sidebar({
 
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
-    <aside className="w-[280px] min-w-[280px] h-full border-r border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light overflow-y-auto relative flex flex-col">
+    <aside className="w-[280px] min-w-[280px] h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
-        <div className="flex p-2">
-          <TooltipProvider delayDuration={500}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={() => setIsVisible(false)}
-                  className="flex group w-[32px] h-[32px] mr-2 items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
-                >
-                  <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">Close Sidebar</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+        
         <div className="flex-1 min-h-0 relative overflow-hidden">
           <AnimatePresence initial={false} mode="sync">
             {activeTab === "tasks" ? (
@@ -666,11 +652,11 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex rounded-[9px] py-2 px-2">
+                <div className="flex rounded-[9px] ml-3 py-1 px-1 bg-black/5 dark:bg-white/5 gap-2">
                   <button
-                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px] ${
+                    className={`flex-grow items-center cursor-pointer text-xs flex-row w-full h-[28px] ${
                       selectedView === "all"
-                        ? "bg-light-bg-lighter font-semibold dark:bg-white/5"
+                        ? "font-medium shadow-sm text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                         : "text-light-text/50 dark:text-dark-text/50"
                     }`}
                     onClick={() => setSelectedView("all")}
@@ -678,9 +664,9 @@ export default function Sidebar({
                     All
                   </button>
                   <button
-                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
+                    className={`flex-grow items-center cursor-pointer text-xs flex-row w-full h-[28px] ${
                       selectedView === "completed"
-                        ? "bg-light-bg-lighter font-semibold dark:bg-white/5"
+                        ? "font-medium shadow-sm text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                         : "text-light-text/50 dark:text-dark-text/50"
                     }`}
                     onClick={() => setSelectedView("completed")}
@@ -688,7 +674,7 @@ export default function Sidebar({
                     Completed
                   </button>
                 </div>
-                <nav className="flex-1 overflow-auto border-t border-light-border dark:border-dark-border pt-2 rounded-t-[13px] bg-light-bg dark:bg-dark-bg">
+                <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg">
                   <div className="space-y-1 flex flex-col gap-2">
                     {selectedView === "all" ? (
                       sections.map((section) => (
@@ -1052,7 +1038,7 @@ export default function Sidebar({
           </div>
         )}
         {/* Tab selector */}
-        <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
+        <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
           <TooltipProvider delayDuration={0} skipDelayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>

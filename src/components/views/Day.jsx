@@ -25,7 +25,7 @@ export default function Day({
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Fixed Headers */}
-      <div className="flex-none bg-light-bg-light dark:bg-dark-bg-light z-10">
+      <div className="flex-none bg-light-bg dark:bg-dark-bg z-10">
         {/* Empty header space */}
         <div className="grid grid-cols-[60px_1fr]">
           <div className="flex flex-col pointer-events-none">

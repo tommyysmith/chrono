@@ -182,27 +182,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
 
     return (
-      <div className={`flex items-center justify-between bg-light-bg-light dark:bg-dark-bg-light px-4 py-4 border-b border-light-border dark:border-dark-border`}>
+
+      <div className={`flex items-center justify-between px-4 pt-4 pb-2`}>
+        
         <div className="flex items-center gap-2">
-          {!isSidebarVisible && (
-            <motion.div layout className="flex items-center gap-2">
-            <TooltipProvider delayDuration={500}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-            <button
-              onClick={() => setIsSidebarVisible(true)}
-              className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
-            >
-              <SidebarIcon className="w-5 h-5 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
-            </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="start">Open Sidebar</TooltipContent>
-            </Tooltip>
-            </TooltipProvider>
-           
-            <div className="w-[1px] h-[20px] bg-light-border dark:bg-dark-border"></div>
-            </motion.div>
-          )}
           <div className="flex items-center">
             <h1 className={`text-xl font-semibold ${isSidebarVisible ? 'ml-0' : 'ml-2'}`}>
               {selectedDate.toLocaleString("en-US", { month: "long" })}
@@ -213,60 +196,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </div>
         </div>
         <div className="flex items-center justify-center gap-1">
-          <div className="relative">
-            <Popover>
-              <PopoverTrigger asChild>
-                <div
-                  className="flex items-center cursor-pointer flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                >
-                  <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
-                    {viewType === ViewType.DAY
-                      ? "Day"
-                      : viewType === ViewType.WEEK
-                      ? "Week"
-                      : "Month"}
-                  </span>
-                  <svg
-                    className="w-4 h-4 ml-2 text-light-text/50 dark:text-dark-text/50 transition-transform"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                  >
-                    <path
-                      d="M19 9l-7 7-7-7"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
-                <div className="flex flex-col gap-1">
-                  {Object.values(ViewType).map((type) => (
-                    <button
-                      key={type}
-                      onClick={() => {
-                        setViewType(type);
-                      }}
-                      className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
-                        viewType === type
-                          ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
-                          : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
-                      }`}
-                    >
-                      <span>
-                        {type.charAt(0).toUpperCase() + type.slice(1)}
-                      </span>
-                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
-                        {type.charAt(0).toUpperCase()}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
+          {/* View selector moved to the top header */}
         </div>
       </div>
     );
@@ -473,9 +403,88 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, [isViewDropdownOpen]);
 
   return (
-    <div className="flex h-full relative isolate">
-      <TooltipProvider delayDuration={1000}>
-      <AnimatePresence initial={false} mode="sync">
+    <div className="flex flex-col h-full relative isolate">
+      {/* Full-width header */}
+      <div className='w-full h-14 bg-light-bg-light dark:bg-dark-bg flex items-center justify-between px-3'>
+        <div className="flex items-center">
+          <TooltipProvider delayDuration={500}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                  className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter transition-colors"
+                >
+                  <SidebarIcon className="w-5 h-5 text-light-text dark:text-dark-text" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" align="start">
+                {isSidebarVisible ? 'Close Sidebar' : 'Open Sidebar'}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+        
+        {/* View selector */}
+        <div className="flex items-center justify-center">
+          <Popover>
+            <PopoverTrigger asChild>
+              <div
+                className="flex items-center cursor-pointer flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+              >
+                <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
+                  {viewType === ViewType.DAY
+                    ? "Day"
+                    : viewType === ViewType.WEEK
+                    ? "Week"
+                    : "Month"}
+                </span>
+                <svg
+                  className="w-4 h-4 ml-2 text-light-text/50 dark:text-dark-text/50 transition-transform"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                >
+                  <path
+                    d="M19 9l-7 7-7-7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+              <div className="flex flex-col gap-1">
+                {Object.values(ViewType).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setViewType(type);
+                    }}
+                    className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
+                      viewType === type
+                        ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
+                        : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
+                    }`}
+                  >
+                    <span>
+                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                    </span>
+                    <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
+                      {type.charAt(0).toUpperCase()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+      
+      {/* Main content area with sidebar and calendar views */}
+      <div className="flex flex-1 overflow-hidden">
+        <TooltipProvider delayDuration={1000}>
+        <AnimatePresence initial={false} mode="sync">
         {isSidebarVisible && (
           <motion.div
             initial={{ x: "-100%", width: 0 }}
@@ -508,8 +517,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </motion.div>
         )}
       </AnimatePresence>
+      </TooltipProvider>
+      
       <motion.div 
-        className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg-light relative"
+        className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg relative"
         layout
         transition={{
           type: "easeInOut",
@@ -517,62 +528,65 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           ease: [0.25, 1, 0.5, 1],
         }}
       >
-        {/* Add header with z-index to ensure it's clickable */}
-        <div className="z-20 relative">
-          {renderHeader()}
-        </div>
-        {/* Calendar views */}
-        <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
-          <div className="absolute inset-0 flex flex-col">
-            {viewType === ViewType.WEEK && (
-              <Week
-                selectedDate={selectedDate}
-                events={displayEvents}
-                dragState={dragState}
-                setPendingEventCell={setPendingEventCell}
-                pendingEventCell={pendingEventCell}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-                handleCellDragStart={handleCellDragStart}
-                handleCellClick={handleCellClick}
-                handleDragOver={handleDragOver}
-                handleDrop={handleDrop}
-                getTimeFromMousePosition={getTimeFromMousePosition}
-                getColumnFromMousePosition={getColumnFromMousePosition}
-                renderEvents={renderEvents}
-                renderAllDayEvents={renderAllDayEvents}
-                timeGridRef={timeGridRef}
-                commandBarRef={commandBarRef}
-              />
-            )}
-            {viewType === ViewType.DAY && (
-              <Day
-                selectedDate={selectedDate}
-                events={displayEvents}
-                dragState={dragState}
-                pendingEventCell={pendingEventCell}
-                setPendingEventCell={setPendingEventCell}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-                handleCellDragStart={handleCellDragStart}
-                handleCellClick={handleCellClick}
-                handleDragOver={handleDragOver}
-                handleDrop={handleDrop}
-                getTimeFromMousePosition={getTimeFromMousePosition}
-                getColumnFromMousePosition={getColumnFromMousePosition}
-                renderEvents={renderEvents}
-                timeGridRef={timeGridRef}
-                commandBarRef={commandBarRef}
-              />
-            )}
-            {viewType === ViewType.MONTH && (
-              <Month
-                selectedDate={selectedDate}
-                events={displayEvents}
-                handleEventClick={handleEventClick}
-                handleEventContextMenu={handleEventContextMenu}
-              />
-            )}
+        {/* Calendar content wrapper */}
+        <div className="flex flex-col flex-1 mt-[1px] ml-3 mr-3 mb-3 bg-light-bg rounded-[9px] outline outline-[1px] outline-light-border dark:bg-dark-bg-light dark:outline-dark-border shadow-lg ">
+          {/* Add header with z-index to ensure it's clickable */}
+          <div className="z-20 relative">
+            {renderHeader()}
+          </div>
+          {/* Calendar views */}
+          <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
+            <div className="absolute inset-0 flex flex-col">
+              {viewType === ViewType.WEEK && (
+                <Week
+                  selectedDate={selectedDate}
+                  events={displayEvents}
+                  dragState={dragState}
+                  setPendingEventCell={setPendingEventCell}
+                  pendingEventCell={pendingEventCell}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                  handleCellDragStart={handleCellDragStart}
+                  handleCellClick={handleCellClick}
+                  handleDragOver={handleDragOver}
+                  handleDrop={handleDrop}
+                  getTimeFromMousePosition={getTimeFromMousePosition}
+                  getColumnFromMousePosition={getColumnFromMousePosition}
+                  renderEvents={renderEvents}
+                  renderAllDayEvents={renderAllDayEvents}
+                  timeGridRef={timeGridRef}
+                  commandBarRef={commandBarRef}
+                />
+              )}
+              {viewType === ViewType.DAY && (
+                <Day
+                  selectedDate={selectedDate}
+                  events={displayEvents}
+                  dragState={dragState}
+                  pendingEventCell={pendingEventCell}
+                  setPendingEventCell={setPendingEventCell}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                  handleCellDragStart={handleCellDragStart}
+                  handleCellClick={handleCellClick}
+                  handleDragOver={handleDragOver}
+                  handleDrop={handleDrop}
+                  getTimeFromMousePosition={getTimeFromMousePosition}
+                  getColumnFromMousePosition={getColumnFromMousePosition}
+                  renderEvents={renderEvents}
+                  timeGridRef={timeGridRef}
+                  commandBarRef={commandBarRef}
+                />
+              )}
+              {viewType === ViewType.MONTH && (
+                <Month
+                  selectedDate={selectedDate}
+                  events={displayEvents}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                />
+              )}
+            </div>
           </div>
         </div>
         {/* Context menu using Popover */}
@@ -672,7 +686,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         )}
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
       />
-      </TooltipProvider>
+      </div>
     </div>
   );
 }

@@ -251,10 +251,10 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   }, [filteredEvents.length, filteredTasks.length]);
 
   return (
-    <div className="flex bg-light-bg h-full rounded-t-[13px] border-t border-light-border dark:border-dark-border dark:bg-dark-bg flex-col gap-4">
+    <div className="flex h-full flex-col gap-4">
       <TooltipProvider delayDuration={750}>
         <div className="flex flex-col">
-        <div className="flex px-3 mt-2 justify-center">
+        <div className="flex px-3 justify-center">
           <DayPicker
             mode="single"
             selected={currentDate}

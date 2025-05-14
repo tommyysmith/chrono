@@ -347,7 +347,7 @@ export function useEventRendering(
       const numRows = eventRows.length > 0 ? eventRows.length : 1; // Ensure at least 1 row
 
       return (
-        <div className="grid grid-cols-[60px_1fr] border-t border-b border-light-border dark:border-dark-border">
+        <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
           <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
             All-day
           </div>

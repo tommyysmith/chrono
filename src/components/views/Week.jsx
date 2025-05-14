@@ -27,7 +27,7 @@ export default function Week({
   return (
     <div className="flex-1 flex select-none flex-col h-full">
       {/* Fixed Headers */}
-      <div className="flex-none bg-light-bg-light dark:bg-dark-bg-light z-10">
+      <div className="flex-none z-10">
         {/* Days header */}
         <div className="grid grid-cols-[60px_1fr]">
           {/* Time column header */}
