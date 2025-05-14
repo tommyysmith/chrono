@@ -94,7 +94,7 @@ const IconRight = memo(() => (
 IconLeft.displayName = 'IconLeft';
 IconRight.displayName = 'IconRight';
 
-export default function AgendaView({ events = [], tasks = [], selectedDate = new Date(), onDateSelect, isWeekView = false, onTaskComplete, onTaskDelete, onTaskEdit }) {
+export default function AgendaView({ events = [], tasks = [], selectedDate = new Date(), onDateSelect, isWeekView = false, onTaskComplete, onTaskDelete, onTaskEdit, commandBarRef }) {
   // Get task management functions
   const { getRecurringTaskInstances } = useTaskManagement();
   
@@ -183,16 +183,30 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
 
   // Handler for completing a task instance
   const handleTaskComplete = useCallback((task) => {
-    if (task.isRepeat || task.repeat) {
+    if (task.isRepeat) {
       // For recurring task instances, store completion state separately using a unique key
       const instanceKey = `${task.id}_${task.scheduledDate}`;
-      setCompletedInstances(prev => ({
-        ...prev,
-        [instanceKey]: !prev[instanceKey]
-      }));
+      setCompletedInstances(prev => {
+        const newState = {
+          ...prev,
+          [instanceKey]: !prev[instanceKey]
+        };
+        
+        // Save to localStorage
+        localStorage.setItem('completedTaskInstances', JSON.stringify(newState));
+        
+        // Dispatch a custom event to notify other components
+        window.dispatchEvent(new CustomEvent('tasksUpdated'));
+        
+        return newState;
+      });
     } else {
       // For regular tasks, use the normal completion handler
+      // This will update the task in all collections via the Sidebar's handleCompleteTask
       onTaskComplete(task.id);
+      
+      // Force a re-render of the agenda view
+      setCurrentDate(prev => new Date(prev.getTime()));
     }
   }, [onTaskComplete]);
 
@@ -342,9 +356,49 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
         {viewMode === 'events' ? (
           <>
             {filteredEvents.length === 0 ? (
-              <div className="text-center text-light-text/50 dark:text-dark-text/50 px-4">
-                No events scheduled for {isToday(currentDate) ? 'today' : format(currentDate, 'MMM d, yyyy')}
-              </div>
+              <div className="flex flex-col items-center justify-center px-4 rounded-[9px] py-6 text-center">
+                                              <div className="text-light-text/50 dark:text-dark-text/50 mb-3">
+                                                <CalendarIcon className="w-6 h-6" />
+                                              </div>
+                                              <p className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+                                              Nothing scheduled
+                                              </p>
+                                              <p className="text-xs text-light-text/50 dark:text-dark-text/50 mt-1 leading-relaxed">
+                                              Schedule an event or task for this date and you will see it here!
+                                              </p> 
+                                              <div className="flex gap-2">
+                                              <button 
+                                                onClick={() => {
+                                                  // If commandBarRef is available, open CommandBar with the current date
+                                                  if (commandBarRef?.current) {
+                                                    // Use the new openForNewTask method which opens the task creation flow
+                                                    commandBarRef.current.openForNewTask(new Date(currentDate));
+                                                  } else {
+                                                    // Fallback to the original behavior if commandBarRef is not available
+                                                    onDateSelect?.(new Date(currentDate));
+                                                  }
+                                                }}
+                                                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                                              >
+                                                Add task
+                                              </button>
+                                              <button 
+                                                onClick={() => {
+                                                  // If commandBarRef is available, open CommandBar with the current date
+                                                  if (commandBarRef?.current) {
+                                                    // Use the new openForNewEvent method which doesn't create an event immediately
+                                                    commandBarRef.current.openForNewEvent(new Date(currentDate));
+                                                  } else {
+                                                    // Fallback to the original behavior if commandBarRef is not available
+                                                    onDateSelect?.(new Date(currentDate));
+                                                  }
+                                                }}
+                                                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                                              >
+                                                Add event
+                                              </button>
+                                              </div>
+                                            </div>
             ) : (
               <div className="flex flex-col gap-6 px-3 py-2">
                 {filteredEvents.map((event) => (
@@ -361,40 +415,53 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
               </div>
             ) : (
               <div className="flex px-2 flex-col gap-2">
-                {filteredTasks.map((task) => (
-                  <TaskItem 
-                    key={task.id} 
-                    task={{
-                      ...task,
-                      tag: task.tag || null  // Ensure tag is always passed
-                    }}
-                    hideScheduledDate={true}  // Hide scheduled date in AgendaView
-                    onComplete={() => handleTaskComplete(task)}
-                    checked={task.isRepeat || task.repeat ? completedInstances[`${task.id}_${task.scheduledDate}`] : task.completed}
-                    onDelete={onTaskDelete}
-                    onDoubleClickEdit={(task) => {
-                      // If this is a recurring task instance, we need to find and edit the base task
-                      if (task.isRepeat && task.originalTaskId) {
-                        // Get the base task from localStorage
-                        const savedTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-                        const allTasks = savedTasks.all || [];
-                        const baseTask = allTasks.find(t => t.id === task.originalTaskId);
-                        
-                        if (baseTask) {
-                          // Edit the base task instead
-                          onTaskEdit(baseTask);
+                {filteredTasks.map((task) => {
+                  // Skip completed tasks in the AgendaView unless they're recurring instances
+                  if (task.completed && !task.isRepeat) return null;
+                  
+                  // For recurring instances, check if they're completed
+                  const isRecurringInstance = task.isRepeat;
+                  const instanceKey = isRecurringInstance ? `${task.id}_${task.scheduledDate}` : null;
+                  const isInstanceCompleted = isRecurringInstance ? completedInstances[instanceKey] : false;
+                  
+                  // Skip completed recurring instances
+                  if (isRecurringInstance && isInstanceCompleted) return null;
+                  
+                  return (
+                    <TaskItem 
+                      key={task.id} 
+                      task={{
+                        ...task,
+                        tag: task.tag || null  // Ensure tag is always passed
+                      }}
+                      hideScheduledDate={true}  // Hide scheduled date in AgendaView
+                      onComplete={() => handleTaskComplete(task)}
+                      checked={isRecurringInstance ? isInstanceCompleted : task.completed}
+                      onDelete={onTaskDelete}
+                      onDoubleClickEdit={(task) => {
+                        // If this is a recurring task instance, we need to find and edit the base task
+                        if (task.isRepeat && task.originalTaskId) {
+                          // Get the base task from localStorage
+                          const savedTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+                          const allTasks = savedTasks.all || [];
+                          const baseTask = allTasks.find(t => t.id === task.originalTaskId);
+                          
+                          if (baseTask) {
+                            // Edit the base task instead
+                            onTaskEdit(baseTask);
+                          } else {
+                            // Fallback to editing the instance
+                            onTaskEdit(task);
+                          }
                         } else {
-                          // Fallback to editing the instance
+                          // Regular task, edit normally
                           onTaskEdit(task);
                         }
-                      } else {
-                        // Regular task, edit normally
-                        onTaskEdit(task);
-                      }
-                    }}
-                    isRecurring={task.repeat && task.repeat !== 'none' || task.isRepeat}
-                  />
-                ))}
+                      }}
+                      isRecurring={task.repeat && task.repeat !== 'none' || task.isRepeat}
+                    />
+                  );
+                })}
               </div>
             )}
           </>

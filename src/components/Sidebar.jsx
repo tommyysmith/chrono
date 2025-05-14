@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { format, isToday, isTomorrow } from "date-fns";
 import { useTaskManagement } from "../hooks/useTaskManagement";
+import { Completed } from "../assets/icons/Completed";
 // import ThemeToggle from '../components/ThemeToggle';
 import {
   ChevronDown,
@@ -106,7 +107,7 @@ export default function Sidebar({
     localStorage.setItem("expandedSections", JSON.stringify(expandedSections));
   }, [expandedSections]);
 
-  const [selectedView, setSelectedView] = useState("all"); // 'all', 'today', or 'upcoming'
+  const [selectedView, setSelectedView] = useState("all"); // 'all', 'today', 'upcoming', or 'completed'
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState("");
   const [isTagDropdownOpen, setIsTagDropdownOpen] = useState(false);
@@ -145,6 +146,7 @@ export default function Sidebar({
       personal: [],
       travel: [],
       all: [],
+      completed: [], // New collection for completed tasks
     };
 
     // Try to load from localStorage
@@ -376,14 +378,65 @@ export default function Sidebar({
   const handleCompleteTask = (taskId) => {
     setTasks((prev) => {
       const newTasks = { ...prev };
-      // Update in all collections
+      
+      // Find the task in any collection
+      let taskToUpdate = null;
       Object.keys(newTasks).forEach((group) => {
         if (Array.isArray(newTasks[group])) {
-          newTasks[group] = newTasks[group].map((task) =>
-            task.id === taskId ? { ...task, completed: !task.completed } : task
-          );
+          const foundTask = newTasks[group].find(task => task.id === taskId);
+          if (foundTask) {
+            taskToUpdate = foundTask;
+          }
         }
       });
+      
+      if (!taskToUpdate) return prev; // Task not found
+      
+      const newCompletedState = !taskToUpdate.completed;
+      
+      if (newCompletedState) {
+        // Task is being marked as completed
+        // Add completedAt timestamp
+        const completedTask = {
+          ...taskToUpdate,
+          completed: true,
+          completedAt: new Date().toISOString()
+        };
+        
+        // Add to completed collection
+        newTasks.completed = [...(newTasks.completed || []), completedTask];
+        
+        // Remove from all other collections except 'completed'
+        Object.keys(newTasks).forEach((group) => {
+          if (group !== 'completed' && Array.isArray(newTasks[group])) {
+            newTasks[group] = newTasks[group].filter(task => task.id !== taskId);
+          }
+        });
+      } else {
+        // Task is being unmarked as completed
+        // Remove from completed collection
+        if (Array.isArray(newTasks.completed)) {
+          newTasks.completed = newTasks.completed.filter(task => task.id !== taskId);
+        }
+        
+        // Add back to all collection and its tag collection if it has one
+        const updatedTask = { ...taskToUpdate, completed: false };
+        delete updatedTask.completedAt; // Remove completedAt timestamp
+        
+        newTasks.all = [...(newTasks.all || []), updatedTask];
+        
+        // Add to tag collection if it has a tag
+        if (updatedTask.tag) {
+          const tagId = updatedTask.tag.id;
+          newTasks[tagId] = [...(newTasks[tagId] || []), updatedTask];
+        }
+        
+        // Add to today collection if scheduled for today
+        if (updatedTask.scheduledDate && isToday(new Date(updatedTask.scheduledDate))) {
+          newTasks.today = [...(newTasks.today || []), updatedTask];
+        }
+      }
+      
       // Save to localStorage immediately
       localStorage.setItem("tasks", JSON.stringify(newTasks));
       return newTasks;
@@ -439,6 +492,9 @@ export default function Sidebar({
       group.forEach((task) => {
         // Skip recurring task instances (only show the base task)
         if (task.isRepeat) return;
+        
+        // Skip completed tasks (they should only appear in the completed tab)
+        if (task.completed) return;
         
         // Use task.id as the key to ensure uniqueness
         unique[task.id] = task;
@@ -520,6 +576,43 @@ export default function Sidebar({
     }));
   };
 
+  // Function to check and remove completed tasks older than 24 hours
+  const removeExpiredCompletedTasks = useCallback(() => {
+    const now = new Date();
+    
+    setTasks(prev => {
+      if (!prev.completed || !Array.isArray(prev.completed)) return prev;
+      
+      // Filter out completed tasks older than 24 hours
+      const filteredCompletedTasks = prev.completed.filter(task => {
+        if (!task.completedAt) return true; // Keep tasks without completedAt timestamp
+        
+        const completedAt = new Date(task.completedAt);
+        const hoursDiff = (now - completedAt) / (1000 * 60 * 60); // Convert ms to hours
+        
+        return hoursDiff < 24; // Keep tasks completed less than 24 hours ago
+      });
+      
+      // If no tasks were removed, return the original state
+      if (filteredCompletedTasks.length === prev.completed.length) return prev;
+      
+      // Update the tasks state with filtered completed tasks
+      const newTasks = {
+        ...prev,
+        completed: filteredCompletedTasks
+      };
+      
+      // Save to localStorage
+      localStorage.setItem("tasks", JSON.stringify(newTasks));
+      return newTasks;
+    });
+  }, []);
+  
+  // Check for expired completed tasks when the component mounts
+  useEffect(() => {
+    removeExpiredCompletedTasks();
+  }, [removeExpiredCompletedTasks]);
+
   const getTasksForView = () => {
     if (selectedView === "all") {
       // For the All view, filter tasks by the current section
@@ -531,23 +624,11 @@ export default function Sidebar({
       } else {
         return allTasksArray;
       }
-    } else if (selectedView === "today") {
-      return allTasksArray
-        .filter((task) => {
-          if (!task.scheduledDate) return false;
-          const taskDate = new Date(task.scheduledDate);
-          return isToday(taskDate);
-        })
-        .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+    } else if (selectedView === "completed") {
+      // Get all completed tasks
+      return tasks.completed || [];
     } else {
-      // Get all scheduled tasks that are not today
-      return allTasksArray
-        .filter((task) => {
-          if (!task.scheduledDate) return false;
-          const taskDate = new Date(task.scheduledDate);
-          return !isToday(taskDate);
-        })
-        .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+      return [];
     }
   };
 
@@ -598,23 +679,13 @@ export default function Sidebar({
                   </button>
                   <button
                     className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
-                      selectedView === "today"
+                      selectedView === "completed"
                         ? "bg-light-bg-lighter font-semibold dark:bg-white/5"
                         : "text-light-text/50 dark:text-dark-text/50"
                     }`}
-                    onClick={() => setSelectedView("today")}
+                    onClick={() => setSelectedView("completed")}
                   >
-                    Today
-                  </button>
-                  <button
-                    className={`flex w-auto px-3 py-2 text-xs rounded-[5px]  ${
-                      selectedView === "upcoming"
-                        ? "bg-light-bg-lighter font-semibold dark:bg-white/5"
-                        : "text-light-text/50 dark:text-dark-text/50"
-                    }`}
-                    onClick={() => setSelectedView("upcoming")}
-                  >
-                    Upcoming
+                    Completed
                   </button>
                 </div>
                 <nav className="flex-1 overflow-auto border-t border-light-border dark:border-dark-border pt-2 rounded-t-[13px] bg-light-bg dark:bg-dark-bg">
@@ -786,82 +857,76 @@ export default function Sidebar({
                         </div>
                       ))
                     ) : (
-                      // Today and Upcoming views - chronological agenda
+                      // Today, Upcoming, and Completed views
                       <div className="flex flex-col px-3 gap-1 mt-2">
                         {(() => {
                           const tasks = getTasksForView();
-                          if (selectedView === "today") {
-                            return tasks.map((task) => (
-                              <TaskItem
-                                key={task.id}
-                                task={{
-                                  ...task,
-                                  tag: task.tag || null,
-                                }}
-                                onComplete={handleCompleteTask}
-                                onDelete={handleDeleteTask}
-                                onEdit={handleEditTask}
-                                onClick={() => setSelectedTaskId(task.id)}
-                                isSelected={selectedTaskId === task.id}
-                                hideTag={false} // Show tags in Today/Upcoming views
-                              />
-                            ));
+                          if (selectedView === "completed") {
+                            return tasks.length > 0 ? (
+                              tasks.map((task) => (
+                                <TaskItem
+                                  key={task.id}
+                                  task={{
+                                    ...task,
+                                    tag: task.tag || null,
+                                  }}
+                                  onComplete={handleCompleteTask}
+                                  onDelete={handleDeleteTask}
+                                  onEdit={handleEditTask}
+                                  onDoubleClickEdit={handleEditTask}
+                                  onClick={() => setSelectedTaskId(task.id)}
+                                  isSelected={selectedTaskId === task.id}
+                                  hideTag={false}
+                                  checked={true} // Force checked state for completed tasks
+                                />
+                              ))
+                            ) : (
+                              <div className="flex flex-col items-center justify-center px-4 rounded-[9px] py-6 text-center">
+                                <div className="text-light-text/50 dark:text-dark-text/50 mb-3">
+                                  <Completed className="w-6 h-6" />
+                                </div>
+                                <p className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+                                  No completed tasks yet
+                                </p>
+                                <p className="text-xs text-light-text/50 dark:text-dark-text/50 mt-1 leading-relaxed">
+                                  Completed tasks will appear here for 24 hours
+                                </p>
+                              </div>
+                            );
                           } else {
-                            // Group tasks by date for Upcoming view
-                            const tasksByDate = tasks.reduce((groups, task) => {
-                              const date = new Date(task.scheduledDate);
-                              const dateStr = format(date, "yyyy-MM-dd");
-                              if (!groups[dateStr]) {
-                                groups[dateStr] = [];
-                              }
-                              groups[dateStr].push(task);
-                              return groups;
-                            }, {});
-
-                            return Object.entries(tasksByDate).map(
-                              ([dateStr, dateTasks]) => {
-                                const date = new Date(dateStr);
-                                const today = new Date();
-                                const tomorrow = new Date(today);
-                                tomorrow.setDate(tomorrow.getDate() + 1);
-
-                                let dateDisplay;
-                                if (isToday(date)) {
-                                  dateDisplay = "Today";
-                                } else if (isTomorrow(date)) {
-                                  dateDisplay = "Tomorrow";
-                                } else {
-                                  dateDisplay = format(date, "EEEE, MMMM d");
-                                }
-
-                                return (
-                                  <div
-                                    key={dateStr}
-                                    className="flex flex-col gap-1"
-                                  >
-                                    <div className="px-2 py-1 text-xs font-medium text-light-text/50 dark:text-dark-text/50">
-                                      {dateDisplay}
-                                    </div>
-                                    {dateTasks.map((task) => (
-                                      <TaskItem
-                                        key={task.id}
-                                        task={{
-                                          ...task,
-                                          tag: task.tag || null,
-                                        }}
-                                        onComplete={handleCompleteTask}
-                                        onDelete={handleDeleteTask}
-                                        onEdit={handleEditTask}
-                                        onClick={() =>
-                                          setSelectedTaskId(task.id)
-                                        }
-                                        isSelected={selectedTaskId === task.id}
-                                        hideTag={false} // Show tags in Today/Upcoming views
-                                      />
-                                    ))}
-                                  </div>
-                                );
-                              }
+                            // Default view for regular tasks (not completed)
+                            return tasks.length > 0 ? (
+                              tasks.map((task) => (
+                                <TaskItem
+                                  key={task.id}
+                                  task={{
+                                    ...task,
+                                    tag: task.tag || null,
+                                  }}
+                                  onComplete={handleCompleteTask}
+                                  onDelete={handleDeleteTask}
+                                  onEdit={handleEditTask}
+                                  onDoubleClickEdit={handleEditTask}
+                                  onClick={() => setSelectedTaskId(task.id)}
+                                  isSelected={selectedTaskId === task.id}
+                                  hideTag={false}
+                                />
+                              ))
+                            ) : (
+                              <div className="flex flex-col items-center justify-center py-8 text-center">
+                                <div className="text-light-text/40 dark:text-dark-text/40 mb-2">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 20h9"></path>
+                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                  </svg>
+                                </div>
+                                <p className="text-sm text-light-text/60 dark:text-dark-text/60">
+                                  No tasks yet
+                                </p>
+                                <p className="text-xs text-light-text/40 dark:text-dark-text/40 mt-1">
+                                  Create a task to get started
+                                </p>
+                              </div>
                             );
                           }
                         })()}
@@ -896,6 +961,7 @@ export default function Sidebar({
                     onTaskComplete={handleCompleteTask}
                     onTaskDelete={handleDeleteTask}
                     onTaskEdit={handleEditTask}
+                    commandBarRef={commandBarRef}
                   />
                 </div>
               </motion.div>

@@ -673,6 +673,58 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setIsAddingEvent(true);
       setHasChanges(false);
     },
+    openForNewEvent: (date) => {
+      // Create a date object at 9:00 AM for the given date
+      const startTime = new Date(date);
+      startTime.setHours(9, 0, 0, 0);
+      
+      // Create an end time 1 hour later
+      const endTime = new Date(startTime);
+      endTime.setHours(10, 0, 0, 0);
+      
+      // Set up the event state without creating an actual event
+      const eventState = {
+        title: '',
+        description: '',
+        date: format(startTime, 'yyyy-MM-dd'),
+        endDate: format(startTime, 'yyyy-MM-dd'),
+        startTime: format(startTime, 'HH:mm'),
+        endTime: format(endTime, 'HH:mm'),
+        isAllDay: false,
+        isMultiDay: false,
+        color: '#3B82F6',
+        repeat: 'none',
+        seriesId: null,
+        rruleOptions: null
+      };
+
+      // Set original event state to null since this is a new event
+      setOriginalEventState(null);
+      setEventState(eventState);
+      setIsAddingEvent(true);
+      setHasChanges(false);
+    },
+    openForNewTask: (date) => {
+      // Reset the task state
+      setTaskTitle('');
+      setTaskNotes('');
+      setSelectedTag(null);
+      setDraftTag(null);
+      setTagSearchText('');
+      setTaskRepeatOption('none');
+      setTaskRepeatSeriesId(null);
+      setTaskRruleOptions(null);
+      setEditingTaskId(null);
+      setTaskToEdit(null);
+      
+      // Set the scheduled date to the provided date
+      setScheduledDate(new Date(date));
+      
+      // Open the CommandBar in task creation mode
+      setIsOpen(true);
+      setIsAddingTask(true);
+      setIsAddingEvent(false);
+    },
     openForEdit,
     openForTaskEdit
   }), [onCreateEvent, openForEdit, openForTaskEdit]);
