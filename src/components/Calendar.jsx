@@ -41,6 +41,8 @@ import { TAG_COLORS } from "../constants/colors";
 import { Trash } from "@/assets/icons/Trash";
 import { Copy } from "@/assets/icons/Copy";
 import { SidebarIcon } from "@/assets/icons/Sidebar";
+import { Check } from "@/assets/icons/Check";
+import { Pencil } from "lucide-react";
 
 const ViewType = {
   DAY: "day",
@@ -101,7 +103,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleColorSelect,
     handleEventDelete,
     handleEventDuplicate,
-  } = useContextMenu(events, setEvents, handleDeleteEvent, setDeleteModalState);
+    handleEventEdit,
+  } = useContextMenu(
+    events,
+    setEvents,
+    handleDeleteEvent,
+    setDeleteModalState,
+    commandBarRef,
+    setRepeatEditModalState
+  );
 
   const {
     dragState,
@@ -406,9 +416,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     <div className="flex flex-col h-full relative isolate">
       {/* Full-width header */}
       <div className='w-full h-14 bg-light-bg-light dark:bg-dark-bg flex items-center justify-between px-3'>
+      
         <div className="flex items-center">
           <TooltipProvider delayDuration={500}>
             <Tooltip>
+              <div className="flex items-center min-w-[86px]">
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setIsSidebarVisible(!isSidebarVisible)}
@@ -420,16 +432,25 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               <TooltipContent side="bottom" align="start">
                 {isSidebarVisible ? 'Close Sidebar' : 'Open Sidebar'}
               </TooltipContent>
+              </div>
             </Tooltip>
           </TooltipProvider>
         </div>
+        <div className="flex items-center">
+            <h1 className={`text-xl font-semibold`}>
+              {selectedDate.toLocaleString("en-US", { month: "long" })}
+            </h1>
+            <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
+              {selectedDate.getFullYear()}
+            </span>
+          </div>
         
         {/* View selector */}
         <div className="flex items-center justify-center">
           <Popover>
             <PopoverTrigger asChild>
               <div
-                className="flex items-center cursor-pointer flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                className="flex items-center justify-between cursor-pointer min-w-[86px] flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
               >
                 <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
                   {viewType === ViewType.DAY
@@ -488,7 +509,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         {isSidebarVisible && (
           <motion.div
             initial={{ x: "-100%", width: 0 }}
-            animate={{ x: 0, width: 280 }}
+            animate={{ x: 0, width: 240 }}
             exit={{ x: "-100%", width: 0 }}
             transition={{
               type: "easeInOut",
@@ -497,7 +518,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             }}
             className="overflow-hidden h-full"
           >
-            <div className="w-[280px] h-full">
+            <div className="w-[240px] h-full">
               <Sidebar
                 commandBarRef={commandBarRef}
                 events={events}
@@ -529,11 +550,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         }}
       >
         {/* Calendar content wrapper */}
-        <div className="flex flex-col flex-1 mt-[1px] ml-3 mr-3 mb-3 bg-light-bg rounded-[9px] outline outline-[1px] outline-light-border dark:bg-dark-bg-light dark:outline-dark-border shadow-lg ">
+        <div className="flex flex-col flex-1 mt-[1px] ml-3 bg-light-bg rounded-tl-[9px] outline outline-[1px] outline-light-border dark:bg-dark-bg-light dark:outline-dark-border shadow-lg ">
           {/* Add header with z-index to ensure it's clickable */}
-          <div className="z-20 relative">
-            {renderHeader()}
-          </div>
+          
           {/* Calendar views */}
           <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
             <div className="absolute inset-0 flex flex-col">
@@ -600,7 +619,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </PopoverTrigger>
           <PopoverContent 
             ref={contextMenuRef}
-            className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 border border-light-border dark:border-dark-border w-[280px] p-0"
+            className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border w-[280px] p-0"
             sideOffset={5}
             align="start"
             side="bottom"
@@ -608,16 +627,25 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           >
             <div>
               <div className="flex flex-wrap gap-2 pb-2 p-3">
-                {colors.map((color) => (
-                  <motion.button
-                    key={color}
-                    whileHover={{ scale: 1.02 }}
-                    className="w-5 h-5 rounded-md hover:ring-1 hover:ring-offset-1 hover:ring-light-border hover:dark:ring-dark-border transition-all"
-                    style={{ backgroundColor: color }}
-                    onClick={(e) => handleColorSelect(e, color)}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  />
-                ))}
+                {colors.map((color) => {
+                  const eventForMenu = events.find(e => e.id === contextMenu.eventId);
+                  const isSelected = eventForMenu && eventForMenu.color === color;
+                  return (
+                    <motion.button
+                      key={color}
+                      whileHover={{ scale: 1.1 }} 
+                      whileTap={{ scale: 0.9 }}
+                      className="relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center"
+                      style={{ backgroundColor: color }}
+                      onClick={(e) => handleColorSelect(e, color)}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
+                      {isSelected && (
+                        <Check className="w-3 h-3 text-white" /> 
+                      )}
+                    </motion.button>
+                  );
+                })}
               </div>
               <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
               <div className="p-1">
@@ -628,6 +656,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 >
                   <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
                   Duplicate
+                </button>
+
+                <button
+                  className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
+                  onClick={(e) => handleEventEdit(e)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <Pencil className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
+                  Edit
                 </button>
 
                 <button

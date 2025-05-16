@@ -6,6 +6,7 @@ import { ViewType } from "../constants/views";
 import { motion } from "framer-motion";
 import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
 import {
+  TooltipProvider,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -126,7 +127,8 @@ export function useEventRendering(
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
-          <Tooltip key={event.id}>
+          <TooltipProvider key={event.id} delayDuration={2000}>
+          <Tooltip>
             <TooltipTrigger asChild>
               <motion.div
                 className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer select-none ${
@@ -182,6 +184,7 @@ export function useEventRendering(
               <EventTooltipContent event={event} />
             </TooltipContent>
           </Tooltip>
+          </TooltipProvider>
         );
       });
     } else {
@@ -206,60 +209,62 @@ export function useEventRendering(
         const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
         return (
-          <Tooltip key={event.id}>
-            <TooltipTrigger asChild>
-              <motion.div
-                className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
-                  dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
-                } ${repeatClass}`}
-                style={getEventStyle(event, overlappingEvents, viewType)}
-                onMouseDown={(e) => {
-                  if (e.button === 0 && !e.target.closest(".resize-handle")) {
-                    handleDragStart(e, event);
-                  }
-                }}
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  handleEventClick(event);
-                }}
-                onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-              >
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1"
-                  style={{ backgroundColor: event.color || "#808080" }}
-                />
-                {/* Resize handles */}
-                <div
-                  className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+          <TooltipProvider key={event.id} delayDuration={2000}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <motion.div
+                  className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
+                    dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
+                  } ${repeatClass}`}
+                  style={getEventStyle(event, overlappingEvents, viewType)}
                   onMouseDown={(e) => {
-                    e.stopPropagation();
-                    handleResizeStart(e, event.id, "top");
+                    if (e.button === 0 && !e.target.closest(".resize-handle")) {
+                      handleDragStart(e, event);
+                    }
                   }}
-                />
-                <div
-                  className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
-                  onMouseDown={(e) => {
+                  onDoubleClick={(e) => {
                     e.stopPropagation();
-                    handleResizeStart(e, event.id, "bottom");
+                    handleEventClick(event);
                   }}
-                />
-                <div className="px-3 py-1">
-                  <div className="font-medium text-xs">{event.title}</div>
-                  <div className="text-xs text-light-text/30 dark:text-dark-text/30">
-                    {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
-                  </div>
-                  {isRepeatEvent && (
-                    <div className="absolute bottom-1 right-1">
-                      <Repeat className="w-3 h-3" />
+                  onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                >
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1"
+                    style={{ backgroundColor: event.color || "#808080" }}
+                  />
+                  {/* Resize handles */}
+                  <div
+                    className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleResizeStart(e, event.id, "top");
+                    }}
+                  />
+                  <div
+                    className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      handleResizeStart(e, event.id, "bottom");
+                    }}
+                  />
+                  <div className="px-3 py-1">
+                    <div className="font-medium text-xs">{event.title}</div>
+                    <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                      {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            </TooltipTrigger>
-            <TooltipContent side="right" align="start">
-              <EventTooltipContent event={event} />
-            </TooltipContent>
-          </Tooltip>
+                    {isRepeatEvent && (
+                      <div className="absolute bottom-1 right-1">
+                        <Repeat className="w-3 h-3" />
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              </TooltipTrigger>
+              <TooltipContent side="right" align="start">
+                <EventTooltipContent event={event} />
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         );
       });
     }
@@ -388,36 +393,45 @@ export function useEventRendering(
                     const isPastEvent = new Date(event.end) < now;
 
                     return (
-                      <div
-                        key={event.id}
-                        onDoubleClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event);
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        onContextMenu={(e) =>
-                          handleEventContextMenu(e, event.id)
-                        }
-                        className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
-                        style={{
-                          backgroundColor: event.color
-                            ? `${event.color}20`
-                            : "#80808020",
-                          opacity: isPastEvent ? 0.5 : 1,
-                        }}
-                      >
-                        <div
-                          className="w-1 self-stretch"
-                          style={{ backgroundColor: event.color || "#808080" }}
-                        />
-                        <div className="px-2 py-1 truncate">
-                          <div className="font-medium text-xs truncate">
-                            {event.title}
-                          </div>
-                        </div>
-                      </div>
+                      <TooltipProvider key={event.id} delayDuration={2000}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              // key={event.id} // Key moved to TooltipProvider
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                handleEventClick(event);
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                              }}
+                              onContextMenu={(e) =>
+                                handleEventContextMenu(e, event.id)
+                              }
+                              className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                              style={{
+                                backgroundColor: event.color
+                                  ? `${event.color}20`
+                                  : "#80808020",
+                                opacity: isPastEvent ? 0.5 : 1,
+                              }}
+                            >
+                              <div
+                                className="w-1 self-stretch"
+                                style={{ backgroundColor: event.color || "#808080" }}
+                              />
+                              <div className="px-2 py-1 truncate">
+                                <div className="font-medium text-xs truncate">
+                                  {event.title}
+                                </div>
+                              </div>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" align="start">
+                            <EventTooltipContent event={event} />
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     );
                   })}
                 </div>
@@ -439,30 +453,39 @@ export function useEventRendering(
                 };
 
                 return (
-                  <div
-                    key={event.id}
-                    className="relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Changed m-px to m-1
-                    style={eventStyle}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(event);
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation(); // Prevent triggering cell click
-                    }}
-                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                  >
-                    <div
-                      className="w-1 self-stretch"
-                      style={{ backgroundColor: event.color || "#808080" }}
-                    />
-                    <div className="px-2 py-1 truncate">
-                      <div className="font-medium text-xs truncate">
-                        {event.title}
-                      </div>
-                    </div>
-                    {/* Add resize handles if needed in the future */}
-                  </div>
+                  <TooltipProvider key={event.id} delayDuration={2000}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          // key={event.id} // Key moved to TooltipProvider
+                          className="relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Changed m-px to m-1
+                          style={eventStyle}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            handleEventClick(event);
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering cell click
+                          }}
+                          onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                        >
+                          <div
+                            className="w-1 self-stretch"
+                            style={{ backgroundColor: event.color || "#808080" }}
+                          />
+                          <div className="px-2 py-1 truncate">
+                            <div className="font-medium text-xs truncate">
+                              {event.title}
+                            </div>
+                          </div>
+                          {/* Add resize handles if needed in the future */}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start">
+                        <EventTooltipContent event={event} />
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 );
               });
             })}
@@ -502,37 +525,46 @@ export function useEventRendering(
                 const isPastEvent = new Date(event.end) < now;
 
                 return (
-                  <div
-                    key={event.id}
-                    className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
-                    style={{
-                      backgroundColor: event.color
-                        ? `${event.color}20`
-                        : "#80808020",
-                      opacity: isPastEvent ? 0.5 : 1,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(event);
-                    }}
-                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                  >
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-1"
-                      style={{ backgroundColor: event.color || "#808080" }}
-                    />
-                    <div className="px-3 py-1">
-                      <div className="font-medium text-xs">{event.title}</div>
-                      {event.isMultiDay && (
-                        <div className="text-xs text-light-text/30 dark:text-dark-text/30">
-                          {format(new Date(event.start), "MMM d")} - {format(new Date(event.end), "MMM d")}
+                  <TooltipProvider key={event.id} delayDuration={2000}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          // key={event.id} // Key moved to TooltipProvider
+                          className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
+                          style={{
+                            backgroundColor: event.color
+                              ? `${event.color}20`
+                              : "#80808020",
+                            opacity: isPastEvent ? 0.5 : 1,
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            handleEventClick(event);
+                          }}
+                          onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                        >
+                          <div
+                            className="absolute left-0 top-0 bottom-0 w-1"
+                            style={{ backgroundColor: event.color || "#808080" }}
+                          />
+                          <div className="px-3 py-1">
+                            <div className="font-medium text-xs">{event.title}</div>
+                            {event.isMultiDay && (
+                              <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                                {format(new Date(event.start), "MMM d")} - {format(new Date(event.end), "MMM d")}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="start">
+                        <EventTooltipContent event={event} />
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 );
               })}
           </div>

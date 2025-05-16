@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { format, isToday, isTomorrow } from "date-fns";
 import { useTaskManagement } from "../hooks/useTaskManagement";
 import { Completed } from "../assets/icons/Completed";
+import { Check } from "../assets/icons/Check"; 
 // import ThemeToggle from '../components/ThemeToggle';
 import {
   ChevronDown,
@@ -634,7 +635,7 @@ export default function Sidebar({
 
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
-    <aside className="w-[280px] min-w-[280px] h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
+    <aside className="w-[240px] min-w-[240px] h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col">
         
         <div className="flex-1 min-h-0 relative overflow-hidden">
@@ -652,26 +653,51 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex rounded-[9px] ml-3 py-1 px-1 bg-black/5 dark:bg-white/5 gap-2">
+                <div className="flex rounded-[9px] ml-3 p-1 bg-black/5 dark:bg-black/30 gap-2">
+                  {/* "All" Button */}
                   <button
-                    className={`flex-grow items-center cursor-pointer text-xs flex-row w-full h-[28px] ${
-                      selectedView === "all"
-                        ? "font-medium shadow-sm text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                        : "text-light-text/50 dark:text-dark-text/50"
-                    }`}
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[28px] rounded-[5px] transition-colors duration-150 ease-in-out
+                                ${
+                                  selectedView === "all"
+                                    ? "font-medium text-light-text dark:text-dark-text"
+                                    : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                                }`}
                     onClick={() => setSelectedView("all")}
                   >
-                    All
+                    <span className="relative z-10">All</span>
+                    {selectedView === "all" && (
+                      <motion.div
+                        layoutId="activeTabIndicator"
+                        className="absolute inset-0 rounded-[5px] shadow-sm 
+                                   bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% 
+                                   dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] 
+                                   outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border"
+                        transition={{ type: "spring", stiffness: 600, damping: 40 }}
+                      />
+                    )}
                   </button>
+
+                  {/* "Completed" Button */}
                   <button
-                    className={`flex-grow items-center cursor-pointer text-xs flex-row w-full h-[28px] ${
-                      selectedView === "completed"
-                        ? "font-medium shadow-sm text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                        : "text-light-text/50 dark:text-dark-text/50"
-                    }`}
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[28px] rounded-[5px] transition-colors duration-150 ease-in-out
+                                ${
+                                  selectedView === "completed"
+                                    ? "font-medium text-light-text dark:text-dark-text"
+                                    : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                                }`}
                     onClick={() => setSelectedView("completed")}
                   >
-                    Completed
+                    <span className="relative z-10">Completed</span>
+                    {selectedView === "completed" && (
+                      <motion.div
+                        layoutId="activeTabIndicator" // Same layoutId
+                        className="absolute inset-0 rounded-[5px] shadow-sm 
+                                   bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% 
+                                   dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] 
+                                   outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border"
+                        transition={{ type: "spring", stiffness: 600, damping: 40 }}
+                      />
+                    )}
                   </button>
                 </div>
                 <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg">
@@ -753,7 +779,7 @@ export default function Sidebar({
                                       setColorMenuOpen(true);
                                     }
                                   }}
-                                  className="flex group px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-white/5"
+                                  className="flex group px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
                                 >
                                   <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
                                 </button>
@@ -844,7 +870,7 @@ export default function Sidebar({
                       ))
                     ) : (
                       // Today, Upcoming, and Completed views
-                      <div className="flex flex-col px-3 gap-1 mt-2">
+                      <div className="flex flex-col pl-3 gap-1 mt-2">
                         {(() => {
                           const tasks = getTasksForView();
                           if (selectedView === "completed") {
@@ -962,7 +988,7 @@ export default function Sidebar({
                 <div className="w-0 h-0" />
               </PopoverTrigger>
               <PopoverContent
-                className="p-0 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border"
+                className="p-0 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md outline outline-1 outline-dark-border dark:outline-dark-border"
                 align="start"
                 side="right"
                 sideOffset={5}
@@ -971,67 +997,72 @@ export default function Sidebar({
               >
                 <div className="pointer-events-auto">
                   <div className="flex flex-wrap gap-2 pb-1 p-3" style={{ maxWidth: '280px' }}>
-                    {TAG_COLORS.map((color) => (
-                      <motion.div
-                        key={color}
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className={`w-5 h-5 rounded-[5px] cursor-pointer hover:ring-1 hover:ring-offset-1 hover:ring-light-border-2 dark:hover:ring-dark-border transition-all ${selectedTagId && tags.find(tag => tag.id === selectedTagId)?.color === color ? 'ring-1 ring-offset-1 ring-light-border dark:ring-dark-border' : ''}`}
-                        style={{ backgroundColor: color }}
-                        onClick={() => {
-                          // Update the tag color
-                          setTags((prevTags) => {
-                            const updatedTags = prevTags.map((tag) =>
-                              tag.id === selectedTagId ? { ...tag, color: color } : tag
-                            );
-                            localStorage.setItem("tags", JSON.stringify(updatedTags));
-                            return updatedTags;
-                          });
-
-                          // Update all tasks that use this tag
-                          setTasks((prevTasks) => {
-                            const updatedTasks = { ...prevTasks };
-                            Object.keys(updatedTasks).forEach((group) => {
-                              if (Array.isArray(updatedTasks[group])) {
-                                updatedTasks[group] = updatedTasks[group].map((task) =>
-                                  task.tag?.id === selectedTagId
-                                    ? {
-                                        ...task,
-                                        tag: {
-                                          ...task.tag,
-                                          color: color,
-                                        },
-                                      }
-                                    : task
-                                );
-                              }
-                            });
-                            localStorage.setItem("tasks", JSON.stringify(updatedTasks));
-                            return updatedTasks;
-                          });
-
-                          setColorMenuOpen(false);
-                        }}
-                      />
-                    ))}
-                  </div>
-                  {selectedTagId && (
-                    <>
-                      <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-                      <div className="p-1">
-                        <button
-                          className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                    {TAG_COLORS.map((color) => {
+                      const selectedTag = tags.find(t => t.id === selectedTagId);
+                      const isSelected = selectedTag && selectedTag.color === color;
+                      return (
+                        <motion.div
+                          key={color}
+                          className={`relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center`}
+                          style={{ backgroundColor: color }}
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
                           onClick={() => {
-                            setTags((prevTags) => prevTags.filter((tag) => tag.id !== selectedTagId));
+                            const updatedTags = tags.map((t) =>
+                              t.id === selectedTagId ? { ...t, color: color } : t
+                            );
+                            setTags(updatedTags);
+
+                            // Update all tasks that use this tag
+                            setTasks((prevTasks) => {
+                              const updatedTasksState = { ...prevTasks };
+                              Object.keys(updatedTasksState).forEach((group) => {
+                                if (Array.isArray(updatedTasksState[group])) {
+                                  updatedTasksState[group] = updatedTasksState[group].map((task) =>
+                                    task.tag?.id === selectedTagId
+                                      ? {
+                                          ...task,
+                                          tag: {
+                                            ...task.tag,
+                                            color: color,
+                                          },
+                                        }
+                                      : task
+                                  );
+                                }
+                              });
+                              return updatedTasksState;
+                            });
+
                             setColorMenuOpen(false);
                           }}
                         >
-                          <Trash className="w-3 h-3" />
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
+                          {isSelected && (
+                            <Check className="w-4 h-4 text-white" />
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-1">
+                    {selectedTagId && (
+                      <>
+                        <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
+                        <div className="p-1">
+                          <button
+                            className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                            onClick={() => {
+                              setTags((prevTags) => prevTags.filter((tag) => tag.id !== selectedTagId));
+                              setColorMenuOpen(false);
+                            }}
+                          >
+                            <Trash className="w-3 h-3" />
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </PopoverContent>
             </Popover>
@@ -1046,11 +1077,11 @@ export default function Sidebar({
                   onClick={() => setActiveTab("tasks")}
                   className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
                     activeTab === "tasks"
-                      ? "bg-light-bg-lighter dark:bg-white/10"
-                      : "hover:bg-light-bg-light dark:hover:bg-white/5"
+                      ? "bg-light-bg-lighter dark:bg-dark-bg-lighter"
+                      : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
                   }`}
                 >
-                  <Task
+                  <Completed
                     className={`w-5 h-5 ${
                       activeTab === "tasks"
                         ? "text-light-text dark:text-dark-text"
@@ -1068,8 +1099,8 @@ export default function Sidebar({
                   onClick={() => setActiveTab("agenda")}
                   className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
                     activeTab === "agenda"
-                      ? "bg-light-bg-lighter dark:bg-white/10"
-                      : "hover:bg-light-bg-light dark:hover:bg-white/5"
+                      ? "bg-light-bg-lighter dark:bg-dark-bg-lighter"
+                      : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
                   }`}
                 >
                   <InboxIcon

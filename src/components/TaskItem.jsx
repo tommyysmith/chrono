@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Pencil, CalendarClock } from 'lucide-react';
 import Checkbox from './Checkbox';
@@ -19,6 +19,34 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
 
   const taskItemRef = useRef(null);
+
+  const [isMultiLine, setIsMultiLine] = useState(false);
+  const textSpanRef = useRef(null);
+
+  useEffect(() => {
+    if (textSpanRef.current) {
+      const span = textSpanRef.current;
+      const computedStyle = window.getComputedStyle(span);
+      const lineHeightStyle = computedStyle.lineHeight;
+      const fontSizeStyle = computedStyle.fontSize; // Needed for 'normal' line-height calculation
+      let lineHeightPx;
+
+      if (lineHeightStyle === 'normal') {
+        const fontSizePx = parseFloat(fontSizeStyle);
+        // A common approximation for 'normal' line height is 1.2 * font-size.
+        // Provide a sensible fallback (e.g., 16px * 1.2) if font size cannot be parsed.
+        lineHeightPx = !isNaN(fontSizePx) ? fontSizePx * 1.2 : 16 * 1.2;
+      } else {
+        lineHeightPx = parseFloat(lineHeightStyle);
+      }
+
+      if (!isNaN(lineHeightPx) && lineHeightPx > 0) {
+        // Check if scrollHeight (total height of content) is greater than one line height.
+        // Adding a small buffer (e.g., 1px) can help with sub-pixel rendering inconsistencies.
+        setIsMultiLine(span.scrollHeight > lineHeightPx + 1);
+      }
+    }
+  }, [task.title, task.completed, task.id]); // Dependencies: re-calculate if text, completion, or task itself changes.
 
   const handleClick = (e) => {
     // Don't trigger selection when clicking checkbox
@@ -44,10 +72,16 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     setIsPopoverOpen(false);
   };
 
+  // Determine if the item should be top-aligned
+  const shouldAlignTop = isMultiLine || 
+                         (!hideScheduledDate && task.scheduledDate) || 
+                         (!hideTag && task.tag);
+  const alignmentClass = shouldAlignTop ? 'items-start' : 'items-center';
+
   return (
     <div 
       ref={taskItemRef}
-      className="task-item select-none cursor-pointer flex items-top gap-2 p-2 hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter rounded-[11px] relative"
+      className={`select-none min-h-[40px] cursor-pointer flex ${alignmentClass} gap-2 p-2 hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter rounded-[11px] relative`}
       onContextMenu={handleContextMenu}
       onClick={handleClick}
       onDoubleClick={() => onDoubleClickEdit(task)}
@@ -57,14 +91,17 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         setIsPopoverOpen(false);
       }}
     >
-      <div className="checkbox flex-shrink-0 mt-0.5">
+      <div className={`checkbox flex-shrink-0 ${shouldAlignTop ? 'mt-[1px]' : 'mt-[2px]'}`}>
         <Checkbox 
           checked={checked !== undefined ? checked : task.completed}
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <div className="flex flex-col flex-grow">
-        <span className={`text-sm ${task.completed ? 'line-through opacity-50' : ''}`}>
+      <div className="flex flex-col flex-grow min-w-0">
+        <span 
+          ref={textSpanRef}
+          className={`text-sm ${task.completed ? 'line-through opacity-50' : ''} break-words`}
+        >
           {task.title}
         </span>
         <div className="flex items-center flex-row gap-1">
@@ -114,7 +151,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.1 }}
-                className="flex group h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-white/5"
+                className="flex group absolute top-2 right-2 bg-light-bg-lighter dark:bg-dark-bg-light h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>

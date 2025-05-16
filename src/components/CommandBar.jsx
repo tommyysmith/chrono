@@ -22,6 +22,7 @@ import RepeatEditModal from './RepeatEditModal';
 import GoToDateCommand from './GoToDateCommand';
 import { parseNaturalLanguage } from '../utils/dateUtils';
 import { Shift } from '../assets/icons/Shift';
+import { Completed } from '../assets/icons/Completed';
 import {
   Popover,
   PopoverContent,
@@ -451,47 +452,50 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         newState = { ...newState, [field]: value };
       }
 
-      // Update multi-day status based on dates
-      if (field === 'date' || field === 'endDate') {
-        const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
-        const endDate = parse(newState.endDate || newState.date, 'yyyy-MM-dd', new Date());
-        newState.isMultiDay = !isSameDay(startDate, endDate);
-      }
+      // Step 2: Handle derived state for multi-day logic
+      // Parse dates consistently. Fallback endDate to date if undefined/null for initial checks.
+      const startDateObj = parse(newState.date, 'yyyy-MM-dd', new Date());
+      const endDateObj = parse(newState.endDate || newState.date, 'yyyy-MM-dd', new Date());
 
-      // --- Multi-Day Date Handling Logic ---
-      if (field === 'isMultiDay') {
-        if (value === true) { // Toggling ON
-          const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
-          let targetEndDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
-
-          // If endDate is invalid or same/before startDate, set it to one day after startDate
-          if (isNaN(targetEndDate.getTime()) || isEqual(targetEndDate, startDate) || isBefore(targetEndDate, startDate)) {
-            targetEndDate = addDays(startDate, 1);
+      if (field === 'isMultiDay') { // Change originated from the multi-day toggle
+        if (newState.isMultiDay === true) { // Toggle switched ON
+          // If endDate is same or before startDate, set endDate to startDate + 1 day
+          if (isSameDay(startDateObj, endDateObj) || isBefore(endDateObj, startDateObj)) {
+            newState.endDate = format(addDays(startDateObj, 1), 'yyyy-MM-dd');
           }
-          newState.endDate = format(targetEndDate, 'yyyy-MM-dd');
-        } else { // Toggling OFF
-          newState.endDate = newState.date; // Reset endDate when turning off multi-day
+          // If endDate was already valid and different, it's preserved.
+        } else { // Toggle switched OFF
+          newState.endDate = newState.date; // Set endDate to match startDate
         }
-      } else if (newState.isMultiDay) { // Only apply date logic if multi-day is already active
-        if (field === 'date') { // Start date changed
-          const startDate = parse(value, 'yyyy-MM-dd', new Date());
-          const endDate = parse(newState.endDate, 'yyyy-MM-dd', new Date());
-
-          // If endDate is now before or same as the new startDate, update endDate
-          if (isEqual(endDate, startDate) || isBefore(endDate, startDate)) {
-            newState.endDate = format(addDays(startDate, 1), 'yyyy-MM-dd');
+      } else if (field === 'date') { // Change originated from start date picker (newState.date is already updated)
+        if (!newState.isMultiDay) { // If multi-day is NOT active
+          newState.endDate = newState.date; // End date follows start date, isMultiDay remains false
+        } else { // If multi-day IS active
+          const currentEndDateObj = parse(newState.endDate, 'yyyy-MM-dd', new Date()); // endDate from before this 'date' change
+          // Check if this change makes it a single-day event
+          if (isSameDay(startDateObj, currentEndDateObj)) {
+            newState.isMultiDay = false;
+            newState.endDate = newState.date; // Ensure endDate matches the new startDate
+          } else if (isBefore(currentEndDateObj, startDateObj)) {
+            // If new start date is after current end date, invalidating the range.
+            // Adjust endDate to be one day after the new start date.
+            newState.endDate = format(addDays(startDateObj, 1), 'yyyy-MM-dd');
           }
-        } else if (field === 'endDate') { // End date changed
-          const startDate = parse(newState.date, 'yyyy-MM-dd', new Date());
-          const endDate = parse(value, 'yyyy-MM-dd', new Date());
-
-          // If new endDate is before or same as startDate, reset it to one day after startDate
-          if (isEqual(endDate, startDate) || isBefore(endDate, startDate)) {
-            newState.endDate = format(addDays(startDate, 1), 'yyyy-MM-dd');
+          // If new start date is before current end date and they are different,
+          // isMultiDay remains true, and endDate is preserved from before this 'date' change.
+        }
+      } else if (field === 'endDate') { // Change originated from end date picker (newState.endDate is already updated)
+        // When endDate is changed, update isMultiDay status based on comparison with current startDate.
+        if (isSameDay(startDateObj, endDateObj)) {
+          newState.isMultiDay = false;
+        } else {
+          newState.isMultiDay = true;
+          // Ensure endDate is not before startDate if it became multi-day
+          if (isBefore(endDateObj, startDateObj)) {
+            newState.endDate = format(addDays(startDateObj, 1), 'yyyy-MM-dd');
           }
         }
       }
-      // --- End Multi-Day Date Handling ---
 
       // Compare with original state to determine if there are changes
       const hasChanges = Object.keys(newState).some(key => {
@@ -1234,7 +1238,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             }}
                             className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
-                            <Task className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
+                            <Completed className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
                             </button>
                           <button

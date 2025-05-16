@@ -70,25 +70,29 @@ const EventItem = memo(({ event }) => {
 EventItem.displayName = 'EventItem';
 
 const IconLeft = memo(() => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <div>
-        <Chevron className="rotate-180 w-4 h-4" />
-      </div>
-    </TooltipTrigger>
-    <TooltipContent>Previous month</TooltipContent>
-  </Tooltip>
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div>
+          <Chevron className="rotate-180 w-4 h-4" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>Previous month</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
 ));
 
 const IconRight = memo(() => (
-  <Tooltip>
-    <TooltipTrigger asChild>
-      <div>
-        <Chevron className="w-4 h-4" />
-      </div>
-    </TooltipTrigger>
-    <TooltipContent>Next month</TooltipContent>
-  </Tooltip>
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div>
+          <Chevron className="w-4 h-4" />
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>Next month</TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
 ));
 
 IconLeft.displayName = 'IconLeft';
@@ -310,7 +314,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                         onDateSelect?.(new Date(today));
                         console.log('Today button clicked:', today);
                       }}
-                      className="absolute top-[15px] right-[70px] p-1 rounded hover:text-light-text dark:hover:text-dark-text text-light-text/50 dark:text-dark-text/50"
+                      className="absolute top-[7px] right-[70px] p-1 rounded hover:text-light-text dark:hover:text-dark-text text-light-text/50 dark:text-dark-text/50"
                       aria-label="Return to today"
                     >
                       <Return className="w-4 h-4" />

@@ -74,7 +74,7 @@ export default function EventTooltipContent({ event }) {
   const duration = formatDuration(startDate, endDate);
 
   return (
-    <div className="p-3 flex flex-col gap-2 bg-dark-bg-darker text-white">
+    <div className="p-3 min-w-[240px] flex flex-col gap-2 bg-dark-bg-darker text-white">
       {/* Title & Description */}
       <div className="flex items-stretch gap-2 mb-3">
         <div
