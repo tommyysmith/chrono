@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { format, isToday, isTomorrow } from "date-fns";
+import { format, isToday, isTomorrow, isPast, isAfter, parseISO, addDays } from "date-fns";
 import { useTaskManagement } from "../hooks/useTaskManagement";
 import { Completed } from "../assets/icons/Completed";
 import { Check } from "../assets/icons/Check"; 
@@ -58,7 +58,12 @@ export default function Sidebar({
   setIsVisible,
 }) {
   // Get task management functions
-  const { getTasksInSeries, getRecurringTaskInstances } = useTaskManagement();
+  const { 
+    getTasksInSeries, 
+    getRecurringTaskInstances, 
+    handleToggleTaskCompletion, 
+    ensureActiveRecurringInstances 
+  } = useTaskManagement();
   const [activeTab, setActiveTab] = useState(() => {
     // Try to load from localStorage first
     const savedTab = localStorage.getItem("activeTab");
@@ -179,6 +184,27 @@ export default function Sidebar({
     localStorage.setItem("tags", JSON.stringify(tags));
   }, [tags]);
 
+  // Call ensureActiveRecurringInstances once on mount
+  useEffect(() => {
+    if (ensureActiveRecurringInstances) {
+      console.log('DEBUG: Calling ensureActiveRecurringInstances');
+      ensureActiveRecurringInstances();
+    }
+    // Reload tasks from local storage after ensuring instances, 
+    // as useTaskManagement might have updated them.
+    const savedTasks = localStorage.getItem("tasks");
+    if (savedTasks) {
+      try {
+        const parsed = JSON.parse(savedTasks);
+        console.log('DEBUG: Reloading tasks after ensuring instances:', parsed);
+        // Preserve structure of initialTasks if needed, or merge carefully.
+        setTasks(prevTasks => ({ ...prevTasks, ...parsed })); 
+      } catch (e) {
+        console.error("Error parsing tasks after ensuring instances:", e);
+      }
+    }
+  }, [ensureActiveRecurringInstances]); // Dependency array ensures it runs if the function reference changes, though typically it won't.
+
   // Listen for tags-updated event from CommandBar
   useEffect(() => {
     const handleTagsUpdated = (event) => {
@@ -286,160 +312,142 @@ export default function Sidebar({
     setIsTagDropdownOpen(false);
   };
 
-  const handleAddTask = (e) => {
-    if (e.key === "Enter" && taskTitle.trim()) {
-      const newTask = {
-        id: Date.now(),
-        title: taskTitle.trim(),
-        completed: false,
-        tag: selectedTag || null,
+  const handleAddTask = (newTask) => {
+    // Use the hook's createTask, assuming it handles localStorage and state updates
+    // For now, will keep local state management and assume hook updates localStorage
+    // This might need refinement if Sidebar's local `tasks` state doesn't auto-update
+    // from localStorage changes made by the hook.
+
+    const tagId = newTask.tag ? newTask.tag.id : "all";
+    const newId = `task-${Date.now()}`;
+    const taskWithId = { ...newTask, id: newId, completed: false };
+
+    setTasks((prevTasks) => {
+      const updatedGroup = [...(prevTasks[tagId] || []), taskWithId];
+      const updatedAll = [...(prevTasks.all || []), taskWithId];
+      return {
+        ...prevTasks,
+        [tagId]: updatedGroup,
+        all: updatedAll,
       };
+    });
 
-      setTasks((prevTasks) => {
-        const updatedTasks = {
-          ...prevTasks,
-          all: [...(prevTasks.all || []), newTask],
-        };
-
-        // Add to tag collection if tag is selected
-        if (selectedTag) {
-          updatedTasks[selectedTag.id] = [
-            ...(prevTasks[selectedTag.id] || []),
-            newTask,
-          ];
-        }
-
-        // Add to today if in today view
-        if (selectedView === "today") {
-          updatedTasks.today = [...(prevTasks.today || []), newTask];
-        }
-
-        return updatedTasks;
-      });
-
-      if (pendingTag) {
-        const newTag = pendingTag;
-        setTags((prevTags) => {
-          const updatedTags = [...prevTags, newTag];
-          // Update expandedSections for the new tag
-          setExpandedSections((prev) => ({
-            ...prev,
-            [newTag.id]: true,
-          }));
-          return updatedTags;
-        });
-        setPendingTag(null);
-      }
-
-      setTaskTitle("");
-      setSelectedTag(null);
-      setIsAddingTask(false);
-    }
+    // If using useTaskManagement's createTask, it would be something like:
+    // createTask(taskWithId); // And then rely on state propagation or re-fetching
   };
 
-  useEffect(() => {
-    const handleEscapeKey = (event) => {
-      if (event.key === "Escape") {
-        handleClose();
+  const handleEditTask = (updatedTask) => {
+    setTasks((prevTasks) => {
+      const newTasks = { ...prevTasks };
+      let found = false;
+      // Update in specific tag group
+      if (updatedTask.tag && newTasks[updatedTask.tag.id]) {
+        newTasks[updatedTask.tag.id] = newTasks[updatedTask.tag.id].map((task) =>
+          task.id === updatedTask.id ? updatedTask : task
+        );
+        found = newTasks[updatedTask.tag.id].some(t => t.id === updatedTask.id);
       }
-    };
-
-    if (isAddingTask) {
-      document.addEventListener("keydown", handleEscapeKey);
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleEscapeKey);
-    };
-  }, [isAddingTask]);
-
-  useEffect(() => {
-    if (isAddingTask && taskInputRef.current) {
-      taskInputRef.current.focus();
-    }
-  }, [isAddingTask]);
-
-  const handleDeleteTask = (taskId) => {
-    setTasks((prev) => {
-      const newTasks = { ...prev };
-      // Remove from all collections
-      Object.keys(newTasks).forEach((group) => {
-        if (Array.isArray(newTasks[group])) {
-          newTasks[group] = newTasks[group].filter(
-            (task) => task.id !== taskId
-          );
-        }
-      });
-      // Save to localStorage immediately
-      localStorage.setItem("tasks", JSON.stringify(newTasks));
+      // Update in 'all' group
+      if (newTasks.all) {
+        newTasks.all = newTasks.all.map((task) =>
+          task.id === updatedTask.id ? updatedTask : task
+        );
+      }
+      // If task was moved from a group or untagged, it might not be found in the new tag group
+      // This part of the logic needs to be robust to handle tag changes correctly.
+      // For simplicity, current update assumes tag doesn't change or is handled by `updatedTask` object.
       return newTasks;
     });
+    setEditingTaskId(null);
   };
 
-  const handleCompleteTask = (taskId) => {
+  const handleDeleteTask = (taskId, scope = 'single') => {
+    console.log(`Deleting task ${taskId} with scope: ${scope}`);
+    
     setTasks((prev) => {
       const newTasks = { ...prev };
       
+      // Find the task to delete
+      let taskToDelete = null;
+      let taskSeriesId = null;
+      let taskScheduledDate = null;
+      
       // Find the task in any collection
-      let taskToUpdate = null;
       Object.keys(newTasks).forEach((group) => {
         if (Array.isArray(newTasks[group])) {
           const foundTask = newTasks[group].find(task => task.id === taskId);
-          if (foundTask) {
-            taskToUpdate = foundTask;
+          if (foundTask && !taskToDelete) {
+            taskToDelete = foundTask;
+            taskSeriesId = foundTask.seriesId;
+            taskScheduledDate = foundTask.scheduledDate;
           }
         }
       });
       
-      if (!taskToUpdate) return prev; // Task not found
+      if (!taskToDelete) {
+        console.warn(`Task with ID ${taskId} not found for deletion`);
+        return prev; // No changes if task not found
+      }
       
-      const newCompletedState = !taskToUpdate.completed;
-      
-      if (newCompletedState) {
-        // Task is being marked as completed
-        // Add completedAt timestamp
-        const completedTask = {
-          ...taskToUpdate,
-          completed: true,
-          completedAt: new Date().toISOString()
-        };
+      // Handle different deletion scopes for recurring tasks
+      if (taskSeriesId && (scope === 'all' || scope === 'future')) {
+        console.log(`Deleting ${scope === 'all' ? 'all tasks' : 'future tasks'} in series ${taskSeriesId}`);
         
-        // Add to completed collection
-        newTasks.completed = [...(newTasks.completed || []), completedTask];
-        
-        // Remove from all other collections except 'completed'
+        // For 'all' scope, delete all tasks in the series
+        if (scope === 'all') {
+          Object.keys(newTasks).forEach((group) => {
+            if (Array.isArray(newTasks[group])) {
+              newTasks[group] = newTasks[group].filter(
+                (task) => task.seriesId !== taskSeriesId
+              );
+            }
+          });
+        }
+        // For 'future' scope, delete this task and all future tasks in the series
+        else if (scope === 'future' && taskScheduledDate) {
+          const taskDate = new Date(taskScheduledDate);
+          
+          Object.keys(newTasks).forEach((group) => {
+            if (Array.isArray(newTasks[group])) {
+              newTasks[group] = newTasks[group].filter(task => {
+                // Keep if not in this series
+                if (task.seriesId !== taskSeriesId) return true;
+                
+                // For tasks in this series, keep only if scheduled before this task
+                if (task.scheduledDate) {
+                  const compareDate = new Date(task.scheduledDate);
+                  return compareDate < taskDate;
+                }
+                
+                // Keep base task definition (not an instance)
+                return task.isRepeat === false;
+              });
+            }
+          });
+        }
+      }
+      // For single task deletion or non-recurring tasks
+      else {
+        // Remove just this task from all collections
         Object.keys(newTasks).forEach((group) => {
-          if (group !== 'completed' && Array.isArray(newTasks[group])) {
-            newTasks[group] = newTasks[group].filter(task => task.id !== taskId);
+          if (Array.isArray(newTasks[group])) {
+            newTasks[group] = newTasks[group].filter(
+              (task) => task.id !== taskId
+            );
           }
         });
-      } else {
-        // Task is being unmarked as completed
-        // Remove from completed collection
-        if (Array.isArray(newTasks.completed)) {
-          newTasks.completed = newTasks.completed.filter(task => task.id !== taskId);
-        }
-        
-        // Add back to all collection and its tag collection if it has one
-        const updatedTask = { ...taskToUpdate, completed: false };
-        delete updatedTask.completedAt; // Remove completedAt timestamp
-        
-        newTasks.all = [...(newTasks.all || []), updatedTask];
-        
-        // Add to tag collection if it has a tag
-        if (updatedTask.tag) {
-          const tagId = updatedTask.tag.id;
-          newTasks[tagId] = [...(newTasks[tagId] || []), updatedTask];
-        }
-        
-        // Add to today collection if scheduled for today
-        if (updatedTask.scheduledDate && isToday(new Date(updatedTask.scheduledDate))) {
-          newTasks.today = [...(newTasks.today || []), updatedTask];
-        }
       }
       
       // Save to localStorage immediately
       localStorage.setItem("tasks", JSON.stringify(newTasks));
+      
+      // Dispatch storage event to notify other components
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'tasks',
+        newValue: JSON.stringify(newTasks),
+        url: window.location.href
+      }));
+      
       return newTasks;
     });
   };
@@ -451,6 +459,7 @@ export default function Sidebar({
         try {
           const newTasks = JSON.parse(e.newValue);
           setTasks(newTasks);
+          console.log('[Sidebar] Tasks updated from storage event.');
         } catch (e) {
           console.error("Error parsing tasks from storage event:", e);
         }
@@ -478,7 +487,7 @@ export default function Sidebar({
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  const handleEditTask = (task) => {
+  const handleEditTaskIconClick = (task) => {
     if (commandBarRef?.current) {
       setEditingTaskId(task.id);
       setOriginalTask(task);
@@ -487,25 +496,118 @@ export default function Sidebar({
   };
 
   // Get all unique tasks with their complete data
+  // console.log('[Sidebar] Processing tasks from state:', tasks); // Keep this if needed for deep debugging task state
+  
   const allTasks = Object.values(tasks)
     .filter(Array.isArray) // Filter out any non-array values
     .reduce((unique, group) => {
       group.forEach((task) => {
-        // Skip recurring task instances (only show the base task)
-        if (task.isRepeat) return;
-        
         // Skip completed tasks (they should only appear in the completed tab)
-        if (task.completed) return;
+        if (task.completed) {
+          return;
+        }
         
-        // Use task.id as the key to ensure uniqueness
+        // For recurring tasks, we want to handle them specially
+        if (task.repeat && task.repeat !== 'none') {
+          // For base tasks (isRepeat === false), we should check if there's an active instance
+          if (task.isRepeat === false) {
+            // console.log(`[Sidebar] Processing base recurring task: ${task.id}`);
+            const hasActiveInstance = Object.values(tasks)
+              .filter(Array.isArray)
+              .some(taskGroup => 
+                taskGroup.some(t => {
+                  // Detailed log for diagnosing hasActiveInstance
+                  if (t.seriesId === task.seriesId) {
+                    console.log(`[Sidebar][hasActiveInstance check] For base series ${task.seriesId} (base ID ${task.id}), checking instance: ID=${t.id}, title=${t.title}, isRepeat=${t.isRepeat}, completed=${t.completed}, scheduledDate=${t.scheduledDate}`);
+                  }
+                  return t.seriesId === task.seriesId && 
+                         t.isRepeat === true && 
+                         !t.completed;
+                })
+              );
+            
+            console.log(`[Sidebar] Base task ${task.id} (series ${task.seriesId}) has active instance: ${hasActiveInstance}`);
+            
+            if (hasActiveInstance) {
+              return; // Skip the base task if an active instance exists
+            }
+            
+            if (!task.scheduledDate && task.repeat && task.repeat !== 'none') {
+              task = {
+                ...task,
+                scheduledDate: new Date().toISOString() 
+              };
+            }
+          }
+          
+          const existingSeriesInstance = Object.values(unique).find(
+            t => t.seriesId === task.seriesId && t.isRepeat && !t.completed
+          );
+          
+          if (existingSeriesInstance) {
+            if (task.isRepeat && task.scheduledDate && existingSeriesInstance.scheduledDate) {
+              const taskDate = parseISO(task.scheduledDate);
+              const existingDate = parseISO(existingSeriesInstance.scheduledDate);
+              if (isAfter(existingDate, taskDate)) { // current task is earlier
+                delete unique[existingSeriesInstance.id]; // remove later instance
+                unique[task.id] = task; // add earlier instance
+              } else {
+                 // existing instance is earlier or same, so keep it and skip current task
+                return; 
+              }
+            } else if (task.isRepeat) { 
+              // if existing is found, and current is an instance, but date issue, prefer existing by default
+              return; 
+            }
+            // If current task is base and existing instance found, base was already skipped if instance active
+          } else {
+            unique[task.id] = task; // No existing instance, or current task is preferred
+          }
+          return; // Handled recurring task
+        }
+        
+        // For non-recurring tasks
         unique[task.id] = task;
       });
       return unique;
     }, {});
 
   const allTasksArray = Object.values(allTasks);
+  // console.log('[Sidebar] All unique, non-completed tasks for display consideration:', allTasksArray);
 
-  // Generate sections including all tags
+  // Separate overdue recurring tasks
+  const todayForComparison = new Date();
+  todayForComparison.setHours(0, 0, 0, 0); 
+  
+  const overdueTasks = allTasksArray.filter(task => {
+    if (!task.scheduledDate) return false;
+    try {
+      const taskDate = parseISO(task.scheduledDate);
+      return isPast(taskDate) && !isToday(taskDate) && !task.completed;
+    } catch (error) {
+      // console.error('Error parsing date for overdue check:', task.id, error);
+      return false;
+    }
+  });
+  
+  // console.log(`[Sidebar] Overdue tasks count: ${overdueTasks.length}`);
+  
+  const activeTasks = allTasksArray.filter(task => {
+    if (task.completed) return false; 
+    if (!task.scheduledDate) return true; // No date = active (e.g. anytime)
+    try {
+      const taskDate = parseISO(task.scheduledDate);
+      return isToday(taskDate) || isAfter(taskDate, todayForComparison);
+    } catch (error) {
+      // console.error('Error parsing date for active check:', task.id, error);
+      return true; 
+    }
+  });
+  
+  // console.log(`[Sidebar] Active tasks (today or future, or anytime) count: ${activeTasks.length}`);
+  
+  const displayableTasks = activeTasks;
+
   const sections =
     selectedView === "all"
       ? [
@@ -514,12 +616,19 @@ export default function Sidebar({
             label: "All tasks",
             icon: LayoutGrid,
             color: "#22C55E",
-            count: allTasksArray.length,
+            count: displayableTasks.length + (overdueTasks.length > 0 ? 1 : 0), // Count overdue section as 1 if it exists
             subsections: [
+              // Always include Overdue section, even if empty
+              {
+                id: "overdue",
+                label: "Overdue",
+                tasks: overdueTasks,
+                isOverdue: true // Flag to style differently
+              },
               {
                 id: "scheduled",
                 label: "Scheduled",
-                tasks: allTasksArray
+                tasks: displayableTasks
                   .filter((task) => task.scheduledDate)
                   .sort(
                     (a, b) =>
@@ -529,7 +638,7 @@ export default function Sidebar({
               {
                 id: "anytime",
                 label: "Anytime",
-                tasks: allTasksArray.filter((task) => !task.scheduledDate),
+                tasks: displayableTasks.filter((task) => !task.scheduledDate),
               },
             ],
           },
@@ -539,10 +648,10 @@ export default function Sidebar({
             label: tag.label,
             icon: Tag,
             color: tag.color,
-            count: allTasksArray.filter(
+            count: displayableTasks.filter(
               (task) => task.tag && task.tag.id === tag.id
             ).length,
-            tasks: allTasksArray.filter(
+            tasks: displayableTasks.filter(
               (task) => task.tag && task.tag.id === tag.id
             ),
           })),
@@ -653,7 +762,7 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex rounded-[9px] ml-3 p-1 bg-black/5 dark:bg-black/30 gap-2">
+                <div className="flex rounded-[9px] ml-3 p-1 bg-black/5 dark:bg-dark-bg-lighter gap-2">
                   {/* "All" Button */}
                   <button
                     className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[28px] rounded-[5px] transition-colors duration-150 ease-in-out
@@ -706,7 +815,7 @@ export default function Sidebar({
                       sections.map((section) => (
                         <div
                           key={section.id}
-                          className="overflow-hidden flex-col gap-2 border-b border-light-border dark:border-dark-border last:border-none pb-2 mr-3 ml-3"
+                          className="overflow-hidden flex-col gap-2 border-b border-light-border dark:border-dark-border last:border-none pb-2 ml-2"
                         >
                           <div
                             role="button"
@@ -809,7 +918,11 @@ export default function Sidebar({
                                               key={subsection.id}
                                               className="flex flex-col gap-1"
                                             >
-                                              <div className="px-2 py-1 text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+                                              <div className={`px-2 py-1 text-xs font-medium ${
+                                                  subsection.isOverdue 
+                                                    ? "text-red-500 dark:text-red-400"
+                                                    : "text-light-text/50 dark:text-dark-text/50"
+                                                }`}>
                                                 {subsection.label} (
                                                 {subsection.tasks.length})
                                               </div>
@@ -820,13 +933,11 @@ export default function Sidebar({
                                                     ...task,
                                                     tag: task.tag || null,
                                                   }}
-                                                  onComplete={
-                                                    handleCompleteTask
-                                                  }
+                                                  onComplete={handleToggleTaskCompletion}
                                                   onDelete={handleDeleteTask}
-                                                  onEdit={handleEditTask}
+                                                  onEdit={handleEditTaskIconClick}
                                                   onDoubleClickEdit={
-                                                    handleEditTask
+                                                    handleEditTaskIconClick
                                                   }
                                                   onClick={() =>
                                                     setSelectedTaskId(task.id)
@@ -835,6 +946,7 @@ export default function Sidebar({
                                                     selectedTaskId === task.id
                                                   }
                                                   hideTag={false}
+                                                  isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
                                                 />
                                               ))}
                                             </div>
@@ -848,10 +960,10 @@ export default function Sidebar({
                                               ...task,
                                               tag: task.tag || null,
                                             }}
-                                            onComplete={handleCompleteTask}
+                                            onComplete={handleToggleTaskCompletion}
                                             onDelete={handleDeleteTask}
-                                            onEdit={handleEditTask}
-                                            onDoubleClickEdit={handleEditTask}
+                                            onEdit={handleEditTaskIconClick}
+                                            onDoubleClickEdit={handleEditTaskIconClick}
                                             onClick={() =>
                                               setSelectedTaskId(task.id)
                                             }
@@ -859,6 +971,7 @@ export default function Sidebar({
                                               selectedTaskId === task.id
                                             }
                                             hideTag={section.id !== "all"}
+                                            isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
                                           />
                                         ))}
                                   </div>
@@ -882,14 +995,15 @@ export default function Sidebar({
                                     ...task,
                                     tag: task.tag || null,
                                   }}
-                                  onComplete={handleCompleteTask}
+                                  onComplete={handleToggleTaskCompletion}
                                   onDelete={handleDeleteTask}
-                                  onEdit={handleEditTask}
-                                  onDoubleClickEdit={handleEditTask}
+                                  onEdit={handleEditTaskIconClick}
+                                  onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
                                   isSelected={selectedTaskId === task.id}
                                   hideTag={false}
-                                  checked={true} // Force checked state for completed tasks
+                                  checked={true}
+                                  isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')} // Force checked state for completed tasks
                                 />
                               ))
                             ) : (
@@ -915,10 +1029,10 @@ export default function Sidebar({
                                     ...task,
                                     tag: task.tag || null,
                                   }}
-                                  onComplete={handleCompleteTask}
+                                  onComplete={handleToggleTaskCompletion}
                                   onDelete={handleDeleteTask}
-                                  onEdit={handleEditTask}
-                                  onDoubleClickEdit={handleEditTask}
+                                  onEdit={handleEditTaskIconClick}
+                                  onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
                                   isSelected={selectedTaskId === task.id}
                                   hideTag={false}
@@ -970,9 +1084,9 @@ export default function Sidebar({
                       // Ensure we're passing a fresh date object to prevent reference issues
                       onDateSelect(new Date(date));
                     }}
-                    onTaskComplete={handleCompleteTask}
+                    onTaskComplete={handleToggleTaskCompletion}
                     onTaskDelete={handleDeleteTask}
-                    onTaskEdit={handleEditTask}
+                    onTaskEdit={handleEditTaskIconClick}
                     commandBarRef={commandBarRef}
                   />
                 </div>
@@ -1077,7 +1191,7 @@ export default function Sidebar({
                   onClick={() => setActiveTab("tasks")}
                   className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
                     activeTab === "tasks"
-                      ? "bg-light-bg-lighter dark:bg-dark-bg-lighter"
+                      ? "bg-light-bg-lighter dark:bg-dark-bg"
                       : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
                   }`}
                 >
@@ -1099,7 +1213,7 @@ export default function Sidebar({
                   onClick={() => setActiveTab("agenda")}
                   className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
                     activeTab === "agenda"
-                      ? "bg-light-bg-lighter dark:bg-dark-bg-lighter"
+                      ? "bg-light-bg-lighter dark:bg-dark-bg"
                       : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
                   }`}
                 >

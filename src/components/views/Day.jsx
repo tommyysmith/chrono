@@ -25,13 +25,13 @@ export default function Day({
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Fixed Headers */}
-      <div className="flex-none bg-light-bg dark:bg-dark-bg z-10">
+      <div className="flex-none z-10">
         {/* Empty header space */}
         <div className="grid grid-cols-[60px_1fr]">
           <div className="flex flex-col pointer-events-none">
             <div className="h-12" />
           </div>
-          <div className="h-12 flex gap-1 flex-row items-center justify-center relative">
+          <div className="h-12 flex gap-1 flex-row items-center justify-start relative">
             <div className="absolute left-1/2 -translate-x-[60px] flex gap-1 items-center">
               <div className="text-xs text-light-text/50 dark:text-dark-text/50 font-medium">
                 {DAYS[selectedDate.getDay()]}

@@ -11,12 +11,14 @@ import { Tag } from '../assets/icons/Tag';
 import { More } from '../assets/icons/More';
 import { Repeat } from '../assets/icons/Repeat';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import DeleteTaskModal from './DeleteTaskModal';
 
 export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked }) {
   // If isRecurring is not explicitly passed, check the task properties
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const taskItemRef = useRef(null);
 
@@ -68,8 +70,21 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   };
 
   const handleDelete = () => {
-    onDelete(task.id);
-    setIsPopoverOpen(false);
+    // If the task is recurring, show the delete modal
+    if (taskIsRecurring) {
+      setIsDeleteModalOpen(true);
+      setIsPopoverOpen(false);
+    } else {
+      // For non-recurring tasks, delete directly
+      onDelete(task.id);
+      setIsPopoverOpen(false);
+    }
+  };
+
+  // Handle deletion with scope for recurring tasks
+  const handleDeleteWithScope = (scope) => {
+    onDelete(task.id, scope);
+    setIsDeleteModalOpen(false);
   };
 
   // Determine if the item should be top-aligned
@@ -104,7 +119,8 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         >
           {task.title}
         </span>
-        <div className="flex items-center flex-row gap-1">
+        <div className="flex items-center flex-wrap flex-row gap-1">
+        {/* Always show scheduled date if available, regardless of tags */}
         {!hideScheduledDate && task.scheduledDate && (
           <div className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
             <Calendar className="h-3 w-3" />
@@ -113,29 +129,27 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             </span>
           </div>
         )}
+        {/* Always show recurring indicator if task is recurring */}
         {taskIsRecurring && (
           <div className="inline-flex self-start mt-1 items-center px-1.5 h-[24px] text-xs rounded-[5px] bg-blue-500/10 text-blue-500">
             <Repeat className="h-3 w-3" />
           </div>
         )}
+        {/* Show tag if not hidden */}
         {!hideTag && task.tag && (
           <div 
             key={`tag-${task.tag.id || 'default'}`}
-            className="flex flex-wrap gap-1"
+            className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px]"
+            style={{
+              backgroundColor: `${task.tag.color}15`,
+              color: task.tag.color
+            }}
           >
-            <div
-              className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px]"
-              style={{
-                backgroundColor: `${task.tag.color}15`,
-                color: task.tag.color
-              }}
-            >
-              <Tag className="h-3 w-3"
-              style={{ color: task.tag.color }} />
-              <span className="px-1">
-              {task.tag.label}
-              </span>
-            </div>
+            <Tag className="h-3 w-3"
+            style={{ color: task.tag.color }} />
+            <span className="px-1">
+            {task.tag.label}
+            </span>
           </div>
         )}
         </div>
@@ -177,6 +191,14 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           </Popover>
         )}
       </AnimatePresence>
+
+      {/* Delete Modal for Recurring Tasks */}
+      <DeleteTaskModal 
+        isOpen={isDeleteModalOpen}
+        taskTitle={task.title}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onDelete={handleDeleteWithScope}
+      />
     </div>
   );
 }

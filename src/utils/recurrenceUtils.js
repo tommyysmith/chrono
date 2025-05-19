@@ -1,5 +1,5 @@
-import { addDays, addWeeks, addMonths, addYears, isAfter, startOfDay, endOfDay, parseISO } from 'date-fns';
-import { RRule, rrulestr } from 'rrule';
+import { addDays, addWeeks, addMonths, addYears, isAfter, startOfDay, endOfDay, parseISO, format } from 'date-fns';
+import { RRule, rrulestr, Weekday } from 'rrule';
 import { generateEventId } from './eventUtils';
 
 /**
@@ -833,4 +833,156 @@ function isSameEventDate(event1, event2) {
     event1.start.getMonth() === event2.start.getMonth() &&
     event1.start.getDate() === event2.start.getDate()
   );
+}
+
+/**
+ * Generates the single next displayable task instance for a recurring series.
+ * @param {Object} baseTaskDefinition - The base task object containing recurrence rules.
+ * @param {Date | string} lastInstanceScheduledDate - The scheduled date of the instance just completed.
+ * @returns {Object|null} A new task object for the next instance, or null if no next instance.
+ */
+export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInstanceScheduledDate) {
+  if (!baseTaskDefinition || (!baseTaskDefinition.repeat || baseTaskDefinition.repeat === 'none') && !baseTaskDefinition.rruleOptions) {
+    console.warn('[RecurrenceUtils][generateNextDisplayableTaskInstance] Base task definition is not recurring or invalid.', baseTaskDefinition);
+    return null;
+  }
+
+  const seriesStartDate = new Date(baseTaskDefinition.startDateOfSeries || baseTaskDefinition.createdAt || Date.now());
+  console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Series Start Date: ${seriesStartDate.toISOString()}`);
+
+  let rule;
+  try {
+    if (baseTaskDefinition.rruleOptions && typeof baseTaskDefinition.rruleOptions === 'object') {
+      const options = JSON.parse(JSON.stringify(baseTaskDefinition.rruleOptions)); 
+      options.dtstart = new Date(options.dtstart || seriesStartDate); 
+      if (options.until && typeof options.until === 'string') {
+        options.until = new Date(options.until);
+      }
+      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from rruleOptions:', options);
+      rule = new RRule(options);
+    } else if (typeof baseTaskDefinition.repeat === 'string' && baseTaskDefinition.repeat.startsWith('RRULE:')) {
+      const rruleString = baseTaskDefinition.repeat;
+      console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Parsing RRule string: ${rruleString}`);
+      // Ensure dtstart is part of the options for rrulestr or RRule constructor if not in string
+      let tempOpts = {};
+      try {
+        // rrulestr might throw if dtstart is missing and not in string for some cases
+        const parsedRRule = rrulestr(rruleString, { compatible: 'v2', forceset: true, unmask: true });
+        tempOpts = { ...parsedRRule.options };
+      } catch(e) {
+        console.warn(`[RecurrenceUtils][generateNextDisplayableTaskInstance] rrulestr failed for string ${rruleString}, attempting to prepend DTSTART. Error: ${e.message}`);
+        // If rrulestr fails, it might be because DTSTART is missing. Try to prepend it.
+        const dtstartString = format(seriesStartDate, "yyyyMMdd'T'HHmmss'Z'");
+        const rruleStringWithDtstart = `DTSTART:${dtstartString}\n${rruleString}`;
+        console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Attempting with modified RRule string: ${rruleStringWithDtstart}`);
+        const parsedRRule = rrulestr(rruleStringWithDtstart, { compatible: 'v2', forceset: true, unmask: true });
+        tempOpts = { ...parsedRRule.options };
+      }
+      tempOpts.dtstart = new Date(tempOpts.dtstart || seriesStartDate); // Prioritize dtstart from rule, then seriesStartDate
+      if (tempOpts.until && typeof tempOpts.until === 'string') {
+        tempOpts.until = new Date(tempOpts.until);
+      }
+      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from parsed string options:', tempOpts);
+      rule = new RRule(tempOpts);
+    } else if (typeof baseTaskDefinition.repeat === 'string' && baseTaskDefinition.repeat !== 'none') {
+      const options = {
+        dtstart: seriesStartDate,
+      };
+      if (baseTaskDefinition.rruleOptions) { 
+        if (baseTaskDefinition.rruleOptions.until) {
+          options.until = new Date(baseTaskDefinition.rruleOptions.until);
+        }
+        if (baseTaskDefinition.rruleOptions.count) {
+          options.count = baseTaskDefinition.rruleOptions.count;
+        }
+      }
+      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from simple repeat pattern:', baseTaskDefinition.repeat, 'with options:', options);
+      rule = createRRuleFromRepeatPattern(baseTaskDefinition.repeat, options, seriesStartDate);
+    } else {
+      console.warn('[RecurrenceUtils][generateNextDisplayableTaskInstance] Invalid recurrence format on base task.', baseTaskDefinition);
+      return null;
+    }
+
+    if (!rule) {
+      console.error('[RecurrenceUtils][generateNextDisplayableTaskInstance] Failed to create RRule object for task:', baseTaskDefinition.id);
+      return null;
+    }
+  } catch (error) {
+    console.error('[RecurrenceUtils][generateNextDisplayableTaskInstance] Error creating RRule for task:', baseTaskDefinition.id, error);
+    return null;
+  }
+
+  let pointInTimeForRruleAfter;
+  if (lastInstanceScheduledDate) {
+    pointInTimeForRruleAfter = new Date(lastInstanceScheduledDate);
+    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Last instance scheduled date provided: ${pointInTimeForRruleAfter.toISOString()}`);
+  } else {
+    // This case would be for generating the very first instance if this function were used for that.
+    // For generating the *next* after completion, lastInstanceScheduledDate should always be valid.
+    pointInTimeForRruleAfter = new Date(rule.options.dtstart); 
+    console.warn(`[RecurrenceUtils][generateNextDisplayableTaskInstance] No lastInstanceScheduledDate provided. Using rule's dtstart for 'after' calculation: ${pointInTimeForRruleAfter.toISOString()}`);
+  }
+
+  try {
+    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Calling rule.after() with date: ${pointInTimeForRruleAfter.toISOString()}, inclusive: false`);
+    const nextOccurrenceDate = rule.after(pointInTimeForRruleAfter, false); 
+    
+    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] RRule returned nextOccurrenceDate: ${nextOccurrenceDate ? nextOccurrenceDate.toISOString() : 'null'}`);
+    
+    if (!nextOccurrenceDate) {
+      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] No next occurrence found based on rule and pointInTimeForRruleAfter.');
+      return null; 
+    }
+    
+    // Sanity check: the next occurrence should be strictly after the pointInTimeForRruleAfter
+    if (nextOccurrenceDate <= pointInTimeForRruleAfter) {
+        console.warn(`[RecurrenceUtils][generateNextDisplayableTaskInstance] CRITICAL WARNING: nextOccurrenceDate (${nextOccurrenceDate.toISOString()}) is not strictly after pointInTimeForRruleAfter (${pointInTimeForRruleAfter.toISOString()}). This indicates a potential issue with RRule dtstart, the rule itself, or rrule.js behavior. The instance might be generated for the same or an earlier date.`);
+    }
+    
+    return generateNextTaskInstance(baseTaskDefinition, nextOccurrenceDate);
+  } catch (error) {
+    console.error('[RecurrenceUtils][generateNextDisplayableTaskInstance] Error in rule.after() or during call to generateNextTaskInstance:', error);
+    return null;
+  }
+}
+
+/**
+ * Helper function to generate a task instance for a specific date
+ * @param {Object} baseTaskDefinition - The base task definition
+ * @param {Date} occurrenceDate - The date for the new instance
+ * @returns {Object} The new task instance
+ */
+function generateNextTaskInstance(baseTaskDefinition, occurrenceDate) {
+  if (!occurrenceDate || !(occurrenceDate instanceof Date) || isNaN(occurrenceDate.getTime())) {
+    console.error('[RecurrenceUtils][generateNextTaskInstance] Invalid occurrenceDate received:', occurrenceDate);
+    return null; // Cannot generate instance without a valid date
+  }
+  console.log(`[RecurrenceUtils][generateNextTaskInstance] Called with baseTask ID: ${baseTaskDefinition.id}, occurrenceDate: ${occurrenceDate.toISOString()}`);
+  
+  const newInstance = {
+    ...baseTaskDefinition,
+    id: generateEventId(), 
+    seriesId: baseTaskDefinition.seriesId || baseTaskDefinition.id, 
+    originalTaskId: baseTaskDefinition.id, 
+    scheduledDate: occurrenceDate.toISOString(),
+    isRepeat: true, 
+    completed: false, 
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    startDateOfSeries: baseTaskDefinition.startDateOfSeries || baseTaskDefinition.createdAt, 
+    // Ensure fields that define recurrence itself are not copied to instances
+    repeat: undefined,
+    rruleOptions: undefined,
+    completedAt: undefined, // New instances are not completed
+  };
+
+  // Explicitly delete to be absolutely sure, as 'undefined' might not remove key if baseTaskDefinition had it as null
+  delete newInstance.repeat;
+  delete newInstance.rruleOptions;
+  delete newInstance.completedAt;
+  // Consider if other fields like 'subTasks' or 'notes' should be reset or deeply cloned.
+  // For now, direct properties are handled.
+
+  console.log(`[RecurrenceUtils][generateNextTaskInstance] Generated new instance: ID ${newInstance.id}, Title: '${newInstance.title}', Scheduled: ${newInstance.scheduledDate}`);
+  return newInstance;
 }

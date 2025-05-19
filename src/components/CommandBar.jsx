@@ -969,6 +969,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           seriesId: seriesId,
           isRepeat: false // Base task is never a repeat instance
         };
+        
+        // For recurring tasks, ensure they have a scheduled date
+        if (taskRepeatOption && taskRepeatOption !== 'none' && !newTask.scheduledDate) {
+          // If no scheduled date was set, use today's date
+          newTask.scheduledDate = new Date().toISOString();
+          console.log('Added default scheduled date for recurring task:', newTask.scheduledDate);
+        }
+        
+        console.log('Creating new task with recurring options:', {
+          repeat: taskRepeatOption,
+          rruleOptions: taskRruleOptions,
+          seriesId: seriesId
+        });
 
         // Add to all tasks
         updatedTasks.all.push(newTask);
@@ -1198,7 +1211,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 ease: exitingRef.current || isAnimating ? "linear" : "easeInOut"
               }
             }}
-            className="bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border px-4"
+            className={`bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border ${!isAddingEvent && !isAddingTask && !isGoToDateMode ? 'px-0' : 'px-4'}`}
           >
             <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}>
               <motion.div 
@@ -1211,7 +1224,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   damping: 30,
                   duration: 0.3
                 }}
-                className="flex items-center gap-4"
+                className="flex items-center"
               >
                 <AnimatePresence mode="popLayout">
                   {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
@@ -1221,22 +1234,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           <motion.button 
                             layout
                         
-                            className="flex group py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
+                            className="flex group py-4 px-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
                           >
                             <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                             <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
                           </motion.button>
                         </PopoverTrigger>
                         <PopoverContent 
-                          className="w-48 p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                          className="w-[364.09px] !z-1 flex flex-row p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
                           align="start"
+                          sideOffset={2}
+                          
+
                         >
                           <button
                             onClick={() => {
                               setIsAddingTask(true);
                               setIsOpen(true);
                             }}
-                            className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                            className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
                             <Completed className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
@@ -1246,7 +1262,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               handleAddEventClick();
                               setIsOpen(true);
                             }}
-                            className="group w-full flex items-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                            className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                           >
                             <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                             <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
@@ -1268,7 +1284,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     <motion.div 
                       layout
                       key="commandBar-date-buttons"
-                      className="flex items-center py-4 gap-2"
+                      className="flex items-center py-4 px-4 gap-2"
                     >
                       <Chevron
                         className="w-4 h-4 rotate-180 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
@@ -1304,7 +1320,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         setQuery('');
                         setSuggestions([]);
                       }}
-                      className="group flex py-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors cursor-pointer"
+                      className="group flex py-4 px-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text transition-colors cursor-pointer"
                     >
                       <ArrowAlt className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" fill="none">
                         <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
