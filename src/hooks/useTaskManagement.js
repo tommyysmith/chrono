@@ -123,8 +123,8 @@ export function useTaskManagement() {
   const handleUpdateTask = useCallback((updatedTaskData) => {
     console.log('handleUpdateTask called with:', updatedTaskData);
     
-    if (!updatedTaskData || !updatedTaskData.id) {
-      console.error('Invalid task data provided for update:', updatedTaskData);
+    if (!updatedTaskData) {
+      console.error('Invalid task data provided for update: null or undefined');
       return false;
     }
     
@@ -135,18 +135,110 @@ export function useTaskManagement() {
       let originalTagId = null;
       let newTagId = updatedTaskData.tag ? updatedTaskData.tag.id : null;
       
-      console.log('Current tasks from localStorage:', tasks);
-      console.log('Looking for task with ID:', updatedTaskData.id);
+      // Ensure basic collections exist
+      if (!tasks.all) tasks.all = [];
+      if (!tasks.today) tasks.today = [];
+      if (newTagId && !tasks[newTagId]) tasks[newTagId] = [];
       
-      // Log all task IDs to help debug
-      const allTaskIds = [];
-      for (const groupKey in tasks) {
-        if (Array.isArray(tasks[groupKey])) {
-          const groupIds = tasks[groupKey].map(t => t.id);
-          allTaskIds.push(...groupIds);
+      console.log('Current tasks from localStorage:', tasks);
+      
+      // Check if this is a new task being created
+      const isNewTask = !updatedTaskData.id || 
+                        !tasks.all.some(t => t.id === updatedTaskData.id);
+      
+      // If it's a new task, generate an ID and handle it as a creation
+      if (isNewTask) {
+        console.log('This appears to be a new task creation rather than an update');
+        
+        // Generate an ID if one doesn't exist
+        const newTask = {
+          ...updatedTaskData,
+          id: updatedTaskData.id || `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          createdAt: new Date().toISOString()
+        };
+        
+        // If it's a recurring task, ensure it has a seriesId
+        if (newTask.repeat && newTask.repeat !== 'none' && !newTask.seriesId) {
+          newTask.seriesId = `series_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          console.log('Generated seriesId for new recurring task:', newTask.seriesId);
+          
+          // Ensure startDateOfSeries is set for rrule generation
+          if (!newTask.startDateOfSeries && newTask.scheduledDate) {
+            newTask.startDateOfSeries = newTask.scheduledDate;
+          } else if (!newTask.startDateOfSeries) {
+            newTask.startDateOfSeries = newTask.createdAt;
+            if (!newTask.scheduledDate) {
+              newTask.scheduledDate = newTask.createdAt; // Also set scheduledDate for consistency
+            }
+          }
+          
+          // For base recurring tasks, explicitly set isRepeat to false
+          if (typeof newTask.isRepeat === 'undefined') {
+            newTask.isRepeat = false;
+          }
+          
+          console.log('Prepared new recurring task:', newTask);
         }
+        
+        // Add to collections
+        tasks.all.push(newTask);
+        if (newTagId) {
+          tasks[newTagId].push(newTask);
+        }
+        
+        // If scheduled for today, add to today collection
+        if (newTask.scheduledDate && isToday(parseISO(newTask.scheduledDate))) {
+          tasks.today.push(newTask);
+        }
+        
+        // Generate instances for recurring tasks
+        if (newTask.repeat && newTask.repeat !== 'none' && !newTask.isRepeat) {
+          console.log('Generating instances for new recurring task');
+          const instances = generateRecurringTasks(newTask);
+          
+          if (instances && instances.length > 0) {
+            console.log(`Generated ${instances.length} instances for new recurring task`);
+            instances.forEach(instance => {
+              // Add to all collection if not already there
+              if (!tasks.all.some(t => t.id === instance.id)) {
+                tasks.all.push(instance);
+              }
+              
+              // Add to tag collection
+              const instanceTagId = instance.tag ? instance.tag.id : null;
+              if (instanceTagId && !tasks[instanceTagId].some(t => t.id === instance.id)) {
+                if (!tasks[instanceTagId]) tasks[instanceTagId] = [];
+                tasks[instanceTagId].push(instance);
+              }
+              
+              // Add to today if applicable
+              if (instance.scheduledDate && isToday(parseISO(instance.scheduledDate)) && 
+                  !tasks.today.some(t => t.id === instance.id)) {
+                tasks.today.push(instance);
+              }
+            });
+          }
+        }
+        
+        // Save to localStorage
+        localStorage.setItem("tasks", JSON.stringify(tasks));
+        
+        // Dispatch events
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'tasks',
+          newValue: JSON.stringify(tasks),
+          url: window.location.href
+        }));
+        
+        window.dispatchEvent(new CustomEvent('tasksUpdated', {
+          detail: tasks
+        }));
+        
+        return true;
       }
-      console.log('All task IDs in storage:', [...new Set(allTaskIds)]);
+      
+      // If we're here, it's an update to an existing task
+      console.log('Looking for task with ID:', updatedTaskData.id);
       
       // First, find and store the original task for reference
       for (const groupKey in tasks) {
@@ -201,7 +293,7 @@ export function useTaskManagement() {
             tasks[instanceTagGroup].push(newInstance);
             tasks.all.push(newInstance);
             
-            // Now set originalTask to this new instance
+            // Set originalTask to this new instance
             originalTask = newInstance;
             if (originalTask.tag) {
               originalTagId = originalTask.tag.id;
@@ -392,80 +484,184 @@ export function useTaskManagement() {
     }
   }, []);
 
-  const handleToggleTaskCompletion = useCallback((taskId) => {
-    console.log('handleToggleTaskCompletion called with taskId:', taskId);
-    
+  const handleToggleTaskCompletion = useCallback((taskIdOrObject, scope = 'single') => {
+    console.log('[handleToggleTaskCompletion] Initiated with:', 
+      typeof taskIdOrObject === 'object' ? JSON.parse(JSON.stringify(taskIdOrObject)) : taskIdOrObject, 
+      'Scope:', scope
+    );
     try {
       const savedTasks = localStorage.getItem("tasks") || "{}";
-      const tasks = JSON.parse(savedTasks); // This 'tasks' object will be mutated and saved
+      const tasks = JSON.parse(savedTasks);
+      
+      // Ensure basic collections exist
+      if (!tasks.all) tasks.all = [];
+      if (!tasks.today) tasks.today = [];
+      if (!tasks.completed) tasks.completed = [];
+      
+      let taskId;
       let taskToToggle = null;
+      let seriesId = null;
+      let isRecurringInstance = false;
       let newCompletionState = false;
+      let baseTask = null;
 
-      console.log('Current tasks from localStorage:', tasks);
+      if (typeof taskIdOrObject === 'object' && taskIdOrObject !== null) {
+        taskToToggle = { ...taskIdOrObject }; // Clone the task object
+        taskId = taskToToggle.id;
+        isRecurringInstance = !!taskToToggle.isRepeat;
+        seriesId = taskToToggle.seriesId;
+        newCompletionState = !taskToToggle.completed;
+        console.log('[handleToggleTaskCompletion] Received task object:', 
+          { id: taskId, title: taskToToggle.title, isRepeat: isRecurringInstance, seriesId: seriesId, originalBaseId: taskToToggle.originalBaseId, completed: taskToToggle.completed }
+        );
 
-      // Find the task to toggle by its ID across all collections
-      for (const groupKey in tasks) {
-        if (Array.isArray(tasks[groupKey])) {
-          const taskIndex = tasks[groupKey].findIndex(t => t.id === taskId);
-          if (taskIndex !== -1) {
-            taskToToggle = { ...tasks[groupKey][taskIndex] }; // Clone the task
-            newCompletionState = !taskToToggle.completed;
-            console.log('Found task to toggle:', taskToToggle, 'New completion state:', newCompletionState);
-            // No break here, we will update it in all its locations later if needed
+        // Data recovery for object: If it's a repeat task but seriesId is missing, try to get it from base task via originalBaseId
+        if (isRecurringInstance && !seriesId && taskToToggle.originalBaseId) {
+          console.warn(`[handleToggleTaskCompletion] Object: Recurring instance ${taskId} is missing seriesId. Attempting recovery via originalBaseId: ${taskToToggle.originalBaseId}`);
+          baseTask = tasks.all.find(t => t.id === taskToToggle.originalBaseId && (t.isRepeat === false || typeof t.isRepeat === 'undefined'));
+          if (baseTask && baseTask.seriesId) {
+            taskToToggle.seriesId = baseTask.seriesId;
+            seriesId = baseTask.seriesId; // Update local variable too
+            console.log(`[handleToggleTaskCompletion] Object: Successfully recovered seriesId: ${seriesId} for task ${taskId}`);
+          } else {
+            console.error(`[handleToggleTaskCompletion] Object: Could not recover seriesId for ${taskId} using originalBaseId ${taskToToggle.originalBaseId}. Base task for recovery:`, baseTask);
+          }
+        } else if (isRecurringInstance && !seriesId && !taskToToggle.originalBaseId) {
+          console.error(`[handleToggleTaskCompletion] CRITICAL (Object): Recurring instance ${taskId} is missing BOTH seriesId and originalBaseId. Cannot reliably find base task.`);
+        }
+      } else if (typeof taskIdOrObject === 'string') {
+        taskId = taskIdOrObject;
+        // Check if it's a recurring instance ID (e.g., "seriesId_repeat_timestamp")
+        const match = taskId.match(/^(series_.*?)_repeat_(\d+)$/);
+        if (match) {
+          isRecurringInstance = true;
+          seriesId = match[1]; // This is the extracted seriesId
+          newCompletionState = true; // Default to completing if it's a new instance being created on-the-fly
+          console.log('[handleToggleTaskCompletion] Identified recurring instance from ID string:', { taskId, seriesId, isRecurringInstance });
+        } else {
+          console.log('[handleToggleTaskCompletion] ID string does not match recurring instance pattern:', taskId);
+          // It might be a regular task ID, isRecurringInstance remains false, seriesId remains null
+        }
+      } else {
+        console.error('[handleToggleTaskCompletion] Invalid taskIdOrObject type:', taskIdOrObject);
+        return false;
+      }
+
+      // If we have a task object (either passed in or to be found by ID), try to use it or find it.
+      // If taskToToggle is already populated, it means an object was passed in.
+      // If not, and taskId is available, try to find it in localStorage.
+      if (!taskToToggle && taskId) {
+        console.log('[handleToggleTaskCompletion] Task object not passed directly or string ID provided. Looking for task in localStorage with ID:', taskId);
+        for (const groupKey in tasks) {
+          if (Array.isArray(tasks[groupKey])) {
+            const taskIndex = tasks[groupKey].findIndex(t => t.id === taskId);
+            if (taskIndex !== -1) {
+              taskToToggle = { ...tasks[groupKey][taskIndex] }; // Clone the task
+              isRecurringInstance = !!taskToToggle.isRepeat;
+              seriesId = taskToToggle.seriesId; // Get seriesId from the found task
+              newCompletionState = !taskToToggle.completed;
+              console.log('[handleToggleTaskCompletion] Found task to toggle in localStorage:', 
+                { id: taskToToggle.id, title: taskToToggle.title, isRepeat: taskToToggle.isRepeat, seriesId: taskToToggle.seriesId, completed: taskToToggle.completed }
+              );
+
+              // Data recovery: If it's a repeat task but seriesId is missing, try to get it from base task via originalBaseId
+              if (taskToToggle.isRepeat && !taskToToggle.seriesId && taskToToggle.originalBaseId) {
+                console.warn(`[handleToggleTaskCompletion] Recurring instance ${taskToToggle.id} is missing seriesId. Attempting recovery via originalBaseId: ${taskToToggle.originalBaseId}`);
+                const baseTaskForRecovery = tasks.all.find(t => t.id === taskToToggle.originalBaseId && (t.isRepeat === false || typeof t.isRepeat === 'undefined'));
+                if (baseTaskForRecovery && baseTaskForRecovery.seriesId) {
+                  taskToToggle.seriesId = baseTaskForRecovery.seriesId;
+                  seriesId = baseTaskForRecovery.seriesId; // Update local variable too
+                  console.log(`[handleToggleTaskCompletion] Successfully recovered seriesId: ${seriesId} for task ${taskToToggle.id}`);
+                } else {
+                  console.error(`[handleToggleTaskCompletion] Could not find base task or seriesId for recovery for instance ${taskToToggle.id} using originalBaseId ${taskToToggle.originalBaseId}`);
+                }
+              }
+              break; // Found it, no need to continue searching
+            }
           }
         }
       }
 
+      // If we still don't have a task (e.g. string ID didn't match localStorage), try to handle it as a recurring instance
       if (!taskToToggle) {
-        console.error("Task not found for completion toggle:", taskId);
-        
-        // If this is a recurring task instance, we might need to create it first
-        if (taskId.seriesId && taskId.isRepeat) {
-          console.log('This appears to be a recurring task instance. Attempting to create it first.');
-          
-          // Find the base task definition
-          let baseTask = null;
-          for (const groupKey in tasks) {
-            if (Array.isArray(tasks[groupKey])) {
-              const found = tasks[groupKey].find(t => 
-                t.seriesId === taskId.seriesId && 
-                (t.isRepeat === false || typeof t.isRepeat === 'undefined')
-              );
-              if (found) {
-                baseTask = found;
-                break;
-              }
-            }
+        console.log("[handleToggleTaskCompletion] Task not found in localStorage by ID, or initial input was a string ID for a new instance. Checking if it's a recurring instance that needs creation.");
+        if (isRecurringInstance && seriesId) { // seriesId would have been extracted from string ID or recovered
+          console.log(`[handleToggleTaskCompletion] Attempting to find base task for seriesId: '${seriesId}' (derived from string ID or recovered).`);
+          console.log('[handleToggleTaskCompletion] tasks.all available for base task lookup:', 
+            JSON.parse(JSON.stringify(tasks.all.filter(t => t.seriesId || (t.isRepeat === false || typeof t.isRepeat === 'undefined')).map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title, repeat: t.repeat }))))
+          );
+
+          baseTask = tasks.all.find(
+            (t) => t.seriesId === seriesId && (t.isRepeat === false || typeof t.isRepeat === 'undefined')
+          );
+          console.log('[handleToggleTaskCompletion] Found base task for seriesId:', baseTask ? { id: baseTask.id, title: baseTask.title, isRepeat: baseTask.isRepeat } : null);
+
+          if (!baseTask) {
+            console.error(`[handleToggleTaskCompletion] CRITICAL: Could not find base task for seriesId: '${seriesId}'. This is likely the root cause of 'Task not found' error.`);
+            const potentialBaseTasks = tasks.all.filter(t => (t.isRepeat === false || typeof t.isRepeat === 'undefined') && t.repeat && t.repeat !== 'none');
+            console.log('[handleToggleTaskCompletion] All potential base tasks in tasks.all (isRepeat=false/undefined and has repeat rule):', 
+              JSON.parse(JSON.stringify(potentialBaseTasks.map(t => ({id: t.id, seriesId: t.seriesId, title: t.title, repeat: t.repeat})))));
+            const similarSeriesIdTasks = tasks.all.filter(t => t.seriesId && seriesId && (t.seriesId.includes(seriesId) || seriesId.includes(t.seriesId)));
+            console.log('[handleToggleTaskCompletion] Tasks with seriesIds similar to target:', 
+              JSON.parse(JSON.stringify(similarSeriesIdTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title})))));
+          } else {
+            console.log('[handleToggleTaskCompletion] Successfully found base task for on-the-fly instance creation:', 
+              {id: baseTask.id, seriesId: baseTask.seriesId, title: baseTask.title}
+            );
           }
           
+          // If baseTask found, proceed to create the instance object (taskToToggle)
           if (baseTask) {
-            console.log('Found base task definition:', baseTask);
             // Create a new instance based on the updated task data
-            const newInstance = {
-              ...taskId,
-              createdAt: new Date().toISOString()
-            };
+            let newInstance;
+            
+            if (typeof taskIdOrObject === 'object') {
+              // If we have a task object, use its properties
+              newInstance = {
+                ...baseTask, // Start with base task properties
+                ...taskIdOrObject, // Override with provided properties
+                id: taskId, // Ensure ID is consistent
+                isRepeat: true,
+                seriesId: seriesId,
+                createdAt: new Date().toISOString(),
+                completed: !taskIdOrObject.completed // Toggle the completion state
+              };
+            } else {
+              // If we only have an ID, create a minimal instance
+              newInstance = {
+                ...baseTask,
+                id: taskId,
+                isRepeat: true,
+                seriesId: seriesId,
+                createdAt: new Date().toISOString(),
+                completed: true // Default to completing the task
+              };
+            }
+            
+            newCompletionState = newInstance.completed;
             
             // Add the new instance to collections
             const instanceTagGroup = newInstance.tag ? newInstance.tag.id : "all";
             if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
-            if (!tasks.all) tasks.all = [];
             
+            // Remove any existing instance with the same ID to avoid duplicates
+            tasks[instanceTagGroup] = tasks[instanceTagGroup].filter(t => t.id !== taskId);
+            tasks.all = tasks.all.filter(t => t.id !== taskId);
+            
+            // Add the new instance
             tasks[instanceTagGroup].push(newInstance);
             tasks.all.push(newInstance);
             
-            // Now set originalTask to this new instance
+            // Set taskToToggle to this new instance
             taskToToggle = newInstance;
-            if (taskToToggle.tag) {
-              originalTagId = taskToToggle.tag.id;
-            }
             
-            console.log('Created missing task instance:', newInstance);
+            console.log('Created and toggled recurring task instance:', newInstance);
           } else {
-            console.error('Could not find base task definition for series:', taskId.seriesId);
+            console.error('Could not find base task definition for series:', seriesId);
             return false;
           }
         } else {
+          console.error("Task not found for completion toggle:", taskId);
           return false;
         }
       }
@@ -496,34 +692,38 @@ export function useTaskManagement() {
         console.log('Task is being marked as completed:', taskId);
         let taskMovedToCompleted = null;
 
-        // Remove from 'today' if present
-        if (tasks.today) {
-          tasks.today = tasks.today.filter(t => {
-            if (t.id === taskId) { taskMovedToCompleted = { ...t, completed: true, completedAt: new Date().toISOString() }; return false; }
-            return true;
-          });
-        }
-        // Remove from specific tag groups (if any)
-        if (taskToToggle.tag && taskToToggle.tag.id && tasks[taskToToggle.tag.id]){
-            tasks[taskToToggle.tag.id] = tasks[taskToToggle.tag.id].filter(t => {
-                if (t.id === taskId && !taskMovedToCompleted) { taskMovedToCompleted = { ...t, completed: true, completedAt: new Date().toISOString() }; }
-                return t.id !== taskId;
-            });
-        }
-        // If not found in today or tag group, get it from 'all' to move to completed
-        if (!taskMovedToCompleted) {
-            const taskFromAll = tasks.all.find(t => t.id === taskId);
-            if (taskFromAll) {
-                taskMovedToCompleted = { ...taskFromAll, completed: true, completedAt: new Date().toISOString() };
-            }
+        // First, find the task in 'all' to ensure we have the most up-to-date version
+        const taskFromAll = tasks.all.find(t => t.id === taskId);
+        if (taskFromAll) {
+          taskMovedToCompleted = { 
+            ...taskFromAll, 
+            completed: true, 
+            completedAt: new Date().toISOString(),
+            // Preserve the original scheduled date for recurring tasks
+            scheduledDate: taskFromAll.scheduledDate || taskFromAll.startDateOfSeries
+          };
         }
 
-        // Ensure 'completed' collection exists and add the task
+        // Remove from active collections
+        if (tasks.today) {
+          tasks.today = tasks.today.filter(t => t.id !== taskId);
+        }
+        
+        // Remove from specific tag groups
+        if (taskToToggle.tag && taskToToggle.tag.id && tasks[taskToToggle.tag.id]) {
+          tasks[taskToToggle.tag.id] = tasks[taskToToggle.tag.id].filter(t => t.id !== taskId);
+        }
+        
+        // Ensure the task is in 'all' with updated completion status
         if (taskMovedToCompleted) {
-            if (!tasks.completed) tasks.completed = [];
-            tasks.completed = tasks.completed.filter(t => t.id !== taskId); // Remove if already there (e.g. toggling back and forth)
-            tasks.completed.push(taskMovedToCompleted);
-            console.log('Moved task to completed collection:', taskMovedToCompleted);
+          tasks.all = tasks.all.map(t => t.id === taskId ? taskMovedToCompleted : t);
+          
+          // Add to completed collection
+          if (!tasks.completed) tasks.completed = [];
+          tasks.completed = tasks.completed.filter(t => t.id !== taskId); // Remove if already there
+          tasks.completed.push(taskMovedToCompleted);
+          
+          console.log('Moved task to completed collection:', taskMovedToCompleted);
         }
         
         // If a recurring task instance was completed, generate the next instance
@@ -594,34 +794,42 @@ export function useTaskManagement() {
         console.log('Task is being marked as incomplete:', taskId);
         let taskMovedFromCompleted = null;
 
-        // Remove from 'completed' collection
-        if (tasks.completed) {
-          tasks.completed = tasks.completed.filter(t => {
-            if (t.id === taskId) { taskMovedFromCompleted = { ...t, completed: false }; delete taskMovedFromCompleted.completedAt; return false; }
-            return true;
-          });
-        }
-        
-        // Add back to 'today' if it was scheduled for today and not already there
-        if (taskMovedFromCompleted && taskMovedFromCompleted.scheduledDate && isToday(parseISO(taskMovedFromCompleted.scheduledDate))) {
-          if (!tasks.today) tasks.today = [];
-          if (!tasks.today.some(t => t.id === taskId)) {
-            tasks.today.push(taskMovedFromCompleted);
+        // Find the task in 'all' to get the most up-to-date version
+        const taskFromAll = tasks.all.find(t => t.id === taskId);
+        if (taskFromAll) {
+          taskMovedFromCompleted = { 
+            ...taskFromAll, 
+            completed: false, 
+            completedAt: undefined
+          };
+          
+          // Update in 'all' collection
+          tasks.all = tasks.all.map(t => t.id === taskId ? taskMovedFromCompleted : t);
+          
+          // Remove from completed collection
+          if (tasks.completed) {
+            tasks.completed = tasks.completed.filter(t => t.id !== taskId);
           }
-        }
-        // Add back to its specific tag group if applicable
-        if (taskMovedFromCompleted && taskMovedFromCompleted.tag && taskMovedFromCompleted.tag.id) {
+          
+          // Add back to 'today' if scheduled for today
+          if (taskMovedFromCompleted.scheduledDate && isToday(parseISO(taskMovedFromCompleted.scheduledDate))) {
+            if (!tasks.today) tasks.today = [];
+            if (!tasks.today.some(t => t.id === taskId)) {
+              tasks.today.push(taskMovedFromCompleted);
+            }
+          }
+          
+          // Add back to its specific tag group if applicable
+          if (taskMovedFromCompleted.tag && taskMovedFromCompleted.tag.id) {
             const tagId = taskMovedFromCompleted.tag.id;
             if (!tasks[tagId]) tasks[tagId] = [];
             if (!tasks[tagId].some(t => t.id === taskId)) {
-                tasks[tagId].push(taskMovedFromCompleted);
+              tasks[tagId].push(taskMovedFromCompleted);
             }
+          }
+          
+          console.log('Moved task from completed collection:', taskMovedFromCompleted);
         }
-        // Ensure it's in 'all' (should already be, but as a fallback)
-        if (taskMovedFromCompleted && !tasks.all.some(t => t.id === taskId)) {
-            tasks.all.push(taskMovedFromCompleted);
-        }
-         console.log('Moved task from completed collection:', taskMovedFromCompleted);
       }
       
       // Save all changes to localStorage
@@ -646,102 +854,106 @@ export function useTaskManagement() {
   }, []);
 
   const ensureActiveRecurringInstances = useCallback(() => {
-    console.log('Running ensureActiveRecurringInstances');
+    console.log('[ensureActiveRecurringInstances] Running check...');
     const savedTasks = localStorage.getItem("tasks") || "{}";
     const tasks = JSON.parse(savedTasks);
     const allCurrentTasks = tasks.all || [];
     let updated = false;
 
-    // Find all base recurring tasks - both those with isRepeat=false and those with repeat property
     const baseRecurringTasks = allCurrentTasks.filter(task => {
-      // Check if it has a repeat pattern
       const hasRepeatPattern = task.repeat && task.repeat !== 'none';
-      
-      // Check if it's a base task (not an instance)
-      // Either explicitly marked as isRepeat=false or not marked as an instance (isRepeat is undefined)
       const isBaseTask = task.isRepeat === false || typeof task.isRepeat === 'undefined';
-      
-      // For tasks created via CommandBar, they might not have isRepeat set but have a repeat pattern
-      return hasRepeatPattern && isBaseTask;
+      return hasRepeatPattern && isBaseTask && task.seriesId; // Ensure base task has a seriesId
     });
 
-    console.log('Found base recurring tasks:', baseRecurringTasks.length, baseRecurringTasks);
-
+    console.log('[ensureActiveRecurringInstances] Found base recurring tasks to process:', baseRecurringTasks.length);
     baseRecurringTasks.forEach(baseTask => {
-      // If the task doesn't have a seriesId yet, assign one
-      if (!baseTask.seriesId && baseTask.repeat && baseTask.repeat !== 'none') {
-        baseTask.seriesId = `series_${Date.now().toString()}_${Math.random().toString(36).substring(2, 9)}`;
-        updated = true;
-        console.log('Added missing seriesId to base task:', baseTask.id, baseTask.seriesId);
-      }
-      
-      // Check if there's already an active instance for this series
-      const activeInstanceExists = allCurrentTasks.some(
-        instance => instance.seriesId === baseTask.seriesId && 
-                   instance.isRepeat === true && 
-                   !instance.completed
+      console.log(`[ensureActiveRecurringInstances] Processing base task: ID=${baseTask.id}, seriesId=${baseTask.seriesId}, Title='${baseTask.title}'`);
+
+      // Log all existing instances for this series from allCurrentTasks
+      const existingInstancesForSeries = allCurrentTasks.filter(
+        instance => instance.seriesId === baseTask.seriesId && instance.isRepeat === true
+      );
+      console.log(`[ensureActiveRecurringInstances] Found ${existingInstancesForSeries.length} existing instances in allCurrentTasks for series ${baseTask.seriesId}:`,
+        JSON.parse(JSON.stringify(existingInstancesForSeries.map(inst => ({id: inst.id, scheduledDate: inst.scheduledDate, completed: inst.completed}))))
       );
 
-      console.log('Active instance exists for series', baseTask.seriesId, ':', activeInstanceExists);
+      const activeInstanceExists = existingInstancesForSeries.some(
+        instance => !instance.completed
+      );
+      console.log(`[ensureActiveRecurringInstances] Active instance exists for series ${baseTask.seriesId}? ${activeInstanceExists}`);
 
       if (!activeInstanceExists) {
-        // Ensure base task has a start date for the series for generating the first instance
+        console.log(`[ensureActiveRecurringInstances] No active instance found for series ${baseTask.seriesId}. Attempting to generate one.`);
         if (!baseTask.startDateOfSeries && baseTask.scheduledDate) {
           baseTask.startDateOfSeries = baseTask.scheduledDate;
-          console.log('Using scheduledDate as startDateOfSeries:', baseTask.scheduledDate);
         } else if (!baseTask.startDateOfSeries && baseTask.createdAt) {
           baseTask.startDateOfSeries = baseTask.createdAt;
-          console.log('Using createdAt as startDateOfSeries:', baseTask.createdAt);
         } else if (!baseTask.startDateOfSeries) {
-          baseTask.startDateOfSeries = new Date().toISOString(); // Fallback, less ideal
-          console.log('Using current date as startDateOfSeries fallback');
+          baseTask.startDateOfSeries = new Date().toISOString(); 
         }
+        console.log(`[ensureActiveRecurringInstances] Base task for generation (series ${baseTask.seriesId}):`, JSON.parse(JSON.stringify(baseTask)));
         
-        // Generate the first instance
-        console.log('Generating first instance for base task:', baseTask);
-        const firstInstance = generateNextDisplayableTaskInstance(baseTask, null); // null for lastInstanceDate to get the first one
+        let rawFirstInstance = generateNextDisplayableTaskInstance(baseTask, null); 
         
-        if (firstInstance) {
-          console.log('Successfully generated first instance:', firstInstance);
+        if (rawFirstInstance) {
+          console.log(`[ensureActiveRecurringInstances] Raw first instance generated by recurrenceUtils for series ${baseTask.seriesId}:`, JSON.parse(JSON.stringify(rawFirstInstance)));
+          const firstInstance = {
+            ...rawFirstInstance,
+            seriesId: baseTask.seriesId, 
+            isRepeat: true,              
+            tag: rawFirstInstance.tag || baseTask.tag, 
+            originalBaseId: baseTask.id,     
+            id: rawFirstInstance.id && !String(rawFirstInstance.id).includes('undefined') && !String(rawFirstInstance.id).includes('null')
+                ? rawFirstInstance.id 
+                : `${baseTask.seriesId}_repeat_${new Date(rawFirstInstance.scheduledDate).getTime()}`,
+            // Ensure scheduledDate is in ISO format if it's a Date object
+            scheduledDate: rawFirstInstance.scheduledDate instanceof Date ? rawFirstInstance.scheduledDate.toISOString() : rawFirstInstance.scheduledDate
+          };
+
+          console.log(`[ensureActiveRecurringInstances] Enriched first instance for series ${baseTask.seriesId}:`, JSON.parse(JSON.stringify(firstInstance)));
+          
           const tagGroup = firstInstance.tag ? firstInstance.tag.id : "all";
           if (!tasks[tagGroup]) tasks[tagGroup] = [];
-          tasks[tagGroup].push(firstInstance);
-          if (!tasks.all.find(t => t.id === firstInstance.id)) {
-             tasks.all.push(firstInstance);
+          if (!tasks[tagGroup].some(t => t.id === firstInstance.id)) {
+            tasks[tagGroup].push(firstInstance);
           }
-          updated = true;
-          console.log(`Generated first active instance for series ${baseTask.seriesId}`, firstInstance);
+          
+          if (!tasks.all.some(t => t.id === firstInstance.id)) {
+             tasks.all.push(firstInstance);
+             updated = true;
+             console.log(`[ensureActiveRecurringInstances] Added generated first active instance ${firstInstance.id} for series ${baseTask.seriesId} to tasks.all.`);
+          } else {
+            console.log(`[ensureActiveRecurringInstances] Instance ${firstInstance.id} (or equivalent) already in tasks.all for series ${baseTask.seriesId}. No update to tasks.all.`);
+          }
         } else {
-          console.error('Failed to generate first instance for base task:', baseTask);
+          console.warn(`[ensureActiveRecurringInstances] Failed to generate first instance for base task ID: ${baseTask.id}, seriesId: ${baseTask.seriesId}`);
         }
+      } else {
+        console.log(`[ensureActiveRecurringInstances] Active instance already exists for series ${baseTask.seriesId}. No new instance generated.`);
       }
     });
 
     if (updated) {
-      console.log('Updating localStorage with new instances');
+      console.log('[ensureActiveRecurringInstances] Found updates, saving tasks to localStorage.');
       localStorage.setItem("tasks", JSON.stringify(tasks));
-      
-      // Dispatch a storage event to notify other components
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'tasks',
         newValue: JSON.stringify(tasks),
         url: window.location.href
       }));
+      window.dispatchEvent(new CustomEvent('tasksUpdated', {
+        detail: { tasks: tasks }
+      }));
     } else {
-      console.log('No updates needed for recurring tasks');
+      console.log('[ensureActiveRecurringInstances] No updates made to tasks in localStorage by this run.');
     }
-  }, []);
-  
-  // Call once on hook initialization (or app start)
-  // This is a side effect and might be better handled by the component consuming the hook
-  // or an application initialization routine.
-  // For now, let's include it here, guarded by a simple check to run once per session or similar logic if possible.
-  // However, directly calling it here will run every time the hook is used, which might not be ideal.
-  // A better approach might be to export it and have a parent component call it once.
-  // For this exercise, I'll call it, assuming its idempotency or that it's managed externally.
-  // useEffect(() => {
-  //  ensureActiveRecurringInstances();
-  // }, []); // Empty dependency array means it runs once when the component using the hook mounts.
+  }, [generateNextDisplayableTaskInstance]); // Added generateNextDisplayableTaskInstance to dependency array
+
+  useEffect(() => {
+    console.log('[useTaskManagement] Hook mounted, calling ensureActiveRecurringInstances.');
+    ensureActiveRecurringInstances();
+  }, [ensureActiveRecurringInstances]); // ensureActiveRecurringInstances is a callback, include it in deps
 
   /**
    * Get all recurring task instances for a given time range
@@ -757,30 +969,42 @@ export function useTaskManagement() {
     
     // Find all recurring tasks (base tasks only, not instances)
     const recurringTasks = allTasks.filter(task => 
-      task.repeat && task.repeat !== 'none' && !task.isRepeat
+      task.repeat && task.repeat !== 'none' && !task.isRepeat && task.seriesId // Ensure base task has a seriesId
     );
     
-    console.log('Found recurring tasks:', recurringTasks);
+    console.log('[getRecurringTaskInstances] Found base recurring tasks:', recurringTasks.length);
     
     // Generate instances for each recurring task
     let instances = [];
-    recurringTasks.forEach(task => {
-      // Make sure we have a valid task with a repeat property
-      if (!task || !task.repeat || task.repeat === 'none') return;
+    recurringTasks.forEach(baseTask => {
+      // Make sure we have a valid task with a repeat property and seriesId
+      if (!baseTask || !baseTask.repeat || baseTask.repeat === 'none' || !baseTask.seriesId) return;
       
-      // Generate recurring instances
-      const taskInstances = generateRecurringTasks(task, endDate);
-      console.log(`Generated ${taskInstances.length} instances for task:`, task.title);
+      // Generate recurring instances using the baseTask
+      const generatedRawInstances = generateRecurringTasks(baseTask, endDate);
+      console.log(`[getRecurringTaskInstances] Generated ${generatedRawInstances.length} raw instances for task: ${baseTask.title} (seriesId: ${baseTask.seriesId})`);
       
-      // Filter to only include instances in the date range
-      const filteredInstances = taskInstances.filter(instance => {
-        if (!instance.scheduledDate) return false;
-        const instanceDate = new Date(instance.scheduledDate);
-        return instanceDate >= startDate && instanceDate <= endDate;
-      });
+      // Filter to only include instances in the date range and enrich them
+      const enrichedAndFilteredInstances = generatedRawInstances
+        .filter(instance => {
+          if (!instance.scheduledDate) return false;
+          const instanceDate = new Date(instance.scheduledDate);
+          return instanceDate >= startDate && instanceDate <= endDate;
+        })
+        .map(instance => ({
+          ...instance,
+          seriesId: baseTask.seriesId, // Ensure seriesId is from the base task
+          isRepeat: true,             // Mark as a repeat instance
+          tag: instance.tag || baseTask.tag, // Inherit tag if not present
+          originalBaseId: baseTask.id, // Store reference to the base task ID
+          // Ensure the instance ID is unique if not already, using seriesId and scheduledDate
+          id: instance.id && !instance.id.includes('undefined') 
+              ? instance.id 
+              : `${baseTask.seriesId}_${new Date(instance.scheduledDate).getTime()}`
+        }));
       
-      console.log(`After filtering, ${filteredInstances.length} instances remain in date range`);
-      instances = [...instances, ...filteredInstances];
+      console.log(`[getRecurringTaskInstances] After filtering and enriching, ${enrichedAndFilteredInstances.length} instances remain in date range for series ${baseTask.seriesId}`);
+      instances = [...instances, ...enrichedAndFilteredInstances];
     });
     
     return instances;

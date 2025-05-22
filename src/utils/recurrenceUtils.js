@@ -341,19 +341,38 @@ export function generateRecurringTasks(baseTask, endDate, maxInstances = 52) {
   for (let i = 0; i < dates.length; i++) {
     const scheduledDate = dates[i];
     
+    // Ensure baseTask has a seriesId. This should be guaranteed by handleCreateTask.
+    if (!baseTask.seriesId) {
+      console.error(`[RecurrenceUtils][generateRecurringTasks] CRITICAL: Base task (ID: ${baseTask.id}) is missing seriesId. Cannot generate valid instance IDs.`);
+      // Potentially skip this instance or assign a temporary problematic ID
+      continue; 
+    }
+
+    const instanceScheduledTime = new Date(scheduledDate).getTime();
+    const newInstanceId = `${baseTask.seriesId}_repeat_${instanceScheduledTime}`;
+
     // Create a new instance for this date
     result.push({
       ...baseTask,
-      id: `${baseTask.id}_repeat_${i}`,
-      seriesId: baseTask.seriesId,
+      id: newInstanceId, // Use the new consistent ID format
+      seriesId: baseTask.seriesId, // Ensure seriesId is correctly propagated
+      originalTaskId: baseTask.id, // Reference to the original base task definition ID
+      originalBaseId: baseTask.id, // Alias for consistency
       scheduledDate: scheduledDate.toISOString(),
       isRepeat: true,
-      // Store the rrule string for future reference
-      rrule: rrule.toString(),
-      // Add a reference to the original task ID
-      originalTaskId: baseTask.id,
-      // Reset completion status for future instances
-      completed: false
+      completed: false, 
+      createdAt: new Date().toISOString(), // Instance creation time
+      updatedAt: new Date().toISOString(),
+      // Ensure fields that define recurrence itself are not copied to instances
+      repeat: undefined,
+      rrule: undefined, // Remove rrule string if present on baseTask, it's for the series, not instance
+      rruleOptions: undefined,
+      completedAt: undefined, // New instances are not completed
+      // Ensure other potentially problematic fields from base are reset or not copied
+      // notes: baseTask.notes || '', // Notes can be copied
+      // tag: baseTask.tag ? { ...baseTask.tag } : null, // Tag can be copied
+      subTasks: [], // New instances should not inherit completed subtasks from a base template
+      attachments: [], // Same for attachments
     });
   }
 
@@ -959,11 +978,15 @@ function generateNextTaskInstance(baseTaskDefinition, occurrenceDate) {
   }
   console.log(`[RecurrenceUtils][generateNextTaskInstance] Called with baseTask ID: ${baseTaskDefinition.id}, occurrenceDate: ${occurrenceDate.toISOString()}`);
   
+  const instanceScheduledTime = new Date(occurrenceDate).getTime();
+  const newInstanceId = `${baseTaskDefinition.seriesId}_repeat_${instanceScheduledTime}`;
+
   const newInstance = {
-    ...baseTaskDefinition,
-    id: generateEventId(), 
-    seriesId: baseTaskDefinition.seriesId || baseTaskDefinition.id, 
-    originalTaskId: baseTaskDefinition.id, 
+    ...baseTaskDefinition, // Spread base properties first
+    id: newInstanceId,    // Set the new, consistent ID
+    seriesId: baseTaskDefinition.seriesId, // Explicitly use the base task's seriesId
+    originalTaskId: baseTaskDefinition.id, // Keep original base task ID reference
+    originalBaseId: baseTaskDefinition.id, // Alias for clarity, consistent with other parts of system
     scheduledDate: occurrenceDate.toISOString(),
     isRepeat: true, 
     completed: false, 
@@ -972,8 +995,14 @@ function generateNextTaskInstance(baseTaskDefinition, occurrenceDate) {
     startDateOfSeries: baseTaskDefinition.startDateOfSeries || baseTaskDefinition.createdAt, 
     // Ensure fields that define recurrence itself are not copied to instances
     repeat: undefined,
+    rrule: undefined, // if baseTaskDefinition had 'rrule' string, remove it
     rruleOptions: undefined,
     completedAt: undefined, // New instances are not completed
+    // Ensure other potentially problematic fields from base are reset or not copied
+    notes: baseTaskDefinition.notes || '', // Copy notes, or default to empty
+    tag: baseTaskDefinition.tag ? { ...baseTaskDefinition.tag } : null, // Copy tag object if exists
+    subTasks: [], // New instances should not inherit completed subtasks from a base template
+    attachments: [], // Same for attachments
   };
 
   // Explicitly delete to be absolutely sure, as 'undefined' might not remove key if baseTaskDefinition had it as null
