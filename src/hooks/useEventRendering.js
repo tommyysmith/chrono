@@ -352,7 +352,7 @@ export function useEventRendering(
       const numRows = eventRows.length > 0 ? eventRows.length : 1; // Ensure at least 1 row
 
       return (
-        <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
+        <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border/50 dark:border-dark-border">
           <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
             All-day
           </div>
@@ -365,7 +365,7 @@ export function useEventRendering(
             {Array.from({ length: 7 * numRows }).map((_, index) => (
               <div
                 key={`bg-cell-${index}`}
-                className={`border-l border-light-border dark:border-dark-border`}
+                className={`border-l border-light-border/50 dark:border-dark-border`}
                 style={{ gridColumn: (index % 7) + 1, gridRow: Math.floor(index / 7) + 1 }}
               />
             ))}

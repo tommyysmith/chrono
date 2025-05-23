@@ -170,7 +170,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border">
+            <PopoverContent align="start" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border">
               <div className="flex flex-col gap-1">
                 <button
                   onClick={handleEdit}
@@ -181,7 +181,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white hover:font-semibold text-[#EC0F0F]"
+                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white text-[#EC0F0F]"
                 >
                   <Trash className="w-3 h-3" />
                   Delete

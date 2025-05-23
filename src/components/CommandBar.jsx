@@ -1693,7 +1693,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             style={{ backgroundColor: selectedColor }}
                           />
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto rounded-[9px] bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border p-3">
+                        <PopoverContent className="w-auto rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border p-3">
                           <div className="grid grid-cols-5 gap-2">
                             {TAG_COLORS.map((color) => (
                               <motion.div

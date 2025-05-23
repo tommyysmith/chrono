@@ -122,12 +122,6 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     return isWithinInterval(date, { start, end });
   }, [currentDate, isWeekView]);
 
-  const filterEvents = useCallback((date) => {
-    return events
-      .filter(event => isSameDay(new Date(event.start), date))
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
-  }, [events]);
-
   const filterTasks = useCallback((date) => {
     console.log(`[AgendaView] Filtering tasks for date: ${format(date, 'yyyy-MM-dd')}`);
     
@@ -154,94 +148,80 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     
     console.log(`[AgendaView] Found ${allTasks.length} total tasks in localStorage`);
     
-    // 1. Get regular non-recurring tasks scheduled for this date
-    const regularTasks = allTasks.filter(task => {
-      // Skip recurring tasks (both base and instances)
-      if (task.repeat && task.repeat !== 'none') return false;
-      if (task.isRepeat) return false;
+    // Process tasks similar to Sidebar's approach
+    const uniqueTasks = allTasks
+      .filter(task => !task.completed) // Skip completed tasks
+      .reduce((unique, task) => {
+        // For recurring tasks, handle them specially
+        if (task.repeat && task.repeat !== 'none') {
+          // For base tasks (isRepeat === false), check if there's an active instance
+          if (task.isRepeat === false) {
+            const hasActiveInstance = allTasks.some(t => 
+              t.seriesId === task.seriesId && 
+              t.isRepeat === true && 
+              !t.completed
+            );
+            
+            if (hasActiveInstance) {
+              return unique; // Skip the base task if an active instance exists
+            }
+            
+            // If no active instance and no scheduled date, set to today
+            if (!task.scheduledDate && task.repeat && task.repeat !== 'none') {
+              task = {
+                ...task,
+                scheduledDate: new Date().toISOString() 
+              };
+            }
+          }
+          
+          // Check if we already have an instance for this series
+          const existingSeriesInstance = Object.values(unique).find(
+            t => t.seriesId === task.seriesId && t.isRepeat && !t.completed
+          );
+          
+          if (existingSeriesInstance) {
+            if (task.isRepeat && task.scheduledDate && existingSeriesInstance.scheduledDate) {
+              const taskDate = parseISO(task.scheduledDate);
+              const existingDate = parseISO(existingSeriesInstance.scheduledDate);
+              if (isAfter(existingDate, taskDate)) { // current task is earlier
+                delete unique[existingSeriesInstance.id]; // remove later instance
+                unique[task.id] = task; // add earlier instance
+              } else {
+                return unique; // existing instance is earlier or same, keep it
+              }
+            } else if (task.isRepeat) { 
+              return unique; // prefer existing by default
+            }
+          } else {
+            unique[task.id] = task; // No existing instance, add this one
+          }
+          return unique;
+        }
+        
+        // For non-recurring tasks
+        unique[task.id] = task;
+        return unique;
+      }, {});
+    
+    // Now filter for tasks scheduled for this specific date
+    const tasksForDate = Object.values(uniqueTasks).filter(task => {
+      if (!task.scheduledDate) return false;
       
-      // Check if scheduled for this specific date
-      const isScheduledForDate = task.scheduledDate && 
-                                 isSameDay(new Date(task.scheduledDate), date);
-      return isScheduledForDate;
-    });
-    
-    console.log(`[AgendaView] Found ${regularTasks.length} regular tasks for ${format(date, 'yyyy-MM-dd')}`);
-    
-    // 2. Get existing recurring instances already in localStorage
-    const existingRecurringInstances = allTasks.filter(task => {
-      // Only get instances (not base tasks)
-      if (!task.isRepeat) return false;
-      
-      // Check if scheduled for this specific date
-      const isScheduledForDate = task.scheduledDate && 
-                                 isSameDay(new Date(task.scheduledDate), date);
-      return isScheduledForDate;
-    });
-    
-    console.log(`[AgendaView] Found ${existingRecurringInstances.length} existing recurring instances`);
-    
-    // 3. Get all base recurring tasks to generate additional instances if needed
-    const recurringBaseTasks = allTasks.filter(task => 
-      task.repeat && task.repeat !== 'none' && !task.isRepeat
-    );
-    
-    console.log(`[AgendaView] Found ${recurringBaseTasks.length} base recurring tasks`);
-    
-    // Create a startDate and endDate for a longer range to ensure we get all instances
-    // Start from 1 year before the selected date to 1 year after to ensure we capture everything
-    const startRangeDate = new Date(date);
-    startRangeDate.setFullYear(date.getFullYear() - 1);
-    
-    const endRangeDate = new Date(date);
-    endRangeDate.setFullYear(date.getFullYear() + 1);
-    
-    // 4. Generate all potential recurring instances from the base tasks
-    const generatedInstances = getRecurringTaskInstances(startRangeDate, endRangeDate)
-      .filter(instance => {
-        // Only include instances for this specific date
-        if (!instance.scheduledDate) return false;
-        
-        const instanceDate = new Date(instance.scheduledDate);
-        const isForSelectedDate = isSameDay(instanceDate, date);
-        
-        // Skip instances we already have
-        const isDuplicate = existingRecurringInstances.some(existing => 
-          existing.id === instance.id || 
-          (existing.seriesId === instance.seriesId && 
-           isSameDay(new Date(existing.scheduledDate), instanceDate))
-        );
-        
-        return isForSelectedDate && !isDuplicate;
-      });
-    
-    console.log(`[AgendaView] Generated ${generatedInstances.length} additional instances from rrule`);
-    
-    // Ensure all generated instances have valid IDs that follow a consistent pattern
-    const processedGeneratedInstances = generatedInstances.map(instance => {
-      // If the instance doesn't have a valid ID, generate one
-      if (!instance.id || instance.id.includes('undefined')) {
-        const newId = `${instance.seriesId}_${Date.now()}_repeat_${Math.floor(Math.random() * 10000)}`;
-        console.log(`[AgendaView] Fixing invalid instance ID: ${instance.id} -> ${newId}`);
-        return {
-          ...instance,
-          id: newId
-        };
+      try {
+        const taskDate = new Date(task.scheduledDate);
+        return isSameDay(taskDate, date);
+      } catch (error) {
+        console.error('Error parsing task date:', task.id, error);
+        return false;
       }
-      return instance;
+    }).sort((a, b) => {
+      return a.title.localeCompare(b.title);
     });
     
-    // Combine and sort all tasks for this date
-    const allDateTasks = [...regularTasks, ...existingRecurringInstances, ...processedGeneratedInstances]
-      .filter(task => !task.completed) // Filter out completed tasks
-      .sort((a, b) => {        
-        // Then sort by title (completed tasks are already filtered out)
-        return a.title.localeCompare(b.title);
-      });
-    
-    console.log(`[AgendaView] Total tasks for display (active only): ${allDateTasks.length}`);
-    return allDateTasks;
-  }, [tasks, getRecurringTaskInstances]);
+    console.log(`[AgendaView] Tasks for ${format(date, 'yyyy-MM-dd')}: ${tasksForDate.length}`);
+    return tasksForDate;
+  }, [tasks]);
 
   const handleDateSelect = useCallback((date) => {
     if (date) {
@@ -253,8 +233,10 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   }, [onDateSelect]);
 
   const filteredEvents = useMemo(() => {
-    return filterEvents(currentDate);
-  }, [filterEvents, currentDate]);
+    return events
+      .filter(event => isSameDay(new Date(event.start), currentDate))
+      .sort((a, b) => new Date(a.start) - new Date(b.start));
+  }, [events, currentDate]);
 
   const filteredTasks = useMemo(() => {
     const tasks = filterTasks(currentDate);
@@ -449,7 +431,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
               >
                 <CalendarIcon className="w-4 h-4" />
                 <span className="text-xs mr-1">
-                  {filterEvents(currentDate).length}
+                  {filteredEvents.length}
                 </span>
               </button>
               <button 

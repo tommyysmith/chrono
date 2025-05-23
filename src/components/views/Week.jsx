@@ -100,7 +100,7 @@ export default function Week({
               {HOURS.map((hour) => (
                 <div key={hour} className={`${hour === 23 ? 'h-40' : 'h-20'}`}>
                   {hour !== 0 && (
-                    <div className="absolute left-0 right-0 border-b border-light-border dark:border-dark-border" />
+                    <div className="absolute left-0 right-0 border-b border-light-border/50 dark:border-dark-border" />
                   )}
                 </div>
               ))}
@@ -108,7 +108,7 @@ export default function Week({
                 {Array.from({ length: 7 }).map((_, i) => (
                   <div
                     key={i}
-                    className="border-l border-light-border dark:border-dark-border h-full relative"
+                    className="border-l border-light-border/50 dark:border-dark-border h-full relative"
                   />
                 ))}
               </div>
