@@ -165,7 +165,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.1 }}
-                className="flex group absolute top-2 right-2 bg-light-bg-lighter dark:bg-dark-bg-light h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
+                className="flex group absolute top-2 right-2 h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>

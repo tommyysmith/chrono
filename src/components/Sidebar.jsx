@@ -28,6 +28,7 @@ import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import TagDropdown from "./TagDropdown";
 import TaskItem from "./TaskItem";
 import Checkbox from "./Checkbox";
+import RepeatTaskEditModal from "./RepeatTaskEditModal";
 import { TAG_COLORS } from "../constants/colors";
 import { Chevron } from "../assets/icons/Chevron";
 import { Calendar } from "../assets/icons/Calendar";
@@ -62,16 +63,19 @@ export default function Sidebar({
     getTasksInSeries, 
     getRecurringTaskInstances, 
     handleToggleTaskCompletion, 
-    ensureActiveRecurringInstances 
+    ensureActiveRecurringInstances,
+    handleUpdateTask
   } = useTaskManagement();
   const [activeTab, setActiveTab] = useState(() => {
-    // Try to load from localStorage first
-    const savedTab = localStorage.getItem("activeTab");
-    if (savedTab) {
-      try {
-        return savedTab;
-      } catch (e) {
-        console.error("Error parsing activeTab:", e);
+    // Try to load from localStorage first (only in browser)
+    if (typeof window !== 'undefined') {
+      const savedTab = localStorage.getItem("activeTab");
+      if (savedTab) {
+        try {
+          return savedTab;
+        } catch (e) {
+          console.error("Error parsing activeTab:", e);
+        }
       }
     }
 
@@ -81,17 +85,21 @@ export default function Sidebar({
 
   // Save activeTab to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("activeTab", activeTab);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("activeTab", activeTab);
+    }
   }, [activeTab]);
 
   const [expandedSections, setExpandedSections] = useState(() => {
-    // Try to load from localStorage first
-    const savedState = localStorage.getItem("expandedSections");
-    if (savedState) {
-      try {
-        return JSON.parse(savedState);
-      } catch (e) {
-        console.error("Error parsing expandedSections:", e);
+    // Try to load from localStorage first (only in browser)
+    if (typeof window !== 'undefined') {
+      const savedState = localStorage.getItem("expandedSections");
+      if (savedState) {
+        try {
+          return JSON.parse(savedState);
+        } catch (e) {
+          console.error("Error parsing expandedSections:", e);
+        }
       }
     }
 
@@ -110,7 +118,9 @@ export default function Sidebar({
 
   // Save expandedSections to localStorage whenever it changes
   useEffect(() => {
-    localStorage.setItem("expandedSections", JSON.stringify(expandedSections));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("expandedSections", JSON.stringify(expandedSections));
+    }
   }, [expandedSections]);
 
   const [selectedView, setSelectedView] = useState("all"); // 'all', 'today', 'upcoming', or 'completed'
@@ -131,13 +141,15 @@ export default function Sidebar({
       { id: "travel", label: "Travel", color: "#22C55E" },
     ];
 
-    // Try to load from localStorage
-    const savedTags = localStorage.getItem("tags");
-    if (savedTags) {
-      try {
-        return JSON.parse(savedTags);
-      } catch (e) {
-        console.error("Error parsing tags:", e);
+    // Try to load from localStorage (only in browser)
+    if (typeof window !== 'undefined') {
+      const savedTags = localStorage.getItem("tags");
+      if (savedTags) {
+        try {
+          return JSON.parse(savedTags);
+        } catch (e) {
+          console.error("Error parsing tags:", e);
+        }
       }
     }
     return defaultTags;
@@ -155,17 +167,19 @@ export default function Sidebar({
       completed: [], // New collection for completed tasks
     };
 
-    // Try to load from localStorage
-    const savedTasks = localStorage.getItem("tasks");
-    if (savedTasks) {
-      try {
-        const parsed = JSON.parse(savedTasks);
-        return {
-          ...initialTasks,
-          ...parsed,
-        };
-      } catch (e) {
-        console.error("Error parsing tasks:", e);
+    // Try to load from localStorage (only in browser)
+    if (typeof window !== 'undefined') {
+      const savedTasks = localStorage.getItem("tasks");
+      if (savedTasks) {
+        try {
+          const parsed = JSON.parse(savedTasks);
+          return {
+            ...initialTasks,
+            ...parsed,
+          };
+        } catch (e) {
+          console.error("Error parsing tasks:", e);
+        }
       }
     }
     return initialTasks;
@@ -173,15 +187,24 @@ export default function Sidebar({
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [originalTask, setOriginalTask] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  
+  // RepeatTaskEditModal state
+  const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState(null);
+  const [draggedTask, setDraggedTask] = useState(null);
 
   // Save tasks to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+    }
   }, [tasks]);
 
   // Save tags to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem("tags", JSON.stringify(tags));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem("tags", JSON.stringify(tags));
+    }
   }, [tags]);
 
   // Call ensureActiveRecurringInstances once on mount
@@ -234,19 +257,24 @@ export default function Sidebar({
     };
   }, []);
 
-  // Listen for tasks-updated event from CommandBar
+  // Listen for tasks-updated event from CommandBar and tasksUpdated from useTaskManagement
   useEffect(() => {
     const handleTasksUpdated = (event) => {
       // Update tasks state when event is received
-      setTasks(event.detail);
+      // Handle both event.detail and event.detail.tasks formats
+      const newTasks = event.detail.tasks || event.detail;
+      setTasks(newTasks);
+      console.log('[Sidebar] Tasks updated from event:', event.type);
     };
 
-    // Add event listener
+    // Add event listeners for both event types
     window.addEventListener("tasks-updated", handleTasksUpdated);
+    window.addEventListener("tasksUpdated", handleTasksUpdated);
 
-    // Clean up event listener on component unmount
+    // Clean up event listeners on component unmount
     return () => {
       window.removeEventListener("tasks-updated", handleTasksUpdated);
+      window.removeEventListener("tasksUpdated", handleTasksUpdated);
     };
   }, []);
 
@@ -362,7 +390,7 @@ export default function Sidebar({
   };
 
   const handleDeleteTask = (taskId, scope = 'single') => {
-    console.log(`Deleting task ${taskId} with scope: ${scope}`);
+    console.log(`[DEBUG] Deleting task ${taskId} with scope: ${scope}`);
     
     setTasks((prev) => {
       const newTasks = { ...prev };
@@ -384,69 +412,665 @@ export default function Sidebar({
         }
       });
       
+      console.log(`[DEBUG] Found task to delete:`, taskToDelete);
+      console.log(`[DEBUG] Task seriesId: ${taskSeriesId}, isRepeat: ${taskToDelete?.isRepeat}, scope: ${scope}`);
+      
       if (!taskToDelete) {
         console.warn(`Task with ID ${taskId} not found for deletion`);
         return prev; // No changes if task not found
       }
       
-      // Handle different deletion scopes for recurring tasks
-      if (taskSeriesId && (scope === 'all' || scope === 'future')) {
-        console.log(`Deleting ${scope === 'all' ? 'all tasks' : 'future tasks'} in series ${taskSeriesId}`);
-        
+      // Add enhanced debugging for task properties
+      console.log(`[DEBUG] Task properties:`, {
+        id: taskToDelete.id,
+        isRepeat: taskToDelete.isRepeat,
+        seriesId: taskToDelete.seriesId,
+        originalBaseId: taskToDelete.originalBaseId,
+        scheduledDate: taskToDelete.scheduledDate
+      });
+      
+      // Strengthen instance detection logic
+      const isRecurringInstance = taskToDelete.isRepeat === true || 
+                                 (taskSeriesId && taskToDelete.originalBaseId) ||
+                                 (taskSeriesId && taskToDelete.id && taskToDelete.id.includes('_repeat_'));
+      
+      // Additional check: if task has seriesId but no explicit isRepeat, it's likely an instance
+      const isLikelyInstance = taskSeriesId && !taskToDelete.repeat && taskToDelete.id !== taskSeriesId;
+      
+      console.log(`[DEBUG] Enhanced instance detection - isRecurringInstance: ${isRecurringInstance}`);
+      console.log(`[DEBUG] Additional check - isLikelyInstance: ${isLikelyInstance}`);
+      console.log(`[DEBUG] Final instance determination: ${isRecurringInstance || isLikelyInstance}`);
+
+      // Handle different deletion scopes
+      if (taskSeriesId && scope === 'all') {
+        console.log(`[DEBUG] Taking 'all' deletion path for series ${taskSeriesId}`);
         // For 'all' scope, delete all tasks in the series
-        if (scope === 'all') {
+        Object.keys(newTasks).forEach((group) => {
+          if (Array.isArray(newTasks[group])) {
+            newTasks[group] = newTasks[group].filter(
+              (task) => task.seriesId !== taskSeriesId
+            );
+          }
+        });
+      }
+      else if (taskSeriesId && scope === 'future' && taskScheduledDate) {
+        console.log(`[DEBUG] Taking 'future' deletion path for series ${taskSeriesId}`);
+        // For 'future' scope, delete this task and all future tasks in the series
+        const taskDate = new Date(taskScheduledDate);
+        
+        Object.keys(newTasks).forEach((group) => {
+          if (Array.isArray(newTasks[group])) {
+            newTasks[group] = newTasks[group].filter(task => {
+              // Keep if not in this series
+              if (task.seriesId !== taskSeriesId) return true;
+              
+              // For tasks in this series, keep only if scheduled before this task
+              if (task.scheduledDate) {
+                const compareDate = new Date(task.scheduledDate);
+                return compareDate < taskDate;
+              }
+              
+              // Keep base task definition (not an instance)
+              return task.isRepeat === false;
+            });
+          }
+        });
+      }
+      else if (scope === 'single') {
+        console.log(`[DEBUG] Taking 'single' deletion path for task ${taskId}`);
+        
+        // For 'single' scope deletion of recurring tasks: Delete the instance and generate next
+        if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
+          console.log(`[DEBUG] Single deletion of recurring instance ${taskId} - will generate next instance`);
+          
+          // Find the base task definition
+          console.log(`[DEBUG] Looking for base task with seriesId: ${taskSeriesId}`);
+          const allTasks = Object.values(newTasks).flat();
+          console.log(`[DEBUG] All tasks in collections:`, allTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title})));
+          const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
+          console.log(`[DEBUG] Tasks with matching seriesId:`, candidateTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, isRepeatType: typeof t.isRepeat, title: t.title})));
+          candidateTasks.forEach(t => {
+            console.log(`[DEBUG] Candidate task ${t.id}: isRepeat=${t.isRepeat}, type=${typeof t.isRepeat}, isRepeat===false: ${t.isRepeat === false}, typeof isRepeat === 'undefined': ${typeof t.isRepeat === 'undefined'}`);
+          });
+          const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
+          console.log(`[DEBUG] Found base task:`, baseTaskDefinition ? {id: baseTaskDefinition.id, seriesId: baseTaskDefinition.seriesId, isRepeat: baseTaskDefinition.isRepeat, title: baseTaskDefinition.title} : 'None');
+          
+          if (baseTaskDefinition) {
+            // Remove the current task from all collections first
+            Object.keys(newTasks).forEach((group) => {
+              if (Array.isArray(newTasks[group])) {
+                newTasks[group] = newTasks[group].filter(
+                  (task) => task.id !== taskId
+                );
+              }
+            });
+            
+            // Handle async operation after the main state update completes
+            setTimeout(() => {
+              import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskToDelete.scheduledDate));
+                
+                if (nextInstance) {
+                  console.log('[DEBUG] Adding new next instance after single deletion:', nextInstance);
+                  
+                  // Update React state in a separate cycle
+                  setTasks(currentTasks => {
+                    const updatedTasks = { ...currentTasks };
+                    
+                    // Check if this exact instance already exists in current state
+                    const instanceExists = Object.values(updatedTasks)
+                      .flat()
+                      .some(t => 
+                        t.id === nextInstance.id || 
+                        (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
+                      );
+                    
+                    if (!instanceExists) {
+                      // Add to 'all' collection
+                      if (!updatedTasks.all) updatedTasks.all = [];
+                      updatedTasks.all.push(nextInstance);
+                      
+                      // Add to specific tag group if applicable
+                      if (nextInstance.tag && nextInstance.tag.id) {
+                        const nextInstanceTagGroup = nextInstance.tag.id;
+                        if (!updatedTasks[nextInstanceTagGroup]) updatedTasks[nextInstanceTagGroup] = [];
+                        updatedTasks[nextInstanceTagGroup].push(nextInstance);
+                      }
+                      
+                      // Add to 'today' collection if scheduled for today
+                      if (nextInstance.scheduledDate) {
+                        const today = new Date();
+                        const instanceDate = new Date(nextInstance.scheduledDate);
+                        if (instanceDate.toDateString() === today.toDateString()) {
+                          if (!updatedTasks.today) updatedTasks.today = [];
+                          updatedTasks.today.push(nextInstance);
+                          console.log('[DEBUG] Added next instance to today collection:', nextInstance);
+                        }
+                      }
+                      
+                      // Save to localStorage and dispatch storage event in separate cycle
+                      setTimeout(() => {
+                        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                        window.dispatchEvent(new StorageEvent('storage', {
+                          key: 'tasks',
+                          newValue: JSON.stringify(updatedTasks),
+                          url: window.location.href
+                        }));
+                      }, 0);
+                    }
+                    
+                    return updatedTasks;
+                  });
+                } else {
+                  console.log('[DEBUG] No further instances to generate for series:', taskSeriesId);
+                }
+              }).catch(error => {
+                console.error('Error importing generateNextDisplayableTaskInstance:', error);
+              });
+            }, 0);
+          } else {
+            console.log(`[DEBUG] No base task found for series ${taskSeriesId}, promoting next instance to base task`);
+            
+            // Find the next instance in the series to promote as the new base task
+            const allSeriesInstances = Object.values(newTasks)
+              .flat()
+              .filter(t => t.seriesId === taskSeriesId && t.id !== taskId)
+              .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+            
+            console.log(`[DEBUG] Found ${allSeriesInstances.length} other instances in series:`, allSeriesInstances.map(t => ({id: t.id, scheduledDate: t.scheduledDate, title: t.title})));
+            
+            if (allSeriesInstances.length > 0) {
+              const nextInstance = allSeriesInstances[0];
+              console.log(`[DEBUG] Promoting instance ${nextInstance.id} to base task for series ${taskSeriesId}`);
+              
+              // Create new base task from the next instance
+              const newBaseTask = {
+                ...nextInstance,
+                id: taskToDelete.originalBaseId || nextInstance.seriesId,
+                isRepeat: false,
+                originalBaseId: undefined,
+                scheduledDate: nextInstance.scheduledDate,
+                startDateOfSeries: nextInstance.scheduledDate,
+                repeat: taskToDelete.repeat || 'daily', // Preserve original repeat pattern
+                rrule: taskToDelete.rrule,
+                rruleOptions: taskToDelete.rruleOptions
+              };
+              
+              // Add the new base task to all collections
+              if (!newTasks.all) newTasks.all = [];
+              newTasks.all.push(newBaseTask);
+              
+              // Add to specific tag group if applicable
+              if (newBaseTask.tag && newBaseTask.tag.id) {
+                const tagGroup = newBaseTask.tag.id;
+                if (!newTasks[tagGroup]) newTasks[tagGroup] = [];
+                newTasks[tagGroup].push(newBaseTask);
+              }
+              
+              console.log(`[DEBUG] Created new base task:`, newBaseTask);
+            } else {
+              console.log(`[DEBUG] No other instances found, creating new base task and generating next instance`);
+              
+              // Create a new base task from the current instance being deleted
+              const newBaseTask = {
+                ...taskToDelete,
+                id: taskToDelete.originalBaseId || taskSeriesId,
+                isRepeat: false,
+                originalBaseId: undefined,
+                scheduledDate: taskToDelete.scheduledDate,
+                startDateOfSeries: taskToDelete.scheduledDate,
+                // Preserve recurrence properties
+                repeat: taskToDelete.repeat || 'daily',
+                rrule: taskToDelete.rrule,
+                rruleOptions: taskToDelete.rruleOptions
+              };
+              
+              // Add the new base task to all collections
+              if (!newTasks.all) newTasks.all = [];
+              newTasks.all.push(newBaseTask);
+              
+              // Add to specific tag group if applicable
+              if (newBaseTask.tag && newBaseTask.tag.id) {
+                const tagGroup = newBaseTask.tag.id;
+                if (!newTasks[tagGroup]) newTasks[tagGroup] = [];
+                newTasks[tagGroup].push(newBaseTask);
+              }
+              
+              console.log(`[DEBUG] Created new base task from current instance:`, newBaseTask);
+              
+              // Generate the next instance asynchronously
+              setTimeout(() => {
+                import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                  const nextInstance = generateNextDisplayableTaskInstance(newBaseTask, new Date(taskToDelete.scheduledDate));
+                  
+                  if (nextInstance) {
+                    console.log(`[DEBUG] Generated next instance:`, nextInstance);
+                    
+                    setTasks(currentTasks => {
+                      const updatedTasks = { ...currentTasks };
+                      
+                      // Check if this exact instance already exists
+                      const instanceExists = Object.values(updatedTasks)
+                        .flat()
+                        .some(t => 
+                          t.id === nextInstance.id || 
+                          (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
+                        );
+                      
+                      if (!instanceExists) {
+                        // Add to 'all' collection
+                        if (!updatedTasks.all) updatedTasks.all = [];
+                        updatedTasks.all.push(nextInstance);
+                        
+                        // Add to specific tag group if applicable
+                        if (nextInstance.tag && nextInstance.tag.id) {
+                          const nextInstanceTagGroup = nextInstance.tag.id;
+                          if (!updatedTasks[nextInstanceTagGroup]) updatedTasks[nextInstanceTagGroup] = [];
+                          updatedTasks[nextInstanceTagGroup].push(nextInstance);
+                        }
+                        
+                        // Add to 'today' collection if scheduled for today
+                        if (nextInstance.scheduledDate) {
+                          const today = new Date();
+                          const instanceDate = new Date(nextInstance.scheduledDate);
+                          if (instanceDate.toDateString() === today.toDateString()) {
+                            if (!updatedTasks.today) updatedTasks.today = [];
+                            updatedTasks.today.push(nextInstance);
+                          }
+                        }
+                        
+                        // Save to localStorage
+                        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                        
+                        // Dispatch storage event
+                        setTimeout(() => {
+                          window.dispatchEvent(new StorageEvent('storage', {
+                            key: 'tasks',
+                            newValue: JSON.stringify(updatedTasks),
+                            url: window.location.href
+                          }));
+                        }, 0);
+                      }
+                      
+                      return updatedTasks;
+                    });
+                  } else {
+                    console.log(`[DEBUG] No next instance generated, series will end`);
+                  }
+                }).catch(error => {
+                  console.error(`[DEBUG] Error generating next instance:`, error);
+                });
+              }, 0);
+            }
+            
+            // Delete the current instance
+            Object.keys(newTasks).forEach((group) => {
+              if (Array.isArray(newTasks[group])) {
+                newTasks[group] = newTasks[group].filter(
+                  (task) => task.id !== taskId
+                );
+              }
+            });
+          }
+        } else {
+          console.log(`[DEBUG] Single deletion of non-recurring task ${taskId}`);
+          
+          // Special handling for base task definitions (isRepeat: false with seriesId)
+          // Only treat as base task if it's explicitly marked as non-repeat AND has no originalBaseId
+          if (taskSeriesId && taskToDelete.isRepeat === false && !taskToDelete.originalBaseId) {
+            console.log(`[DEBUG] Attempting to delete base task definition ${taskId} for series ${taskSeriesId}`);
+            
+            // Check if there are any active instances of this series
+            const hasActiveInstances = Object.values(newTasks)
+              .flat()
+              .some(t => 
+                t.seriesId === taskSeriesId && 
+                t.isRepeat === true && 
+                !t.completed
+              );
+            
+            if (hasActiveInstances) {
+              console.log(`[DEBUG] Cannot delete base task ${taskId} - active instances exist for series ${taskSeriesId}`);
+              console.warn('Cannot delete the base recurring task while active instances exist. Please delete the instances first or use "Delete all" to remove the entire series.');
+              return prev; // Prevent deletion
+            } else {
+              console.log(`[DEBUG] No active instances found, treating base task as single instance and generating next occurrence`);
+              
+              // Remove the current base task from all collections first
+              Object.keys(newTasks).forEach((group) => {
+                if (Array.isArray(newTasks[group])) {
+                  newTasks[group] = newTasks[group].filter(
+                    (task) => task.id !== taskId
+                  );
+                }
+              });
+              
+              // Generate the next instance using the base task as template
+              setTimeout(() => {
+                import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                  const nextInstance = generateNextDisplayableTaskInstance(taskToDelete, new Date(taskToDelete.scheduledDate));
+                  
+                  if (nextInstance) {
+                    console.log('[DEBUG] Adding new next instance after base task single deletion:', nextInstance);
+                    
+                    // Update React state in a separate cycle
+                    setTasks(currentTasks => {
+                      const updatedTasks = { ...currentTasks };
+                      
+                      // Check if this exact instance already exists in current state
+                      const instanceExists = Object.values(updatedTasks)
+                        .flat()
+                        .some(t => 
+                          t.id === nextInstance.id || 
+                          (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
+                        );
+                      
+                      if (!instanceExists) {
+                        // Add to 'all' collection
+                        updatedTasks.all.push(nextInstance);
+                        
+                        // Add to tag-specific collection if applicable
+                        if (nextInstance.tagId && updatedTasks[nextInstance.tagId]) {
+                          updatedTasks[nextInstance.tagId].push(nextInstance);
+                        }
+                        
+                        // Add to 'today' if scheduled for today
+                        const today = new Date().toISOString().split('T')[0];
+                        const instanceDate = new Date(nextInstance.scheduledDate).toISOString().split('T')[0];
+                        if (instanceDate === today) {
+                          updatedTasks.today.push(nextInstance);
+                        }
+                        
+                        console.log('[DEBUG] Successfully added next instance to state');
+                      } else {
+                        console.log('[DEBUG] Next instance already exists, skipping addition');
+                      }
+                      
+                      // Save to localStorage
+                      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                      
+                      return updatedTasks;
+                    });
+                  } else {
+                    console.log('[DEBUG] No next instance generated for base task');
+                  }
+                }).catch(error => {
+                  console.error('[DEBUG] Error generating next instance:', error);
+                });
+              }, 0);
+              
+              // Skip the regular deletion logic below
+              return newTasks;
+            }
+          }
+          
+          // For non-recurring tasks or base tasks with no active instances, just delete the task
           Object.keys(newTasks).forEach((group) => {
             if (Array.isArray(newTasks[group])) {
               newTasks[group] = newTasks[group].filter(
-                (task) => task.seriesId !== taskSeriesId
+                (task) => task.id !== taskId
               );
             }
           });
         }
-        // For 'future' scope, delete this task and all future tasks in the series
-        else if (scope === 'future' && taskScheduledDate) {
-          const taskDate = new Date(taskScheduledDate);
+      }
+      // For other cases (continuation logic for recurring instances) - but NOT for 'single' scope
+       else if (scope !== 'single') {
+         // Only generate next instance if:
+         // 1. We're deleting a recurring INSTANCE (using enhanced detection), not the base task
+         // 2. There's a valid base task definition to generate from
+         if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
+          console.log(`[DEBUG] Other deletion case - recurring task instance ${taskId} and generating next instance`);
           
+          // Find the base task definition
+          console.log(`[DEBUG] Looking for base task with seriesId: ${taskSeriesId}`);
+          const allTasks = Object.values(newTasks).flat();
+          console.log(`[DEBUG] All tasks in collections:`, allTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title})));
+          const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
+          console.log(`[DEBUG] Tasks with matching seriesId:`, candidateTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, isRepeatType: typeof t.isRepeat, title: t.title})));
+          candidateTasks.forEach(t => {
+            console.log(`[DEBUG] Candidate task ${t.id}: isRepeat=${t.isRepeat}, type=${typeof t.isRepeat}, isRepeat===false: ${t.isRepeat === false}, typeof isRepeat === 'undefined': ${typeof t.isRepeat === 'undefined'}`);
+          });
+          const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
+          console.log(`[DEBUG] Found base task:`, baseTaskDefinition ? {id: baseTaskDefinition.id, seriesId: baseTaskDefinition.seriesId, isRepeat: baseTaskDefinition.isRepeat, title: baseTaskDefinition.title} : 'None');
+          
+          if (baseTaskDefinition) {
+            // Remove the current task from all collections first
+            Object.keys(newTasks).forEach((group) => {
+              if (Array.isArray(newTasks[group])) {
+                newTasks[group] = newTasks[group].filter(
+                  (task) => task.id !== taskId
+                );
+              }
+            });
+            
+            // Handle async operation after the main state update completes
+            setTimeout(() => {
+              import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskToDelete.scheduledDate));
+                
+                if (nextInstance) {
+                  console.log('Adding new next instance after deletion:', nextInstance);
+                  
+                  // Update React state in a separate cycle
+                  setTasks(currentTasks => {
+                    const updatedTasks = { ...currentTasks };
+                    
+                    // Check if this exact instance already exists in current state
+                    const instanceExists = Object.values(updatedTasks)
+                      .flat()
+                      .some(t => 
+                        t.id === nextInstance.id || 
+                        (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
+                      );
+                    
+                    if (!instanceExists) {
+                      // Add to 'all' collection
+                      if (!updatedTasks.all) updatedTasks.all = [];
+                      updatedTasks.all.push(nextInstance);
+                      
+                      // Add to specific tag group if applicable
+                      if (nextInstance.tag && nextInstance.tag.id) {
+                        const nextInstanceTagGroup = nextInstance.tag.id;
+                        if (!updatedTasks[nextInstanceTagGroup]) updatedTasks[nextInstanceTagGroup] = [];
+                        updatedTasks[nextInstanceTagGroup].push(nextInstance);
+                      }
+                      
+                      // Add to 'today' collection if scheduled for today
+                      if (nextInstance.scheduledDate) {
+                        const today = new Date();
+                        const instanceDate = new Date(nextInstance.scheduledDate);
+                        if (instanceDate.toDateString() === today.toDateString()) {
+                          if (!updatedTasks.today) updatedTasks.today = [];
+                          updatedTasks.today.push(nextInstance);
+                          console.log('Added next instance to today collection:', nextInstance);
+                        }
+                      }
+                      
+                      // Save to localStorage and dispatch storage event in separate cycle
+                      setTimeout(() => {
+                        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                        window.dispatchEvent(new StorageEvent('storage', {
+                          key: 'tasks',
+                          newValue: JSON.stringify(updatedTasks),
+                          url: window.location.href
+                        }));
+                      }, 0);
+                    }
+                    
+                    return updatedTasks;
+                  });
+                } else {
+                  console.log('No further instances to generate for series:', taskSeriesId);
+                }
+              }).catch(error => {
+                console.error('Error importing generateNextDisplayableTaskInstance:', error);
+              });
+            }, 0);
+          }
+        }
+        // For all other cases (non-recurring tasks, base task definitions, or when no base task found)
+        // This handles cases where scope is not 'single' but we couldn't generate a next instance
+        else if (scope !== 'single') {
+          // Check if this is a recurring instance without a base task
+          if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
+            console.log(`[DEBUG] No base task found for series ${taskSeriesId} in non-single scope, promoting next instance to base task`);
+             
+             // Find the next instance in the series to promote as the new base task
+             const allSeriesInstances = Object.values(newTasks)
+               .flat()
+               .filter(t => t.seriesId === taskSeriesId && t.id !== taskId)
+               .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
+             
+             console.log(`[DEBUG] Found ${allSeriesInstances.length} other instances in series:`, allSeriesInstances.map(t => ({id: t.id, scheduledDate: t.scheduledDate, title: t.title})));
+             
+             if (allSeriesInstances.length > 0) {
+              const nextInstance = allSeriesInstances[0];
+              console.log(`[DEBUG] Promoting instance ${nextInstance.id} to base task for series ${taskSeriesId}`);
+              
+              // Create new base task from the next instance
+              const newBaseTask = {
+                ...nextInstance,
+                id: taskToDelete.originalBaseId || nextInstance.seriesId,
+                isRepeat: false,
+                originalBaseId: undefined,
+                scheduledDate: nextInstance.scheduledDate,
+                startDateOfSeries: nextInstance.scheduledDate,
+                repeat: taskToDelete.repeat || 'daily', // Preserve original repeat pattern
+                rrule: taskToDelete.rrule,
+                rruleOptions: taskToDelete.rruleOptions
+              };
+              
+              // Add the new base task to all collections
+              if (!newTasks.all) newTasks.all = [];
+              newTasks.all.push(newBaseTask);
+              
+              // Add to specific tag group if applicable
+              if (newBaseTask.tag && newBaseTask.tag.id) {
+                const tagGroup = newBaseTask.tag.id;
+                if (!newTasks[tagGroup]) newTasks[tagGroup] = [];
+                newTasks[tagGroup].push(newBaseTask);
+              }
+              
+              console.log(`[DEBUG] Created new base task:`, newBaseTask);
+            } else {
+              console.log(`[DEBUG] No other instances found, creating new base task and generating next instance`);
+              
+              // Create a new base task from the current instance being deleted
+              const newBaseTask = {
+                ...taskToDelete,
+                id: taskToDelete.originalBaseId || taskSeriesId,
+                isRepeat: false,
+                originalBaseId: undefined,
+                scheduledDate: taskToDelete.scheduledDate,
+                startDateOfSeries: taskToDelete.scheduledDate,
+                // Preserve recurrence properties
+                repeat: taskToDelete.repeat || 'daily',
+                rrule: taskToDelete.rrule,
+                rruleOptions: taskToDelete.rruleOptions
+              };
+              
+              // Add the new base task to all collections
+              if (!newTasks.all) newTasks.all = [];
+              newTasks.all.push(newBaseTask);
+              
+              // Add to specific tag group if applicable
+              if (newBaseTask.tag && newBaseTask.tag.id) {
+                const tagGroup = newBaseTask.tag.id;
+                if (!newTasks[tagGroup]) newTasks[tagGroup] = [];
+                newTasks[tagGroup].push(newBaseTask);
+              }
+              
+              console.log(`[DEBUG] Created new base task from current instance:`, newBaseTask);
+              
+              // Generate the next instance asynchronously
+              setTimeout(() => {
+                import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                  const nextInstance = generateNextDisplayableTaskInstance(newBaseTask, new Date(taskToDelete.scheduledDate));
+                  
+                  if (nextInstance) {
+                    console.log(`[DEBUG] Generated next instance:`, nextInstance);
+                    
+                    setTasks(currentTasks => {
+                      const updatedTasks = { ...currentTasks };
+                      
+                      // Check if this exact instance already exists
+                      const instanceExists = Object.values(updatedTasks)
+                        .flat()
+                        .some(t => 
+                          t.id === nextInstance.id || 
+                          (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
+                        );
+                      
+                      if (!instanceExists) {
+                        // Add to 'all' collection
+                        if (!updatedTasks.all) updatedTasks.all = [];
+                        updatedTasks.all.push(nextInstance);
+                        
+                        // Add to specific tag group if applicable
+                        if (nextInstance.tag && nextInstance.tag.id) {
+                          const nextInstanceTagGroup = nextInstance.tag.id;
+                          if (!updatedTasks[nextInstanceTagGroup]) updatedTasks[nextInstanceTagGroup] = [];
+                          updatedTasks[nextInstanceTagGroup].push(nextInstance);
+                        }
+                        
+                        // Add to 'today' collection if scheduled for today
+                        if (nextInstance.scheduledDate) {
+                          const today = new Date();
+                          const instanceDate = new Date(nextInstance.scheduledDate);
+                          if (instanceDate.toDateString() === today.toDateString()) {
+                            if (!updatedTasks.today) updatedTasks.today = [];
+                            updatedTasks.today.push(nextInstance);
+                          }
+                        }
+                        
+                        // Save to localStorage
+                        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+                        
+                        // Dispatch storage event
+                        setTimeout(() => {
+                          window.dispatchEvent(new StorageEvent('storage', {
+                            key: 'tasks',
+                            newValue: JSON.stringify(updatedTasks),
+                            url: window.location.href
+                          }));
+                        }, 0);
+                      }
+                      
+                      return updatedTasks;
+                    });
+                  } else {
+                    console.log(`[DEBUG] No next instance generated, series will end`);
+                  }
+                }).catch(error => {
+                  console.error(`[DEBUG] Error generating next instance:`, error);
+                });
+              }, 0);
+            }
+          }
+          
+          // Remove just this task from all collections
           Object.keys(newTasks).forEach((group) => {
             if (Array.isArray(newTasks[group])) {
-              newTasks[group] = newTasks[group].filter(task => {
-                // Keep if not in this series
-                if (task.seriesId !== taskSeriesId) return true;
-                
-                // For tasks in this series, keep only if scheduled before this task
-                if (task.scheduledDate) {
-                  const compareDate = new Date(task.scheduledDate);
-                  return compareDate < taskDate;
-                }
-                
-                // Keep base task definition (not an instance)
-                return task.isRepeat === false;
-              });
+              newTasks[group] = newTasks[group].filter(
+                (task) => task.id !== taskId
+              );
             }
           });
         }
-      }
-      // For single task deletion or non-recurring tasks
-      else {
-        // Remove just this task from all collections
-        Object.keys(newTasks).forEach((group) => {
-          if (Array.isArray(newTasks[group])) {
-            newTasks[group] = newTasks[group].filter(
-              (task) => task.id !== taskId
-            );
-          }
-        });
       }
       
       // Save to localStorage immediately
       localStorage.setItem("tasks", JSON.stringify(newTasks));
       
-      // Dispatch storage event to notify other components
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'tasks',
-        newValue: JSON.stringify(newTasks),
-        url: window.location.href
-      }));
+      // Dispatch storage event after state update completes to avoid render cycle conflicts
+      setTimeout(() => {
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: 'tasks',
+          newValue: JSON.stringify(newTasks),
+          url: window.location.href
+        }));
+      }, 0);
       
       return newTasks;
     });
@@ -455,6 +1079,12 @@ export default function Sidebar({
   // Add an effect to ensure tasks and tags stay in sync with localStorage
   useEffect(() => {
     const handleStorageChange = (e) => {
+      // Skip storage events that originated from this same window to prevent cycles
+      if (e.url === window.location.href) {
+        console.log('[Sidebar] Skipping storage event from same window to prevent cycles.');
+        return;
+      }
+      
       if (e.key === "tasks") {
         try {
           const newTasks = JSON.parse(e.newValue);
@@ -489,9 +1119,20 @@ export default function Sidebar({
 
   const handleEditTaskIconClick = (task) => {
     if (commandBarRef?.current) {
-      setEditingTaskId(task.id);
-      setOriginalTask(task);
-      commandBarRef.current.openForTaskEdit(task);
+      // Check if this is a recurring task
+      const isRecurringTask = task.repeat && task.repeat !== 'none';
+      
+      if (isRecurringTask) {
+        // Show the RepeatTaskEditModal for recurring tasks
+        setTaskToEdit(task);
+        setDraggedTask(task); // For recurring tasks, the "dragged" task is the same as original
+        setIsRepeatTaskEditModalOpen(true);
+      } else {
+        // For non-recurring tasks, open the command bar directly
+        setEditingTaskId(task.id);
+        setOriginalTask(task);
+        commandBarRef.current.openForTaskEdit(task);
+      }
     }
   };
 
@@ -1231,6 +1872,50 @@ export default function Sidebar({
           </TooltipProvider>
         </div>
       </div>
+      
+      {/* RepeatTaskEditModal */}
+      <RepeatTaskEditModal
+        isOpen={isRepeatTaskEditModalOpen}
+        task={taskToEdit}
+        taskTitle={taskToEdit?.title}
+        onClose={() => {
+          setIsRepeatTaskEditModalOpen(false);
+          setTaskToEdit(null);
+          setDraggedTask(null);
+        }}
+        onEditConfirm={({ scope, task }) => {
+          // Handle the edit confirmation based on scope
+          if (scope === 'single') {
+            // For single instance edits, prepare the task for detachment but don't process yet
+            // The detachment will happen when the user saves changes in CommandBar
+            const taskForEdit = {
+              ...task,
+              _detachedTask: true,
+              _editScope: 'single',
+              _originalTask: taskToEdit // Keep reference to original for detachment logic
+            };
+            
+            // Open CommandBar for editing - detachment will occur on save
+            setEditingTaskId(taskToEdit.id);
+            setOriginalTask(taskToEdit);
+            commandBarRef.current.openForTaskEdit(taskForEdit);
+          } else {
+            // Edit the series (future or all) - use original task to preserve recurring settings
+            setEditingTaskId(taskToEdit.id);
+            setOriginalTask(taskToEdit);
+            commandBarRef.current.openForTaskEdit(taskToEdit);
+          }
+          
+          // Close the modal
+          setIsRepeatTaskEditModalOpen(false);
+          setTaskToEdit(null);
+          setDraggedTask(null);
+        }}
+        originalTask={taskToEdit}
+        draggedTask={draggedTask}
+        isEditOperation={true}
+        commandBarRef={commandBarRef}
+      />
     </aside>
   );
 }

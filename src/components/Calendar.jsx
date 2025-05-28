@@ -154,6 +154,22 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, []);
 
+  const { handleCreateTask, handleUpdateTask, handleToggleTaskCompletion } = useTaskManagement();
+
+  // Handler for task editing that checks for recurring tasks
+  const handleTaskEdit = useCallback((task) => {
+    const isRecurringTask = task.repeat && task.repeat !== 'none';
+    
+    if (isRecurringTask) {
+      // For recurring tasks, fallback to direct command bar opening
+      // The RepeatTaskEditModal will be handled in Sidebar component
+      commandBarRef?.current?.openForTaskEdit(task);
+    } else {
+      // For non-recurring tasks, open command bar directly
+      commandBarRef?.current?.openForTaskEdit(task);
+    }
+  }, [commandBarRef]);
+
   const { renderEvents, renderAllDayEvents } = useEventRendering(
     displayEvents,
     selectedDate,
@@ -163,10 +179,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleEventClick,
     handleEventContextMenu,
     handleResizeStart,
-    eventStyleGetter
+    eventStyleGetter,
+    commandBarRef,
+    handleToggleTaskCompletion,
+    handleTaskEdit
   );
-
-  const { handleCreateTask, handleUpdateTask } = useTaskManagement();
   // Handle date selection from GoToDateCommand
   const handleGoToDate = useCallback((date) => {
     if (date) {

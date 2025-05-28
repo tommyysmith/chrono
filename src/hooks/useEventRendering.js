@@ -1,5 +1,6 @@
-import { useCallback, useEffect } from "react";
-import { format, isSameDay, addDays } from "date-fns";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { format, isSameDay, addDays, startOfDay, endOfDay, isWithinInterval, parseISO } from "date-fns";
+
 import { RRule } from "rrule";
 import { Repeat } from "@/assets/icons/Repeat";
 import { ViewType } from "../constants/views";
@@ -12,8 +13,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import EventTooltipContent from "@/components/EventTooltipContent";
+import { Completed } from "@/assets/icons/Completed";
+import Checkbox from "@/components/Checkbox";
 
-export function useEventRendering(
+export const useEventRendering = (
   events,
   selectedDate,
   viewType,
@@ -21,8 +24,29 @@ export function useEventRendering(
   handleDragStart,
   handleEventClick,
   handleEventContextMenu,
-  handleResizeStart
-) {
+  handleResizeStart,
+  eventStyleGetter,
+  commandBarRef,
+  handleToggleTaskCompletion,
+  handleTaskEdit
+) => {
+  const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
+
+  // Listen for task updates to refresh the calendar
+  useEffect(() => {
+    const handleTaskUpdate = () => {
+      setTaskUpdateTrigger(prev => prev + 1);
+    };
+
+    window.addEventListener('storage', handleTaskUpdate);
+    window.addEventListener('tasksUpdated', handleTaskUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleTaskUpdate);
+      window.removeEventListener('tasksUpdated', handleTaskUpdate);
+    };
+  }, []);
+
   const expandRecurringEvents = useCallback((events, dateRangeStart, dateRangeEnd) => {
     const expandedEvents = [];
 
@@ -224,7 +248,16 @@ export function useEventRendering(
                   }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    handleEventClick(event);
+                    if (isTask) {
+                      // Handle task click - open task edit modal
+                      if (handleTaskEdit) {
+                        handleTaskEdit(event.originalTask);
+                      } else if (commandBarRef?.current?.openForTaskEdit) {
+                        commandBarRef.current.openForTaskEdit(event.originalTask);
+                      }
+                    } else {
+                      handleEventClick(event);
+                    }
                   }}
                   onContextMenu={(e) => handleEventContextMenu(e, event.id)}
                 >
@@ -279,33 +312,63 @@ export function useEventRendering(
     handleResizeStart,
   ]);
 
-  const renderAllDayEvents = () => {
+  // Add this import at the top if not already present
+
+  // In the renderAllDayEvents function, modify the section that processes events
+  const renderAllDayEvents = useMemo(() => () => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 7);
-
+  
+      // Get tasks from localStorage and filter for calendar tasks
+      const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+      const allTasks = tasks.all || [];
+      const calendarTasks = allTasks.filter(task => 
+        task.addToCalendar && 
+        task.scheduledDate && 
+        !task.completed &&
+        new Date(task.scheduledDate) >= weekStart && 
+        new Date(task.scheduledDate) < weekEnd
+      );
+  
+      // Convert tasks to event-like objects for rendering
+      const taskEvents = calendarTasks.map(task => ({
+        id: `task-${task.id}`,
+        title: task.title,
+        start: task.scheduledDate,
+        end: task.scheduledDate,
+        allDay: true,
+        isAllDay: true,
+        color: task.tag?.color || '#6B7280', // Use tag color or default gray
+        isTask: true, // Flag to identify this as a task
+        originalTask: task // Keep reference to original task
+      }));
+  
+      // Combine events and task events
+      const allItems = [...events, ...taskEvents];
+  
       // Process multi-day events to determine their span across the week
       const processedEvents = [];
       const multiDayEvents = [];
-
+  
       // First, identify multi-day events that span across days
-      events.forEach(event => {
+      allItems.forEach(event => {
         // Check both allDay and isAllDay properties to ensure compatibility
         const isAllDayEvent = event.allDay || event.isAllDay;
         const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
-
+  
         if (isAllDayEvent || isMultiDayEvent) {
           const eventStart = new Date(event.start);
           const eventEnd = new Date(event.end);
-
+  
           // Check if the event overlaps with our week view
           if (eventEnd >= weekStart && eventStart < weekEnd) {
             // Calculate the day index where this event starts and ends in our week view
             const startDayIndex = Math.max(0, Math.floor((eventStart - weekStart) / (24 * 60 * 60 * 1000)));
             const endDayIndex = Math.min(6, Math.floor((eventEnd - weekStart) / (24 * 60 * 60 * 1000)));
-
+  
             multiDayEvents.push({
               ...event,
               startDayIndex,
@@ -315,30 +378,30 @@ export function useEventRendering(
           }
         }
       });
-
+  
       // Group multi-day events by row to avoid overlaps
       const eventRows = [];
-
+  
       // Sort multi-day events by duration (longest first) to optimize layout
       multiDayEvents.sort((a, b) => b.span - a.span);
-
+  
       // Assign each event to a row where it fits
       multiDayEvents.forEach(event => {
         let rowIndex = 0;
         let placed = false;
-
+  
         while (!placed) {
           // Create new row if needed
           if (!eventRows[rowIndex]) {
             eventRows[rowIndex] = [];
           }
-
+  
           // Check if event can be placed in this row
           const canPlaceInRow = !eventRows[rowIndex].some(existingEvent => {
             return (event.startDayIndex <= existingEvent.endDayIndex && 
                     event.endDayIndex >= existingEvent.startDayIndex);
           });
-
+  
           if (canPlaceInRow) {
             eventRows[rowIndex].push(event);
             placed = true;
@@ -347,10 +410,10 @@ export function useEventRendering(
           }
         }
       });
-
+  
       // Calculate the total minimum height needed for the all-day section
       const numRows = eventRows.length > 0 ? eventRows.length : 1; // Ensure at least 1 row
-
+  
       return (
         <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border/50 dark:border-dark-border">
           <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
@@ -369,29 +432,29 @@ export function useEventRendering(
                 style={{ gridColumn: (index % 7) + 1, gridRow: Math.floor(index / 7) + 1 }}
               />
             ))}
-
+  
             {/* First render the single-day all-day events within their respective columns (assuming they fit in row 1 for now) */}
             {Array.from({ length: 7 }).map((_, dayIndex) => {
               const currentDate = addDays(weekStart, dayIndex);
-              const dayEvents = events.filter((event) => {
+              const dayEvents = allItems.filter((event) => {
                 const isAllDayEvent = event.allDay || event.isAllDay;
                 const eventStart = new Date(event.start);
                 const eventEnd = new Date(event.end);
-                // Check if it's a single day event (or spans less than a day but marked allDay) and starts on the current dayIndex
                 const isSingleDay = isSameDay(eventStart, eventEnd) || (eventEnd.getTime() - eventStart.getTime() < 24 * 60 * 60 * 1000);
                 return isAllDayEvent && isSingleDay && isSameDay(eventStart, currentDate) && !multiDayEvents.some(e => e.id === event.id);
               });
-
+  
               return (
                 <div
                   key={`day-col-${dayIndex}`}
-                  className="relative p-1 flex flex-col gap-1 overflow-hidden z-10" // Added z-10
-                  style={{ gridColumn: dayIndex + 1, gridRow: 1 }} // Place single day events in the first row of their column
+                  className="relative p-1 flex flex-col gap-1 overflow-hidden z-10"
+                  style={{ gridColumn: dayIndex + 1, gridRow: 1 }}
                 >
                   {dayEvents.map((event) => {
                     const now = new Date();
                     const isPastEvent = new Date(event.end) < now;
-
+                    const isTask = event.isTask;
+  
                     return (
                       <TooltipProvider key={event.id} delayDuration={2000}>
                         <Tooltip>
@@ -400,35 +463,71 @@ export function useEventRendering(
                               // key={event.id} // Key moved to TooltipProvider
                               onDoubleClick={(e) => {
                                 e.stopPropagation();
-                                handleEventClick(event);
+                                if (isTask) {
+                                  // Handle task click - open task edit modal
+                                  if (handleTaskEdit) {
+                                    handleTaskEdit(event.originalTask);
+                                  } else if (commandBarRef?.current?.openForTaskEdit) {
+                                    commandBarRef.current.openForTaskEdit(event.originalTask);
+                                  }
+                                } else {
+                                  handleEventClick(event);
+                                }
                               }}
                               onClick={(e) => {
                                 e.stopPropagation();
                               }}
-                              onContextMenu={(e) =>
-                                handleEventContextMenu(e, event.id)
-                              }
-                              className="flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden"
+                              onContextMenu={(e) => {
+                                if (!isTask) {
+                                  handleEventContextMenu(e, event.id);
+                                }
+                              }}
+                              className={`flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden ${
+                                isTask ? 'border-2 border-dashed' : ''
+                              }`}
                               style={{
-                                backgroundColor: event.color
-                                  ? `${event.color}20`
-                                  : "#80808020",
+                                backgroundColor: isTask 
+                                  ? (event.color ? `${event.color}10` : "#f3f4f6")
+                                  : (event.color ? `${event.color}20` : "#80808020"),
                                 opacity: isPastEvent ? 0.5 : 1,
+
                               }}
                             >
-                              <div
-                                className="w-1 self-stretch"
-                                style={{ backgroundColor: event.color || "#808080" }}
-                              />
+                              {!isTask && (
+                                <div
+                                  className="w-1 self-stretch"
+                                  style={{ backgroundColor: event.color || "#808080" }}
+                                />
+                              )}
                               <div className="px-2 py-1 truncate">
-                                <div className="font-medium text-xs truncate">
+                                <div className="font-medium text-xs truncate flex items-center gap-1">
+                                  {isTask && (
+                                    <Checkbox 
+                                      checked={event.originalTask?.completed || false}
+                                      onChange={() => {
+                                        if (handleToggleTaskCompletion && event.originalTask) {
+                                          handleToggleTaskCompletion(event.originalTask, 'single');
+                                        }
+                                      }}
+                                    />
+                                  )}
                                   {event.title}
                                 </div>
                               </div>
                             </div>
                           </TooltipTrigger>
                           <TooltipContent side="top" align="start">
-                            <EventTooltipContent event={event} />
+                            {isTask ? (
+                              <div className="text-xs">
+                                <div className="font-medium">{event.title}</div>
+                                {event.originalTask.notes && (
+                                  <div className="text-gray-400 mt-1">{event.originalTask.notes}</div>
+                                )}
+                                <div className="text-gray-400 mt-1">Task</div>
+                              </div>
+                            ) : (
+                              <EventTooltipContent event={event} />
+                            )}
                           </TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
@@ -437,43 +536,75 @@ export function useEventRendering(
                 </div>
               );
             })}
-
+  
             {/* Then render the multi-day events spanning across columns */}
             {eventRows.map((row, rowIndex) => {
               return row.map((event) => {
                 const now = new Date();
                 const isPastEvent = new Date(event.end) < now;
-                // Use grid column/row properties instead of absolute positioning
+                
+                // Grid positioning and dynamic colors that can't be done with Tailwind
                 const eventStyle = {
                   gridColumnStart: event.startDayIndex + 1,
                   gridColumnEnd: event.endDayIndex + 2, // Span includes the end day
                   gridRowStart: rowIndex + 1,
-                  backgroundColor: event.color ? `${event.color}20` : '#80808020',
-                  opacity: isPastEvent ? 0.5 : 1,
+                  backgroundColor: event.isTask 
+                    ? (event.color ? `${event.color}10` : undefined)
+                    : (event.color ? `${event.color}20` : undefined),
                 };
-
+                
+                // Tailwind classes for styling
+                const eventClasses = `relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10 ${
+                  event.isTask 
+                    ? `border border-dashed border-light-border dark:border-dark-border bg-light-bg-lighter dark:bg-dark-bg-lighter'}`
+                    : ''
+                } ${
+                  isPastEvent ? 'opacity-50' : ''
+                }`.trim();
+  
                 return (
                   <TooltipProvider key={event.id} delayDuration={2000}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div
                           // key={event.id} // Key moved to TooltipProvider
-                          className="relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10" // Changed m-px to m-1
+                          className={eventClasses}
                           style={eventStyle}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
-                            handleEventClick(event);
+                            if (event.isTask) {
+                              // Handle task click - open task edit modal
+                              if (handleTaskEdit) {
+                                handleTaskEdit(event.originalTask);
+                              } else if (commandBarRef?.current?.openForTaskEdit) {
+                                commandBarRef.current.openForTaskEdit(event.originalTask);
+                              }
+                            } else {
+                              handleEventClick(event);
+                            }
                           }}
                           onClick={(e) => {
                             e.stopPropagation(); // Prevent triggering cell click
                           }}
                           onContextMenu={(e) => handleEventContextMenu(e, event.id)}
                         >
-                          <div
-                            className="w-1 self-stretch"
-                            style={{ backgroundColor: event.color || "#808080" }}
-                          />
-                          <div className="px-2 py-1 truncate">
+                          {!event.isTask && (
+                            <div
+                              className="w-1 self-stretch"
+                              style={{ backgroundColor: event.color || "#808080" }}
+                            />
+                          )}
+                          <div className="px-2 py-1 truncate flex items-center gap-1">
+                            {event.isTask && (
+                              <Checkbox 
+                                checked={event.originalTask?.completed || false}
+                                onChange={() => {
+                                  if (handleToggleTaskCompletion && event.originalTask) {
+                                    handleToggleTaskCompletion(event.originalTask, 'single');
+                                  }
+                                }}
+                              />
+                            )}
                             <div className="font-medium text-xs truncate">
                               {event.title}
                             </div>
@@ -507,14 +638,14 @@ export function useEventRendering(
                   // Check both allDay and isAllDay properties to ensure compatibility
                   const isAllDayEvent = event.allDay || event.isAllDay;
                   const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
-
+  
                   // Include both all-day events and multi-day events that overlap with the selected date
                   const eventStart = new Date(event.start);
                   const eventEnd = new Date(event.end);
                   const selectedDateObj = new Date(selectedDate);
                   const nextDay = new Date(selectedDate);
                   nextDay.setDate(nextDay.getDate() + 1);
-
+  
                   return (isAllDayEvent || isMultiDayEvent) && 
                          eventEnd >= selectedDateObj && 
                          eventStart < nextDay;
@@ -523,35 +654,60 @@ export function useEventRendering(
               .map((event) => {
                 const now = new Date();
                 const isPastEvent = new Date(event.end) < now;
-
+  
                 return (
                   <TooltipProvider key={event.id} delayDuration={2000}>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div
                           // key={event.id} // Key moved to TooltipProvider
-                          className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
+                          className={`z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10 ${
+                            event.isTask ? 'border-2 border-dashed' : ''
+                          }`}
                           style={{
-                            backgroundColor: event.color
-                              ? `${event.color}20`
-                              : "#80808020",
-                            opacity: isPastEvent ? 0.5 : 1,
+                            backgroundColor: event.isTask
+                              ? (event.color ? `${event.color}10` : "#f3f4f6")
+                              : (event.color ? `${event.color}20` : "#80808020"),
+                            opacity: isPastEvent ? 0.5 : 1
                           }}
                           onClick={(e) => {
                             e.stopPropagation();
                           }}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
-                            handleEventClick(event);
+                            if (event.isTask) {
+                              // Handle task click
+                              if (handleTaskEdit) {
+                                handleTaskEdit(event.originalTask);
+                              } else if (commandBarRef?.current?.openForTaskEdit) {
+                                commandBarRef.current.openForTaskEdit(event.originalTask);
+                              }
+                            } else {
+                              handleEventClick(event);
+                            }
                           }}
                           onContextMenu={(e) => handleEventContextMenu(e, event.id)}
                         >
-                          <div
-                            className="absolute left-0 top-0 bottom-0 w-1"
-                            style={{ backgroundColor: event.color || "#808080" }}
-                          />
+                          {!event.isTask && (
+                            <div
+                              className="absolute left-0 top-0 bottom-0 w-1"
+                              style={{ backgroundColor: event.color || "#808080" }}
+                            />
+                          )}
                           <div className="px-3 py-1">
-                            <div className="font-medium text-xs">{event.title}</div>
+                            <div className="font-medium text-xs flex items-center gap-1">
+                              {event.isTask && (
+                                <Checkbox 
+                                  checked={event.originalTask?.completed || false}
+                                  onChange={() => {
+                                    if (handleToggleTaskCompletion && event.originalTask) {
+                                      handleToggleTaskCompletion(event.originalTask, 'single');
+                                    }
+                                  }}
+                                />
+                              )}
+                              {event.title}
+                            </div>
                             {event.isMultiDay && (
                               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                                 {format(new Date(event.start), "MMM d")} - {format(new Date(event.end), "MMM d")}
@@ -571,7 +727,7 @@ export function useEventRendering(
         </div>
       </div>
     );
-  };
+  }, [events, selectedDate, viewType, handleEventClick, handleEventContextMenu, commandBarRef, taskUpdateTrigger]);
 
   return {
     renderEvents,

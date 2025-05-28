@@ -135,6 +135,9 @@ export function useTaskManagement() {
       let originalTagId = null;
       let newTagId = updatedTaskData.tag ? updatedTaskData.tag.id : null;
       
+      // Note: Detached task creation is now handled in CommandBar.jsx
+      // This ensures the user can make changes before the detachment occurs
+      
       // Ensure basic collections exist
       if (!tasks.all) tasks.all = [];
       if (!tasks.today) tasks.today = [];

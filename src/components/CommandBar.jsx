@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 // Add addDays, isBefore, isEqual imports
-import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual, differenceInMilliseconds, add } from 'date-fns';
+import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual, differenceInMilliseconds, add, parseISO } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
 import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
@@ -214,6 +214,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   // Don't automatically save tags to localStorage
   // Tags will be saved when a task is created or updated
   const [taskNotes, setTaskNotes] = useState('');
+  const [addToCalendar, setAddToCalendar] = useState(false);
   const [originalEventState, setOriginalEventState] = useState(null);
   const [eventState, setEventState] = useState({
     title: '',
@@ -347,6 +348,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setSelectedTag(null);
     setPendingNewTag(null);
     setDraftTag(null);
+    setAddToCalendar(false);
     setTagSearchText('');
     setIsTagDropdownOpen(false);
     setIsRepeatDropdownOpen(false); // Reset repeat dropdown state
@@ -598,6 +600,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskNotes(task.notes || '');
     setSelectedTag(task.tag || null);
     setDraftTag(task.tag || null);
+    setAddToCalendar(task.addToCalendar || false);
     setTagSearchText(''); // Don't set the tag search text when editing
     setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
     setTaskRepeatOption(task.repeat || 'none');
@@ -718,6 +721,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatOption('none');
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null);
+      setAddToCalendar(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
       
@@ -887,73 +891,191 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const repeatChanged = taskToEdit && taskToEdit.repeat !== taskRepeatOption;
       
       // Generate a series ID for recurring tasks if needed
+      // Preserve existing seriesId if task was already recurring, even if addToCalendar is false
       const seriesId = taskRepeatOption !== 'none' 
         ? (taskRepeatSeriesId || `series_${Date.now().toString()}`)
-        : null;
+        : (taskToEdit && taskToEdit.seriesId && !repeatChanged ? taskToEdit.seriesId : null);
 
       if (editingTaskId) {
-        // Update existing task
-        const updatedTask = {
-          ...taskToEdit,
-          id: editingTaskId,
-          title: taskTitle.trim(),
-          notes: taskNotes.trim(),
-          tag: finalTag,
-          scheduledDate: scheduledDate?.toISOString(),
-          updatedAt: new Date().toISOString(),
-          repeat: taskRepeatOption,
-          rruleOptions: taskRruleOptions, // Include task rrule options
-          seriesId: seriesId,
-          isRepeat: false // Base task is never a repeat instance
-        };
-
-        // Update in all tasks
-        updatedTasks.all = updatedTasks.all.map(t => 
-          t.id === editingTaskId ? updatedTask : t
-        );
-
-        // Handle today's tasks
-        if (scheduledDate && isToday(scheduledDate)) {
-          const taskInToday = updatedTasks.today.some(t => t.id === editingTaskId);
-          if (taskInToday) {
-            updatedTasks.today = updatedTasks.today.map(t => 
-              t.id === editingTaskId ? updatedTask : t
+        // Check if this is a detached task creation (single instance edit of recurring task)
+        if (taskToEdit && taskToEdit._detachedTask && taskToEdit._editScope === 'single') {
+          console.log('Creating detached task instance for single edit');
+          
+          // Create a new detached task with a new ID
+          const detachedTask = {
+            id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+            title: taskTitle.trim(),
+            notes: taskNotes.trim(),
+            tag: finalTag,
+            scheduledDate: scheduledDate?.toISOString(),
+            completed: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            repeat: 'none', // Detached tasks don't repeat
+            seriesId: null, // Detached tasks have no series
+            isRepeat: false,
+            addToCalendar: addToCalendar,
+            // Remove all internal flags
+            _detachedTask: undefined,
+            _editScope: undefined,
+            _originalTask: undefined
+          };
+          
+          // Add detached task to collections
+          updatedTasks.all.push(detachedTask);
+          
+          // Add to today if scheduled for today
+          if (scheduledDate && isToday(scheduledDate)) {
+            updatedTasks.today.push(detachedTask);
+          }
+          
+          // Add to tag collection if it exists
+          if (finalTag) {
+            const tagId = finalTag.id;
+            if (!Array.isArray(updatedTasks[tagId])) {
+              updatedTasks[tagId] = [];
+            }
+            updatedTasks[tagId].push(detachedTask);
+          }
+          
+          // Advance the recurring series by generating the next instance
+          const originalTask = taskToEdit._originalTask;
+          if (originalTask && originalTask.seriesId && originalTask.repeat && originalTask.repeat !== 'none') {
+            console.log('Advancing recurring series after detachment');
+            
+            // Find the base task definition for the series
+            const baseTask = updatedTasks.all.find(t => 
+              t.seriesId === originalTask.seriesId && 
+              !t.isRepeat && 
+              t.repeat && 
+              t.repeat !== 'none'
             );
-          } else {
-            updatedTasks.today.push(updatedTask);
+            
+            if (baseTask) {
+              // Import generateNextDisplayableTaskInstance dynamically
+              import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+                const nextInstance = generateNextDisplayableTaskInstance(baseTask, originalTask.scheduledDate);
+                
+                if (nextInstance) {
+                  console.log('Generated next instance for recurring series:', nextInstance);
+                  
+                  // Get current tasks from localStorage to ensure we have the latest state
+                  const currentTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+                  
+                  // Add next instance to collections if it doesn't already exist
+                  if (!currentTasks.all) currentTasks.all = [];
+                  if (!currentTasks.all.find(t => t.id === nextInstance.id)) {
+                    currentTasks.all.push(nextInstance);
+                    
+                    // Add to tag collection
+                    if (nextInstance.tag && nextInstance.tag.id) {
+                      const instanceTagGroup = nextInstance.tag.id;
+                      if (!currentTasks[instanceTagGroup]) currentTasks[instanceTagGroup] = [];
+                      currentTasks[instanceTagGroup].push(nextInstance);
+                    }
+                    
+                    // Add to today if scheduled for today
+                    if (nextInstance.scheduledDate && isToday(parseISO(nextInstance.scheduledDate))) {
+                      if (!currentTasks.today) currentTasks.today = [];
+                      currentTasks.today.push(nextInstance);
+                    }
+                    
+                    // Save updated tasks
+                    localStorage.setItem('tasks', JSON.stringify(currentTasks));
+                    
+                    // Dispatch events to update UI
+                    window.dispatchEvent(new StorageEvent('storage', {
+                      key: 'tasks',
+                      newValue: JSON.stringify(currentTasks),
+                      url: window.location.href
+                    }));
+                    
+                    window.dispatchEvent(new CustomEvent('tasksUpdated', {
+                      detail: currentTasks
+                    }));
+                    
+                    console.log('Successfully advanced recurring series');
+                  }
+                }
+              }).catch(error => {
+                console.error('Error importing recurrenceUtils:', error);
+              });
+            } else {
+              console.warn('Could not find base task definition for series:', originalTask.seriesId);
+            }
           }
+          
+          // The original recurring task remains unchanged
+          // Call onUpdateTask with detached task to trigger any necessary updates
+          onUpdateTask(detachedTask);
+          
+          console.log('Created detached task:', detachedTask);
         } else {
-          updatedTasks.today = updatedTasks.today.filter(t => 
-            t.id !== editingTaskId
+          // Regular task update
+          const updatedTask = {
+            ...taskToEdit,
+            id: editingTaskId,
+            title: taskTitle.trim(),
+            notes: taskNotes.trim(),
+            tag: finalTag,
+            scheduledDate: scheduledDate?.toISOString(),
+            updatedAt: new Date().toISOString(),
+            repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
+            rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : (taskToEdit && taskToEdit.rruleOptions && !repeatChanged ? taskToEdit.rruleOptions : null), // Include task rrule options
+            seriesId: seriesId,
+            // Preserve the original isRepeat value - don't hardcode to false
+            isRepeat: taskToEdit.isRepeat,
+            addToCalendar: addToCalendar
+          };
+
+          // Update in all tasks
+          updatedTasks.all = updatedTasks.all.map(t => 
+            t.id === editingTaskId ? updatedTask : t
           );
+
+          // Handle today's tasks
+          if (scheduledDate && isToday(scheduledDate)) {
+            const taskInToday = updatedTasks.today.some(t => t.id === editingTaskId);
+            if (taskInToday) {
+              updatedTasks.today = updatedTasks.today.map(t => 
+                t.id === editingTaskId ? updatedTask : t
+              );
+            } else {
+              updatedTasks.today.push(updatedTask);
+            }
+          } else {
+            updatedTasks.today = updatedTasks.today.filter(t => 
+              t.id !== editingTaskId
+            );
+          }
+
+          // Handle tag collections
+          const tagCollections = Object.keys(updatedTasks).filter(key => 
+            key !== 'all' && key !== 'today'
+          );
+
+          // Remove task from all tag collections first
+          tagCollections.forEach(key => {
+            if (!Array.isArray(updatedTasks[key])) {
+              updatedTasks[key] = [];
+            }
+            updatedTasks[key] = updatedTasks[key].filter(t => t.id !== editingTaskId);
+          });
+
+          // Add task to new tag collection if it exists
+          if (finalTag) {
+            const tagId = finalTag.id;
+            if (!Array.isArray(updatedTasks[tagId])) {
+              updatedTasks[tagId] = [];
+            }
+            // Only add if not already in the collection
+            if (!updatedTasks[tagId].some(t => t.id === editingTaskId)) {
+              updatedTasks[tagId].push(updatedTask);
+            }
+          }
+
+          onUpdateTask(updatedTask);
         }
-
-        // Handle tag collections
-        const tagCollections = Object.keys(updatedTasks).filter(key => 
-          key !== 'all' && key !== 'today'
-        );
-
-        // Remove task from all tag collections first
-        tagCollections.forEach(key => {
-          if (!Array.isArray(updatedTasks[key])) {
-            updatedTasks[key] = [];
-          }
-          updatedTasks[key] = updatedTasks[key].filter(t => t.id !== editingTaskId);
-        });
-
-        // Add task to new tag collection if it exists
-        if (finalTag) {
-          const tagId = finalTag.id;
-          if (!Array.isArray(updatedTasks[tagId])) {
-            updatedTasks[tagId] = [];
-          }
-          // Only add if not already in the collection
-          if (!updatedTasks[tagId].some(t => t.id === editingTaskId)) {
-            updatedTasks[tagId].push(updatedTask);
-          }
-        }
-
-        onUpdateTask(updatedTask);
       } else {
         // Create new task
         const newTask = {
@@ -964,10 +1086,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           scheduledDate: scheduledDate?.toISOString(),
           completed: false,
           createdAt: new Date().toISOString(),
-          repeat: taskRepeatOption,
-          rruleOptions: taskRruleOptions, // Include task rrule options
+          repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
+          rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : (taskToEdit && taskToEdit.rruleOptions && !repeatChanged ? taskToEdit.rruleOptions : null), // Include task rrule options
           seriesId: seriesId,
-          isRepeat: false // Base task is never a repeat instance
+          isRepeat: false, // Base task is never a repeat instance
+          addToCalendar: addToCalendar
         };
         
         // For recurring tasks, ensure they have a scheduled date
@@ -1030,6 +1153,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatOption('none');
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null); // Reset task custom rule state
+      setAddToCalendar(false);
       setIsAddingTask(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
@@ -1038,7 +1162,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       console.error('Error saving task:', error);
       // You might want to show an error message to the user here
     }
-  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
+  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated, addToCalendar]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
@@ -1621,6 +1745,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     </div>
                                   </PopoverContent>
                                 </Popover>
+                              </div>                              <div className="flex items-center gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
+
+                                <div className="flex flex-grow justify-end items-center gap-2">
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={addToCalendar}
+                                      onChange={(e) => setAddToCalendar(e.target.checked)}
+                                    />
+                                    <div className="w-7 h-4 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:shadow-sm after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
+                                  </label>
+                                  <span className="text-xs text-light-text/50 dark:text-dark-text/50">Add to calendar</span>
+                                </div>
                               </div>
                               <div className="flex items-center justify-end gap-2 px-4 py-4">
                           <button
