@@ -1079,11 +1079,8 @@ export default function Sidebar({
   // Add an effect to ensure tasks and tags stay in sync with localStorage
   useEffect(() => {
     const handleStorageChange = (e) => {
-      // Skip storage events that originated from this same window to prevent cycles
-      if (e.url === window.location.href) {
-        console.log('[Sidebar] Skipping storage event from same window to prevent cycles.');
-        return;
-      }
+      // Allow storage events from same window for useTaskManagement updates
+      // Only skip if it's a different type of storage event that could cause cycles
       
       if (e.key === "tasks") {
         try {
@@ -1119,8 +1116,8 @@ export default function Sidebar({
 
   const handleEditTaskIconClick = (task) => {
     if (commandBarRef?.current) {
-      // Check if this is a recurring task
-      const isRecurringTask = task.repeat && task.repeat !== 'none';
+      // Check if this is a recurring task (base task with repeat property OR instance with seriesId/isRepeat)
+      const isRecurringTask = (task.repeat && task.repeat !== 'none') || task.seriesId || task.isRepeat;
       
       if (isRecurringTask) {
         // Show the RepeatTaskEditModal for recurring tasks
@@ -1900,10 +1897,17 @@ export default function Sidebar({
             setOriginalTask(taskToEdit);
             commandBarRef.current.openForTaskEdit(taskForEdit);
           } else {
-            // Edit the series (future or all) - use original task to preserve recurring settings
+            // Edit the series (future or all) - pass the task with scope information
+            const taskForEdit = {
+              ...taskToEdit,
+              _editScope: scope,
+              _updateSeries: scope === 'all',
+              _originalTask: taskToEdit
+            };
+            
             setEditingTaskId(taskToEdit.id);
             setOriginalTask(taskToEdit);
-            commandBarRef.current.openForTaskEdit(taskToEdit);
+            commandBarRef.current.openForTaskEdit(taskForEdit);
           }
           
           // Close the modal

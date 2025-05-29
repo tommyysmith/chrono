@@ -4,7 +4,7 @@ import { format, isSameDay, addDays, startOfDay, endOfDay, isWithinInterval, par
 import { RRule } from "rrule";
 import { Repeat } from "@/assets/icons/Repeat";
 import { ViewType } from "../constants/views";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
 import {
   TooltipProvider,
@@ -12,9 +12,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import EventTooltipContent from "@/components/EventTooltipContent";
 import { Completed } from "@/assets/icons/Completed";
 import Checkbox from "@/components/Checkbox";
+import { Pencil } from "lucide-react";
+import { Trash } from "@/assets/icons/Trash";
+
 
 export const useEventRendering = (
   events,
@@ -31,6 +39,130 @@ export const useEventRendering = (
   handleTaskEdit
 ) => {
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
+  const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+
+
+  // Task context menu handlers
+  const handleTaskContextMenu = useCallback((e, task) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setTaskContextMenu({ 
+      isOpen: true, 
+      taskId: task.id, 
+      task,
+      position: { x: e.clientX, y: e.clientY }
+    });
+  }, []);
+
+  const handleTaskEditFromMenu = useCallback((task) => {
+    if (handleTaskEdit) {
+      handleTaskEdit(task);
+    } else if (commandBarRef?.current?.openForTaskEdit) {
+      commandBarRef.current.openForTaskEdit(task);
+    }
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, [handleTaskEdit, commandBarRef]);
+
+  const handleTaskDelete = useCallback((task) => {
+    // For calendar view, always delete the specific instance (single scope behavior)
+    // Get tasks from localStorage
+    const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+    
+    const updatedTasks = { ...tasks };
+    const taskId = task.id;
+    const taskSeriesId = task.seriesId;
+    const taskScheduledDate = task.scheduledDate;
+    
+    // Strengthen instance detection logic
+    const isRecurringInstance = task.isRepeat === true || 
+                               (taskSeriesId && task.originalBaseId) ||
+                               (taskSeriesId && task.id && task.id.includes('_repeat_'));
+    
+    // Additional check: if task has seriesId but no explicit isRepeat, it's likely an instance
+    const isLikelyInstance = taskSeriesId && !task.repeat && task.id !== taskSeriesId;
+    
+    // For recurring tasks (both instances and base tasks), implement single instance deletion behavior
+    if (taskSeriesId && (isRecurringInstance || isLikelyInstance || (task.repeat && task.repeat !== 'none'))) {
+      // Find the base task definition
+      const allTasks = Object.values(updatedTasks).flat();
+      const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
+      let baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
+      
+      // If we're deleting the base task itself, use it as the base definition
+      if (!baseTaskDefinition && task.repeat && task.repeat !== 'none') {
+        baseTaskDefinition = task;
+      }
+      
+      if (baseTaskDefinition) {
+        // For single instance deletion, update the base task's scheduledDate to the next occurrence
+        setTimeout(() => {
+          import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
+            const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskScheduledDate));
+            
+            if (nextInstance) {
+              // Update the base task with the next occurrence date
+              Object.keys(updatedTasks).forEach((group) => {
+                if (Array.isArray(updatedTasks[group])) {
+                  updatedTasks[group] = updatedTasks[group].map((t) => {
+                    if (t.id === baseTaskDefinition.id) {
+                      return {
+                        ...t,
+                        scheduledDate: nextInstance.scheduledDate
+                      };
+                    }
+                    return t;
+                  });
+                }
+              });
+            } else {
+              // No more instances, remove the base task
+              Object.keys(updatedTasks).forEach((group) => {
+                if (Array.isArray(updatedTasks[group])) {
+                  updatedTasks[group] = updatedTasks[group].filter(
+                    (t) => t.id !== baseTaskDefinition.id
+                  );
+                }
+              });
+            }
+            
+            // Save to localStorage and dispatch events
+            localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+            const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+            window.dispatchEvent(event);
+            setTaskUpdateTrigger(prev => prev + 1);
+          }).catch(error => {
+            console.error('Error importing generateNextDisplayableTaskInstance:', error);
+          });
+        }, 0);
+      } else {
+        // No base task found, just remove the instance
+        Object.keys(updatedTasks).forEach(key => {
+          if (Array.isArray(updatedTasks[key])) {
+            updatedTasks[key] = updatedTasks[key].filter(t => t.id !== task.id);
+          }
+        });
+        
+        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+        window.dispatchEvent(event);
+        setTaskUpdateTrigger(prev => prev + 1);
+      }
+    } else {
+      // For non-recurring tasks, just remove directly
+      Object.keys(updatedTasks).forEach(key => {
+        if (Array.isArray(updatedTasks[key])) {
+          updatedTasks[key] = updatedTasks[key].filter(t => t.id !== task.id);
+        }
+      });
+      
+      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+      const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+      window.dispatchEvent(event);
+      setTaskUpdateTrigger(prev => prev + 1);
+    }
+    
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, []);
 
   // Listen for task updates to refresh the calendar
   useEffect(() => {
@@ -168,9 +300,24 @@ export const useEventRendering = (
                 }}
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  handleEventClick(event);
+                  if (event.isTask) {
+                    // Handle task click - open task edit modal
+                    if (handleTaskEdit) {
+                      handleTaskEdit(event.originalTask);
+                    } else if (commandBarRef?.current?.openForTaskEdit) {
+                      commandBarRef.current.openForTaskEdit(event.originalTask);
+                    }
+                  } else {
+                    handleEventClick(event);
+                  }
                 }}
-                onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                onContextMenu={(e) => {
+                  if (event.isTask) {
+                    handleTaskContextMenu(e, event.originalTask);
+                  } else {
+                    handleEventContextMenu(e, event.id);
+                  }
+                }}
               >
                 <div
                   className="absolute left-0 top-0 bottom-0 w-1"
@@ -248,7 +395,7 @@ export const useEventRendering = (
                   }}
                   onDoubleClick={(e) => {
                     e.stopPropagation();
-                    if (isTask) {
+                    if (event.isTask) {
                       // Handle task click - open task edit modal
                       if (handleTaskEdit) {
                         handleTaskEdit(event.originalTask);
@@ -259,7 +406,13 @@ export const useEventRendering = (
                       handleEventClick(event);
                     }
                   }}
-                  onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                  onContextMenu={(e) => {
+                    if (event.isTask) {
+                      handleTaskContextMenu(e, event.originalTask);
+                    } else {
+                      handleEventContextMenu(e, event.id);
+                    }
+                  }}
                 >
                   <div
                     className="absolute left-0 top-0 bottom-0 w-1"
@@ -478,7 +631,9 @@ export const useEventRendering = (
                                 e.stopPropagation();
                               }}
                               onContextMenu={(e) => {
-                                if (!isTask) {
+                                if (isTask) {
+                                  handleTaskContextMenu(e, event.originalTask);
+                                } else {
                                   handleEventContextMenu(e, event.id);
                                 }
                               }}
@@ -586,7 +741,13 @@ export const useEventRendering = (
                           onClick={(e) => {
                             e.stopPropagation(); // Prevent triggering cell click
                           }}
-                          onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                          onContextMenu={(e) => {
+                            if (event.isTask) {
+                              handleTaskContextMenu(e, event.originalTask);
+                            } else {
+                              handleEventContextMenu(e, event.id);
+                            }
+                          }}
                         >
                           {!event.isTask && (
                             <div
@@ -686,7 +847,13 @@ export const useEventRendering = (
                               handleEventClick(event);
                             }
                           }}
-                          onContextMenu={(e) => handleEventContextMenu(e, event.id)}
+                          onContextMenu={(e) => {
+                            if (event.isTask) {
+                              handleTaskContextMenu(e, event.originalTask);
+                            } else {
+                              handleEventContextMenu(e, event.id);
+                            }
+                          }}
                         >
                           {!event.isTask && (
                             <div
@@ -729,8 +896,74 @@ export const useEventRendering = (
     );
   }, [events, selectedDate, viewType, handleEventClick, handleEventContextMenu, commandBarRef, taskUpdateTrigger]);
 
+  // Task Context Menu Popover Component
+  const TaskContextMenuPopover = () => {
+    if (!taskContextMenu.isOpen || !taskContextMenu.task) return null;
+
+    const handleClose = () => {
+      setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+    };
+
+    const handleEdit = () => {
+      handleTaskEditFromMenu(taskContextMenu.task);
+      handleClose();
+    };
+
+    const handleDelete = () => {
+      handleTaskDelete(taskContextMenu.task);
+      handleClose();
+    };
+
+    return (
+      <>
+        <AnimatePresence>
+          {taskContextMenu.isOpen && (
+            <>
+              {/* Backdrop to close menu when clicking outside */}
+              <div 
+                className="fixed inset-0 z-40" 
+                onClick={handleClose}
+              />
+              {/* Context Menu */}
+              <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.1 }}
+            className="fixed z-50 w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border"
+            style={{
+              left: taskContextMenu.position.x,
+              top: taskContextMenu.position.y,
+            }}
+          >
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={handleEdit}
+                className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5"
+              >
+                <Pencil className="w-3 h-3 text-dark-text dark:text-dark-text" />
+                Edit
+              </button>
+              <button
+                onClick={handleDelete}
+                className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white text-[#EC0F0F]"
+              >
+                <Trash className="w-3 h-3" />
+                Delete
+              </button>
+            </div>
+           </motion.div>
+             </>
+           )}
+         </AnimatePresence>
+
+      </>
+    );
+  };
+
   return {
     renderEvents,
     renderAllDayEvents,
+    TaskContextMenuPopover,
   };
 }

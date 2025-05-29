@@ -603,9 +603,34 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setAddToCalendar(task.addToCalendar || false);
     setTagSearchText(''); // Don't set the tag search text when editing
     setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
-    setTaskRepeatOption(task.repeat || 'none');
-    setTaskRepeatSeriesId(task.seriesId || null);
-    setTaskRruleOptions(task.rruleOptions || null); // Load task rrule options
+    
+    // Handle repeat options for recurring task instances
+    let repeatOption = task.repeat || 'none';
+    let repeatSeriesId = task.seriesId || null;
+    let rruleOptions = task.rruleOptions || null;
+    
+    // If this is a recurring task instance (has seriesId but no repeat), get repeat info from base task
+    if (task.isRepeat === true && task.seriesId && (!task.repeat || task.repeat === 'none')) {
+      // Get all tasks from localStorage to find the base task
+      const savedTasks = localStorage.getItem("tasks") || "{}";
+      const tasks = JSON.parse(savedTasks);
+      const allTasks = tasks.all || [];
+      
+      // Find the base task for this series
+      const baseTask = allTasks.find(t => 
+        t.seriesId === task.seriesId && 
+        (t.isRepeat === false || typeof t.isRepeat === 'undefined')
+      );
+      
+      if (baseTask) {
+        repeatOption = baseTask.repeat || 'none';
+        rruleOptions = baseTask.rruleOptions || null;
+      }
+    }
+    
+    setTaskRepeatOption(repeatOption);
+    setTaskRepeatSeriesId(repeatSeriesId);
+    setTaskRruleOptions(rruleOptions);
     setEditingTaskId(task.id);
     setTaskToEdit(task);
   }, []);
@@ -1025,8 +1050,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             seriesId: seriesId,
             // Preserve the original isRepeat value - don't hardcode to false
             isRepeat: taskToEdit.isRepeat,
-            addToCalendar: addToCalendar
+            // Explicitly preserve originalBaseId for recurring task instances
+            originalBaseId: taskToEdit.originalBaseId,
+            addToCalendar: addToCalendar,
+            // Pass through scope information for series-wide updates
+            _editScope: taskToEdit._editScope,
+            _updateSeries: taskToEdit._updateSeries
           };
+          
+          console.log('📝 [DEBUG] CommandBar sending task update:', {
+            id: updatedTask.id,
+            title: updatedTask.title,
+            isRepeat: updatedTask.isRepeat,
+            originalBaseId: updatedTask.originalBaseId,
+            seriesId: updatedTask.seriesId,
+            _editScope: updatedTask._editScope,
+            _updateSeries: updatedTask._updateSeries
+          });
 
           // Update in all tasks
           updatedTasks.all = updatedTasks.all.map(t => 
@@ -1072,6 +1112,30 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             if (!updatedTasks[tagId].some(t => t.id === editingTaskId)) {
               updatedTasks[tagId].push(updatedTask);
             }
+          }
+
+          // For series updates, skip local manipulation and let useTaskManagement handle everything
+          if (updatedTask._updateSeries) {
+            console.log('Series update detected - skipping local manipulation, letting useTaskManagement handle it');
+            onUpdateTask(updatedTask);
+            
+            // Reset form and states
+            setTaskTitle('');
+            setTaskNotes('');
+            setSelectedTag(null);
+            setPendingNewTag(null);
+            setDraftTag(null);
+            setTagSearchText('');
+            setScheduledDate(null);
+            setTaskRepeatOption('none');
+            setTaskRepeatSeriesId(null);
+            setTaskRruleOptions(null);
+            setAddToCalendar(false);
+            setIsAddingTask(false);
+            setEditingTaskId(null);
+            setTaskToEdit(null);
+            handleClose();
+            return;
           }
 
           onUpdateTask(updatedTask);

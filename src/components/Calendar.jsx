@@ -170,7 +170,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
   }, [commandBarRef]);
 
-  const { renderEvents, renderAllDayEvents } = useEventRendering(
+  const { renderEvents, renderAllDayEvents, TaskContextMenuPopover } = useEventRendering(
     displayEvents,
     selectedDate,
     viewType,
@@ -740,6 +740,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         )}
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
       />
+      {TaskContextMenuPopover && <TaskContextMenuPopover />}
       </div>
     </div>
   );

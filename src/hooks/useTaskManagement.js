@@ -121,7 +121,15 @@ export function useTaskManagement() {
   }, []);
 
   const handleUpdateTask = useCallback((updatedTaskData) => {
-    console.log('handleUpdateTask called with:', updatedTaskData);
+    console.log('🔄 [DEBUG] handleUpdateTask called with:', {
+      id: updatedTaskData?.id,
+      title: updatedTaskData?.title,
+      isRepeat: updatedTaskData?.isRepeat,
+      originalBaseId: updatedTaskData?.originalBaseId,
+      seriesId: updatedTaskData?.seriesId,
+      _editScope: updatedTaskData?._editScope,
+      _updateSeries: updatedTaskData?._updateSeries
+    });
     
     if (!updatedTaskData) {
       console.error('Invalid task data provided for update: null or undefined');
@@ -316,7 +324,213 @@ export function useTaskManagement() {
       
       // Create the updated task by merging original with updates
       const mergedTask = { ...originalTask, ...updatedTaskData };
+      
+      // Clean up internal flags before saving
+      const cleanedTask = { ...mergedTask };
+      delete cleanedTask._editScope;
+      delete cleanedTask._updateSeries;
+      delete cleanedTask._originalTask;
+      
       console.log('Merged task after update:', mergedTask);
+      console.log('Cleaned task for storage:', cleanedTask);
+      
+      // Check for series updates first before normal task updates
+      const isSeriesUpdate = mergedTask._updateSeries === true || mergedTask._editScope === 'all';
+      
+      if (isSeriesUpdate && mergedTask.isRepeat === true && (mergedTask.originalBaseId || mergedTask.seriesId)) {
+        console.log('🔄 [DEBUG] Series update detected - handling series update logic first');
+        
+        // Find the base task definition
+        const baseTask = mergedTask.originalBaseId 
+          ? tasks.all.find(t => t.id === mergedTask.originalBaseId)
+          : mergedTask; // If no originalBaseId, this task IS the base task
+        
+        if (baseTask) {
+          console.log('🔄 [DEBUG] Base task details:', {
+            id: baseTask.id,
+            title: baseTask.title,
+            seriesId: baseTask.seriesId,
+            isRepeat: baseTask.isRepeat,
+            repeat: baseTask.repeat
+          });
+          
+          console.log('🔄 [DEBUG] Performing series-wide update from instance edit');
+          
+          // First, update the base task definition with the new properties
+          console.log('🔄 [DEBUG] Updating base task definition for series-wide update');
+          const updatedBaseTask = {
+            ...baseTask,
+            title: cleanedTask.title,
+            notes: cleanedTask.notes,
+            tag: cleanedTask.tag,
+            updatedAt: new Date().toISOString(),
+            // Preserve base task properties
+            id: baseTask.id,
+            scheduledDate: baseTask.scheduledDate,
+            repeat: baseTask.repeat,
+            seriesId: baseTask.seriesId,
+            startDateOfSeries: baseTask.startDateOfSeries,
+            isRepeat: baseTask.isRepeat || false
+          };
+          
+          // Update base task in all collection
+          const baseTaskIndex = tasks.all.findIndex(t => t.id === baseTask.id);
+          if (baseTaskIndex !== -1) {
+            tasks.all[baseTaskIndex] = updatedBaseTask;
+            console.log('Updated base task in all collection');
+          }
+          
+          // Update base task in tag collections
+          if (originalTagId && tasks[originalTagId]) {
+            tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== baseTask.id);
+          }
+          if (newTagId) {
+            if (!tasks[newTagId]) tasks[newTagId] = [];
+            if (!tasks[newTagId].find(t => t.id === baseTask.id)) {
+              tasks[newTagId].push(updatedBaseTask);
+              console.log('Added updated base task to new tag collection');
+            }
+          }
+          // Note: If newTagId is null/undefined (No Tag), the task remains only in 'all' collection
+          
+          // Use the getTasksInSeries function to get ALL tasks in the series
+          const allTasksInSeries = getTasksInSeries([...tasks.all, ...(tasks.completed || [])], mergedTask.seriesId);
+          console.log('🔄 [DEBUG] getTasksInSeries result:', {
+            seriesId: mergedTask.seriesId,
+            totalFound: allTasksInSeries.length,
+            tasks: allTasksInSeries.map(t => ({ id: t.id, title: t.title, isRepeat: t.isRepeat, completed: t.completed, seriesId: t.seriesId }))
+          });
+          
+          // Filter out the current task being edited to avoid duplicate updates
+          const instances = allTasksInSeries.filter(t => t.id !== mergedTask.id);
+          
+          console.log('🔄 [DEBUG] Other instances to update:', {
+            count: instances.length,
+            instances: instances.map(t => ({ id: t.id, title: t.title, isRepeat: t.isRepeat, completed: t.completed }))
+          });
+          
+          // Update all other instances with new properties
+          instances.forEach(instance => {
+            // Update the instance with new properties while preserving instance-specific data
+            const updatedInstance = {
+              ...instance,
+              title: cleanedTask.title,
+              notes: cleanedTask.notes,
+              tag: cleanedTask.tag,
+              updatedAt: new Date().toISOString(),
+              // Preserve instance-specific properties
+              id: instance.id,
+              scheduledDate: instance.scheduledDate,
+              isRepeat: instance.isRepeat,
+              seriesId: instance.seriesId,
+              originalBaseId: instance.originalBaseId
+            };
+           
+           // Check if this instance is completed
+           const isCompletedInstance = instance.completed || instance.completedAt;
+           
+           if (isCompletedInstance) {
+             // Update in completed collection
+             if (tasks.completed) {
+               const completedIndex = tasks.completed.findIndex(t => t.id === instance.id);
+               if (completedIndex !== -1) {
+                 tasks.completed[completedIndex] = updatedInstance;
+                 console.log(`Updated completed task ${instance.id} in completed collection`);
+               }
+             }
+           } else {
+             // Update in all collection for active instances
+             const allIndex = tasks.all.findIndex(t => t.id === instance.id);
+             if (allIndex !== -1) {
+               tasks.all[allIndex] = updatedInstance;
+               console.log(`Updated active task ${instance.id} in all collection`);
+             }
+             
+             // Remove from old tag collection if it exists
+             if (originalTagId && tasks[originalTagId]) {
+               tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== instance.id);
+             }
+             
+             // Add to new tag collection for active instances
+             if (newTagId) {
+               if (!tasks[newTagId]) tasks[newTagId] = [];
+               if (!tasks[newTagId].find(t => t.id === instance.id)) {
+                 tasks[newTagId].push(updatedInstance);
+                 console.log(`Added task ${instance.id} to new tag collection ${newTagId}`);
+               }
+             }
+           }
+         });
+         
+         // Update the current instance being edited with preserved recurring properties
+         // Skip this if the current task IS the base task (already updated above)
+         if (mergedTask.id !== baseTask.id) {
+           const updatedCurrentInstance = {
+             ...mergedTask,
+             title: cleanedTask.title,
+             notes: cleanedTask.notes,
+             tag: cleanedTask.tag,
+             updatedAt: new Date().toISOString(),
+             // Preserve instance-specific properties
+             id: mergedTask.id,
+             scheduledDate: mergedTask.scheduledDate,
+             isRepeat: mergedTask.isRepeat,
+             seriesId: mergedTask.seriesId,
+             originalBaseId: mergedTask.originalBaseId
+           };
+           
+           // Check if current instance is completed
+           const isCurrentInstanceCompleted = mergedTask.completed || mergedTask.completedAt;
+           
+           if (isCurrentInstanceCompleted) {
+             // Update in completed collection
+             if (tasks.completed) {
+               const completedIndex = tasks.completed.findIndex(t => t.id === mergedTask.id);
+               if (completedIndex !== -1) {
+                 tasks.completed[completedIndex] = updatedCurrentInstance;
+                 console.log(`Updated current completed task ${mergedTask.id} in completed collection`);
+               }
+             }
+           } else {
+             // Update current instance in all collection
+             const currentInstanceIndex = tasks.all.findIndex(t => t.id === mergedTask.id);
+             if (currentInstanceIndex !== -1) {
+               tasks.all[currentInstanceIndex] = updatedCurrentInstance;
+               console.log(`Updated current active task ${mergedTask.id} in all collection`);
+             }
+             
+             // Remove from old tag collection
+             if (originalTagId && tasks[originalTagId]) {
+               tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== mergedTask.id);
+             }
+             
+             // Update current instance in its new tag collection
+             if (newTagId) {
+               if (!tasks[newTagId]) tasks[newTagId] = [];
+               if (!tasks[newTagId].find(t => t.id === mergedTask.id)) {
+                 tasks[newTagId].push(updatedCurrentInstance);
+                 console.log(`Added current task ${mergedTask.id} to new tag collection ${newTagId}`);
+               }
+             }
+           }
+         }
+         
+         // Skip the normal task update logic since we've handled the series update
+         console.log('Series-wide update completed, skipping normal update logic');
+         localStorage.setItem("tasks", JSON.stringify(tasks));
+         window.dispatchEvent(new StorageEvent('storage', {
+           key: 'tasks',
+           newValue: JSON.stringify(tasks),
+           url: window.location.href
+         }));
+         return true;
+        }
+        
+        // If we reach here, the series update was initiated but base task wasn't found
+        console.log('Series update initiated but base task not found, proceeding with normal update');
+      } else {
+        console.log('Not a series update, proceeding with normal task update logic');
+      }
       
       // Handle tag changes - we need to move the task between collections
       if (originalTagId !== newTagId) {
@@ -332,7 +546,7 @@ export function useTaskManagement() {
         // Add to new tag collection if it has a new tag
         if (newTagId) {
           if (!tasks[newTagId]) tasks[newTagId] = [];
-          tasks[newTagId].push(mergedTask);
+          tasks[newTagId].push(cleanedTask);
           console.log(`Added task to new tag collection: ${newTagId}`);
         }
       }
@@ -340,13 +554,13 @@ export function useTaskManagement() {
       // Update the task in the 'all' collection
       const allTaskIndex = tasks.all ? tasks.all.findIndex(t => t.id === updatedTaskData.id) : -1;
       if (allTaskIndex !== -1) {
-        tasks.all[allTaskIndex] = mergedTask;
+        tasks.all[allTaskIndex] = cleanedTask;
         console.log('Updated task in all collection');
       } else if (tasks.all) {
-        tasks.all.push(mergedTask);
+        tasks.all.push(cleanedTask);
         console.log('Added task to all collection');
       } else {
-        tasks.all = [mergedTask];
+        tasks.all = [cleanedTask];
         console.log('Created all collection with task');
       }
       
@@ -354,23 +568,37 @@ export function useTaskManagement() {
       if (mergedTask.repeat && mergedTask.repeat !== 'none') {
         console.log('Updating a recurring task');
         
-        // Ensure the task has a seriesId
-        if (!mergedTask.seriesId) {
+        // Only generate a new seriesId for base tasks (not instances)
+        if (!mergedTask.seriesId && !mergedTask.isRepeat) {
           mergedTask.seriesId = `series_${Date.now().toString()}_${Math.random().toString(36).substring(2, 9)}`;
-          console.log('Added missing seriesId to task:', mergedTask.seriesId);
+          cleanedTask.seriesId = mergedTask.seriesId;
+          console.log('Added missing seriesId to base task:', mergedTask.seriesId);
+        } else if (!mergedTask.seriesId && mergedTask.isRepeat && mergedTask.originalBaseId) {
+          // For instances, try to get seriesId from the base task
+          const baseTask = tasks.all.find(t => t.id === mergedTask.originalBaseId);
+          if (baseTask && baseTask.seriesId) {
+            mergedTask.seriesId = baseTask.seriesId;
+            cleanedTask.seriesId = baseTask.seriesId;
+            console.log('Inherited seriesId from base task:', baseTask.seriesId);
+          }
         }
         
         // Ensure the task has a startDateOfSeries
         if (!mergedTask.startDateOfSeries) {
           mergedTask.startDateOfSeries = mergedTask.scheduledDate || mergedTask.createdAt;
+          cleanedTask.startDateOfSeries = mergedTask.startDateOfSeries;
           console.log('Set startDateOfSeries to:', mergedTask.startDateOfSeries);
         }
         
+        // Check if this is a series-wide update
+        const isSeriesUpdate = mergedTask._updateSeries === true || mergedTask._editScope === 'all';
+        
         // If this is a base task (not an instance), update all instances
-        if (!mergedTask.isRepeat) {
+        // Skip this if we already handled a series update above
+        if (!mergedTask.isRepeat && !isSeriesUpdate) {
           console.log('This is a base recurring task, updating instances');
           
-          // Find all instances of this series
+          // Find all instances of this series (including completed ones)
           let instances = [];
           for (const groupKey in tasks) {
             if (Array.isArray(tasks[groupKey])) {
@@ -383,10 +611,71 @@ export function useTaskManagement() {
             }
           }
           
+          // Also check the 'completed' collection for completed instances
+          if (tasks.completed && Array.isArray(tasks.completed)) {
+            const completedInstances = tasks.completed.filter(t => 
+              t.seriesId === mergedTask.seriesId && 
+              t.isRepeat === true && 
+              t.id !== mergedTask.id
+            );
+            instances = [...instances, ...completedInstances];
+          }
+          
           console.log(`Found ${instances.length} instances of this series`);
           
-          // Update tag on all instances if tag has changed
-          if (originalTagId !== newTagId && instances.length > 0) {
+          // For series-wide updates, update all properties on all instances
+          if (isSeriesUpdate && instances.length > 0) {
+            console.log('Performing series-wide update on all instances');
+            
+            // Remove instances from old tag collection
+            if (originalTagId && tasks[originalTagId]){
+                tasks[originalTagId] = tasks[originalTagId].filter(t => 
+                  !(t.seriesId === mergedTask.seriesId && t.isRepeat === true)
+                );
+            }
+            
+            // Update all instances with new properties
+             instances.forEach(instance => {
+               // Update the instance with new properties while preserving instance-specific data
+               const updatedInstance = {
+                 ...instance,
+                 title: cleanedTask.title,
+                 notes: cleanedTask.notes,
+                 tag: cleanedTask.tag,
+                 updatedAt: new Date().toISOString(),
+                 // Preserve instance-specific properties
+                 id: instance.id,
+                 scheduledDate: instance.scheduledDate,
+                 isRepeat: instance.isRepeat,
+                 seriesId: instance.seriesId,
+                 originalBaseId: instance.originalBaseId
+               };
+              
+              // Check if this instance is completed
+              const isCompletedInstance = instance.completed || instance.completedAt;
+              
+              if (isCompletedInstance) {
+                // Update in completed collection
+                const completedIndex = tasks.completed.findIndex(t => t.id === instance.id);
+                if (completedIndex !== -1) {
+                  tasks.completed[completedIndex] = updatedInstance;
+                }
+              } else {
+                // Update in all collection for active instances
+                const allIndex = tasks.all.findIndex(t => t.id === instance.id);
+                if (allIndex !== -1) {
+                  tasks.all[allIndex] = updatedInstance;
+                }
+                
+                // Add to new tag collection for active instances
+                if (newTagId) {
+                  if (!tasks[newTagId]) tasks[newTagId] = [];
+                  tasks[newTagId].push(updatedInstance);
+                }
+              }
+            });
+          } else if (originalTagId !== newTagId && instances.length > 0) {
+            // Only update tag on all instances if tag has changed (non-series update)
             console.log('Updating tag on all instances');
             
             // Remove instances from old tag collection
@@ -400,17 +689,30 @@ export function useTaskManagement() {
             if (tasks.all) {
               tasks.all.forEach(task => {
                 if (task.seriesId === mergedTask.seriesId && task.isRepeat === true) {
-                  task.tag = mergedTask.tag;
+                  task.tag = cleanedTask.tag;
                 }
               });
             }
             
-            // Add instances to new tag collection
+            // Update instances in completed collection
+            if (tasks.completed) {
+              tasks.completed.forEach(task => {
+                if (task.seriesId === mergedTask.seriesId && task.isRepeat === true) {
+                  task.tag = cleanedTask.tag;
+                }
+              });
+            }
+            
+            // Add active instances to new tag collection
             if (newTagId) {
               if (!tasks[newTagId]) tasks[newTagId] = [];
               instances.forEach(instance => {
-                const updatedInstance = { ...instance, tag: mergedTask.tag };
-                tasks[newTagId].push(updatedInstance);
+                // Only add to tag collection if the instance is not completed
+                const isCompletedInstance = instance.completed || instance.completedAt;
+                if (!isCompletedInstance) {
+                  const updatedInstance = { ...instance, tag: cleanedTask.tag };
+                  tasks[newTagId].push(updatedInstance);
+                }
               });
             }
           }
@@ -428,7 +730,7 @@ export function useTaskManagement() {
           
           if (!hasActiveInstance) {
             console.log('No active instance found, generating a new one');
-            const nextInstance = generateNextDisplayableTaskInstance(mergedTask, null);
+            const nextInstance = generateNextDisplayableTaskInstance(cleanedTask, null);
             
             if (nextInstance) {
               console.log('Generated new instance:', nextInstance);
@@ -440,29 +742,57 @@ export function useTaskManagement() {
             }
           }
         }
-        // If this is an instance being updated, ensure the base task reflects the changes
-        else if (mergedTask.isRepeat === true && mergedTask.originalBaseId) {
-          console.log('This is a recurring instance, updating base task if needed');
+        // If this is an instance being updated, handle series-wide updates if needed
+        // Skip this if we already handled a series update above
+        else if (mergedTask.isRepeat === true && mergedTask.originalBaseId && !isSeriesUpdate) {
+          console.log('🔄 [DEBUG] This is a recurring instance, checking for series-wide updates');
+          console.log('🔄 [DEBUG] Instance details:', {
+            id: mergedTask.id,
+            originalBaseId: mergedTask.originalBaseId,
+            seriesId: mergedTask.seriesId,
+            isRepeat: mergedTask.isRepeat,
+            _updateSeries: mergedTask._updateSeries,
+            _editScope: mergedTask._editScope
+          });
           
           // Find the base task
           const baseTask = tasks.all.find(t => t.id === mergedTask.originalBaseId);
-          if (baseTask && newTagId !== null && originalTagId !== newTagId) {
-            console.log('Updating tag on base task');
-            baseTask.tag = mergedTask.tag;
+          console.log('🔄 [DEBUG] Base task search result:', baseTask ? 'FOUND' : 'NOT FOUND');
+          if (!baseTask) {
+            console.log('🔄 [DEBUG] Base task not found! Available tasks in all collection:', tasks.all.map(t => ({ id: t.id, title: t.title, isRepeat: t.isRepeat })));
+          }
+          if (baseTask) {
+            console.log('🔄 [DEBUG] Base task details:', {
+              id: baseTask.id,
+              title: baseTask.title,
+              seriesId: baseTask.seriesId,
+              isRepeat: baseTask.isRepeat,
+              repeat: baseTask.repeat
+            });
             
-            // Update base task in its tag collection
-            if (baseTask.tag && baseTask.tag.id) {
-              const baseTagId = baseTask.tag.id;
-              if (!tasks[baseTagId]) tasks[baseTagId] = [];
+            // Series updates are now handled earlier in the function
+            // This section only handles non-series updates for instances
+            console.log('🔄 [DEBUG] Handling non-series instance update');
+            
+            if (newTagId !== null && originalTagId !== newTagId) {
+              // Non-series update: only update tag on base task
+              console.log('Updating tag on base task only');
+              baseTask.tag = cleanedTask.tag;
               
-              // Remove from old tag collection
-              if (originalTagId && tasks[originalTagId]) {
-                tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== baseTask.id);
-              }
-              
-              // Add to new tag collection if not already there
-              if (!tasks[baseTagId].find(t => t.id === baseTask.id)) {
-                tasks[baseTagId].push(baseTask);
+              // Update base task in its tag collection
+              if (baseTask.tag && baseTask.tag.id) {
+                const baseTagId = baseTask.tag.id;
+                if (!tasks[baseTagId]) tasks[baseTagId] = [];
+                
+                // Remove from old tag collection
+                if (originalTagId && tasks[originalTagId]) {
+                  tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== baseTask.id);
+                }
+                
+                // Add to new tag collection if not already there
+                if (!tasks[baseTagId].find(t => t.id === baseTask.id)) {
+                  tasks[baseTagId].push(baseTask);
+                }
               }
             }
           }
