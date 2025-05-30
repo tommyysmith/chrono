@@ -963,18 +963,54 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             updatedTasks[tagId].push(detachedTask);
           }
           
-          // Advance the recurring series by generating the next instance
+          // Handle detachment logic
           const originalTask = taskToEdit._originalTask;
           if (originalTask && originalTask.seriesId && originalTask.repeat && originalTask.repeat !== 'none') {
-            console.log('Advancing recurring series after detachment');
+            console.log('Processing detachment for recurring task:', originalTask.id);
             
-            // Find the base task definition for the series
+            // First, find the base task definition for the series BEFORE removing anything
             const baseTask = updatedTasks.all.find(t => 
               t.seriesId === originalTask.seriesId && 
               !t.isRepeat && 
               t.repeat && 
               t.repeat !== 'none'
             );
+            
+            // Only remove the original task if it's NOT the base task
+            // If the original task is the base task, we need to keep it for the series
+            const isBaseTask = baseTask && baseTask.id === originalTask.id;
+            
+            if (!isBaseTask) {
+              console.log('Removing original instance from collections after detachment:', originalTask.id);
+              
+              // Remove from all collections
+              updatedTasks.all = updatedTasks.all.filter(t => t.id !== originalTask.id);
+              
+              // Remove from today collection if it exists
+              if (updatedTasks.today) {
+                updatedTasks.today = updatedTasks.today.filter(t => t.id !== originalTask.id);
+              }
+              
+              // Remove from tag collections
+              for (const groupKey in updatedTasks) {
+                if (groupKey !== 'all' && groupKey !== 'today' && Array.isArray(updatedTasks[groupKey])) {
+                  updatedTasks[groupKey] = updatedTasks[groupKey].filter(t => t.id !== originalTask.id);
+                }
+              }
+              
+              // Remove from completed collection if it exists
+              if (updatedTasks.completed) {
+                updatedTasks.completed = updatedTasks.completed.filter(t => t.id !== originalTask.id);
+              }
+            } else {
+              console.log('Original task is the base task, keeping it for series continuation');
+            }
+           
+           // Save the updated tasks after processing the original instance
+           localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+           
+           // Advance the recurring series by generating the next instance
+           console.log('Advancing recurring series after detachment');
             
             if (baseTask) {
               // Import generateNextDisplayableTaskInstance dynamically
