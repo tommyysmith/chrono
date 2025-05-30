@@ -1003,6 +1003,8 @@ function generateNextTaskInstance(baseTaskDefinition, occurrenceDate) {
     tag: baseTaskDefinition.tag ? { ...baseTaskDefinition.tag } : null, // Copy tag object if exists
     subTasks: [], // New instances should not inherit completed subtasks from a base template
     attachments: [], // Same for attachments
+    // Explicitly preserve addToCalendar property from base task definition
+    addToCalendar: baseTaskDefinition.addToCalendar || false,
   };
 
   // Explicitly delete to be absolutely sure, as 'undefined' might not remove key if baseTaskDefinition had it as null

@@ -363,6 +363,7 @@ export function useTaskManagement() {
             title: cleanedTask.title,
             notes: cleanedTask.notes,
             tag: cleanedTask.tag,
+            addToCalendar: cleanedTask.addToCalendar,
             updatedAt: new Date().toISOString(),
             // Preserve base task properties
             id: baseTask.id,
@@ -1135,6 +1136,73 @@ export function useTaskManagement() {
             completed: false, 
             completedAt: undefined
           };
+          
+          // If this was a recurring task, handle detachment based on type
+          if (taskMovedFromCompleted.seriesId && (taskMovedFromCompleted.isRepeat === true || taskMovedFromCompleted.isRepeat === false)) {
+            console.log('Processing uncompleted recurring task:', {
+              id: taskMovedFromCompleted.id,
+              title: taskMovedFromCompleted.title,
+              seriesId: taskMovedFromCompleted.seriesId,
+              isRepeat: taskMovedFromCompleted.isRepeat,
+              taskType: taskMovedFromCompleted.isRepeat === true ? 'instance' : 'base definition'
+            });
+            
+            if (taskMovedFromCompleted.isRepeat === true) {
+              // For instances, simply detach them from the series
+              taskMovedFromCompleted.isRepeat = false;
+              taskMovedFromCompleted.seriesId = null;
+              taskMovedFromCompleted.originalBaseId = null;
+              taskMovedFromCompleted.repeat = 'none';
+              console.log('Task instance successfully detached from series and converted to individual task');
+            } else if (taskMovedFromCompleted.isRepeat === false) {
+              // For base definitions, create a new standalone task and preserve the original base
+              const originalSeriesId = taskMovedFromCompleted.seriesId;
+              const originalRepeat = taskMovedFromCompleted.repeat;
+              const originalRruleOptions = taskMovedFromCompleted.rruleOptions;
+              
+              // Create a new standalone task from the base definition
+              const standaloneTask = {
+                ...taskMovedFromCompleted,
+                id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                isRepeat: false,
+                seriesId: null,
+                originalBaseId: null,
+                repeat: 'none',
+                rruleOptions: null,
+                completed: false,
+                completedAt: undefined
+              };
+              
+              // Add the standalone task to collections
+              tasks.all.push(standaloneTask);
+              
+              // Add to 'today' if scheduled for today
+              if (standaloneTask.scheduledDate && isToday(parseISO(standaloneTask.scheduledDate))) {
+                if (!tasks.today) tasks.today = [];
+                tasks.today.push(standaloneTask);
+              }
+              
+              // Add to its specific tag group if applicable
+              if (standaloneTask.tag && standaloneTask.tag.id) {
+                const tagId = standaloneTask.tag.id;
+                if (!tasks[tagId]) tasks[tagId] = [];
+                tasks[tagId].push(standaloneTask);
+              }
+              
+              // Restore the original base task definition to preserve the series
+              taskMovedFromCompleted.seriesId = originalSeriesId;
+              taskMovedFromCompleted.repeat = originalRepeat;
+              taskMovedFromCompleted.rruleOptions = originalRruleOptions;
+              taskMovedFromCompleted.isRepeat = false;
+              taskMovedFromCompleted.completed = true; // Keep it completed to hide from active view
+              
+              console.log('Created standalone task from base definition and preserved original series:', {
+                standaloneTaskId: standaloneTask.id,
+                originalBaseId: taskMovedFromCompleted.id,
+                seriesId: originalSeriesId
+              });
+            }
+          }
           
           // Update in 'all' collection
           tasks.all = tasks.all.map(t => t.id === taskId ? taskMovedFromCompleted : t);
