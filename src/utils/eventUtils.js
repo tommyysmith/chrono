@@ -69,7 +69,6 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
 
   const style = {
     position: "absolute",
-    backgroundColor: event.color ? `${event.color}20` : "#80808020",
     zIndex: 10,
     borderRadius: "4px",
     margin: "0",
@@ -78,6 +77,11 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
     overflow: "hidden",
     cursor: "pointer",
   };
+
+  // Only apply backgroundColor for events, not tasks
+  if (!event.isTask) {
+    style.backgroundColor = event.color ? `${event.color}20` : "#80808020";
+  }
 
   // Add lower opacity for past events
   const now = new Date();

@@ -83,7 +83,7 @@ export default function Day({
                       className="absolute left-0 top-0 bottom-0 w-1"
                       style={{ backgroundColor: event.color || "#808080" }}
                     />
-                    <div className="px-3 py-1">
+                    <div className="px-2 py-1">
                       <div className="font-medium text-xs">{event.title}</div>
                     </div>
                   </div>

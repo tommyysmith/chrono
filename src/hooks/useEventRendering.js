@@ -3,6 +3,7 @@ import { format, isSameDay, addDays, startOfDay, endOfDay, isWithinInterval, par
 
 import { RRule } from "rrule";
 import { Repeat } from "@/assets/icons/Repeat";
+import { Tag } from "@/assets/icons/Tag";
 import { ViewType } from "../constants/views";
 import { motion, AnimatePresence } from "framer-motion";
 import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
@@ -36,7 +37,8 @@ export const useEventRendering = (
   eventStyleGetter,
   commandBarRef,
   handleToggleTaskCompletion,
-  handleTaskEdit
+  handleTaskEdit,
+  handleTaskDelete = null
 ) => {
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
@@ -63,7 +65,16 @@ export const useEventRendering = (
     setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
   }, [handleTaskEdit, commandBarRef]);
 
-  const handleTaskDelete = useCallback((task) => {
+  const handleTaskDeleteInternal = useCallback((task) => {
+    // If a custom task delete handler is provided, try it first
+    if (handleTaskDelete) {
+      const handled = handleTaskDelete(task);
+      if (handled) {
+        return; // Custom handler took care of it
+      }
+      // If custom handler returned false, continue with internal logic
+    }
+    
     // For calendar view, always delete the specific instance (single scope behavior)
     // Get tasks from localStorage
     const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
@@ -287,11 +298,19 @@ export const useEventRendering = (
           <Tooltip>
             <TooltipTrigger asChild>
               <motion.div
-                className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer select-none ${
-                  event.isEditing || dragState.eventId === event.id
-                    ? "bg-primary/30"
-                    : "bg-primary/10"
-                } event-item ${repeatClass}`}
+                className={`absolute z-10 overflow-hidden cursor-pointer select-none event-item ${repeatClass} ${
+                  event.isTask 
+                    ? `border-1 border-dashed rounded-[5px] bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm ${
+                        event.isEditing || dragState.eventId === event.id
+                          ? "border-primary bg-gray-100/90 dark:bg-gray-700/90"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`
+                    : `backdrop-blur-md rounded-[9px] ${
+                        event.isEditing || dragState.eventId === event.id
+                          ? "bg-primary/30"
+                          : "bg-primary/10"
+                      }`
+                }`}
                 style={getEventStyle(event, overlappingEvents, viewType)}
                 onMouseDown={(e) => {
                   if (e.button === 0 && !e.target.closest(".resize-handle")) {
@@ -319,10 +338,12 @@ export const useEventRendering = (
                   }
                 }}
               >
-                <div
-                  className="absolute left-0 top-0 bottom-0 w-1"
-                  style={{ backgroundColor: event.color || "#808080" }}
-                />
+                {!event.isTask && (
+                  <div
+                    className="absolute left-0 top-0 bottom-0 w-1"
+                    style={{ backgroundColor: event.color || "#808080" }}
+                  />
+                )}
                 {/* Resize handles */}
                 <div
                   className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
@@ -338,7 +359,7 @@ export const useEventRendering = (
                     handleResizeStart(e, event.id, "bottom");
                   }}
                 />
-                <div className="px-3 py-1">
+                <div className="px-2 py-1 relative">
                   <div className="font-medium text-xs">{event.title}</div>
                   <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                     {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
@@ -351,9 +372,11 @@ export const useEventRendering = (
                 </div>
               </motion.div>
             </TooltipTrigger>
-            <TooltipContent side="right" align="start">
-              <EventTooltipContent event={event} />
-            </TooltipContent>
+            {!event.isTask && (
+              <TooltipContent side="right" align="start">
+                <EventTooltipContent event={event} />
+              </TooltipContent>
+            )}
           </Tooltip>
           </TooltipProvider>
         );
@@ -384,9 +407,17 @@ export const useEventRendering = (
             <Tooltip>
               <TooltipTrigger asChild>
                 <motion.div
-                  className={`absolute z-10 backdrop-blur-md rounded-[9px] overflow-hidden cursor-move ${
-                    dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
-                  } ${repeatClass}`}
+                  className={`absolute z-10 overflow-hidden cursor-move ${
+                  event.isTask 
+                    ? `border-1 border-dashed rounded-[5px] bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm ${
+                        dragState.eventId === event.id
+                          ? "border-primary bg-gray-100/90 dark:bg-gray-700/90"
+                          : "border-gray-300 dark:border-gray-600"
+                      }`
+                    : `backdrop-blur-md rounded-[9px] ${
+                        dragState.eventId === event.id ? "bg-primary/30" : "bg-primary/10"
+                      }`
+                } ${repeatClass}`}
                   style={getEventStyle(event, overlappingEvents, viewType)}
                   onMouseDown={(e) => {
                     if (e.button === 0 && !e.target.closest(".resize-handle")) {
@@ -433,16 +464,55 @@ export const useEventRendering = (
                       handleResizeStart(e, event.id, "bottom");
                     }}
                   />
-                  <div className="px-3 py-1">
+                  <div className="px-2 py-1 relative">
                     <div className="font-medium text-xs">{event.title}</div>
                     <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                       {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
                     </div>
-                    {isRepeatEvent && (
-                      <div className="absolute bottom-1 right-1">
-                        <Repeat className="w-3 h-3" />
-                      </div>
-                    )}
+                    <div className="flex items-center gap-1 ml-auto">
+                      {((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || (event.originalTask?.seriesId && event.originalTask?.originalBaseId)) && (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <div className="inline-flex items-center px-1 h-[20px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
+                                <Repeat className="w-3 h-3" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Repeats {(() => {
+                                if (event.originalTask.repeat && event.originalTask.repeat !== 'none') {
+                                  return event.originalTask.repeat;
+                                }
+                                // For task instances, find the base task to get repeat pattern
+                                if (event.originalTask.originalBaseId) {
+                                  const savedTasks = localStorage.getItem('tasks');
+                                  if (savedTasks) {
+                                    const tasks = JSON.parse(savedTasks);
+                                    const baseTask = tasks.all?.find(t => t.id === event.originalTask.originalBaseId);
+                                    return baseTask?.repeat || 'unknown';
+                                  }
+                                }
+                                return 'unknown';
+                              })()}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      {event.originalTask?.tag && (
+                        <TooltipProvider>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <div className="inline-flex items-center px-1 h-[20px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[4px]">
+                                <Tag className="w-3 h-3" style={{ color: event.originalTask.tag.color }} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{event.originalTask.tag.label}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               </TooltipTrigger>
@@ -642,7 +712,7 @@ export const useEventRendering = (
                               }`}
                               style={{
                                 backgroundColor: isTask 
-                                  ? (event.color ? `${event.color}10` : "#f3f4f6")
+                                  ? undefined
                                   : (event.color ? `${event.color}20` : "#80808020"),
                                 opacity: isPastEvent ? 0.5 : 1,
 
@@ -704,15 +774,15 @@ export const useEventRendering = (
                   gridColumnEnd: event.endDayIndex + 2, // Span includes the end day
                   gridRowStart: rowIndex + 1,
                   backgroundColor: event.isTask 
-                    ? (event.color ? `${event.color}10` : undefined)
+                    ? undefined
                     : (event.color ? `${event.color}20` : undefined),
                 };
                 
                 // Tailwind classes for styling
-                const eventClasses = `relative flex items-center text-xs m-1 last:mb-1 backdrop-blur-md mb-0 cursor-pointer hover:bg-black/10 select-none dark:hover:bg-white/10 rounded-[5px] overflow-hidden z-10 ${
+                const eventClasses = `relative flex items-center text-xs mx-1 mt-1 mb-1 cursor-pointer select-none overflow-hidden z-10 ${
                   event.isTask 
-                    ? `border border-dashed border-light-border dark:border-dark-border bg-light-bg-lighter dark:bg-dark-bg-lighter'}`
-                    : ''
+                    ? `border border-dashed rounded-[5px] py-2 px-1 border-gray-300 dark:border-gray-600 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-gray-100/90 dark:hover:bg-light-bg `
+                    : `backdrop-blur-md rounded-[5px] hover:bg-black/10 dark:hover:bg-white/10`
                 } ${
                   isPastEvent ? 'opacity-50' : ''
                 }`.trim();
@@ -755,7 +825,8 @@ export const useEventRendering = (
                               style={{ backgroundColor: event.color || "#808080" }}
                             />
                           )}
-                          <div className="px-2 py-1 truncate flex items-center gap-1">
+                          <div className="px-1 truncate justify-between flex flex-1 items-center">
+                            <div className="flex flex-row gap-2 items-center">
                             {event.isTask && (
                               <Checkbox 
                                 checked={event.originalTask?.completed || false}
@@ -769,13 +840,60 @@ export const useEventRendering = (
                             <div className="font-medium text-xs truncate">
                               {event.title}
                             </div>
+                            </div>
+                            <div className="flex items-center gap-1 ml-auto">
+                               {((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || (event.originalTask?.seriesId && event.originalTask?.originalBaseId)) && (
+                                 <TooltipProvider>
+                                   <Tooltip delayDuration={0}>
+                                     <TooltipTrigger asChild>
+                                       <div className="inline-flex items-center justify-center w-[16px] h-[16px] border border-light-border dark:border-dark-border text-xs rounded-[3px] bg-white dark:bg-dark-bg-light text-blue-500">
+                                         <Repeat className="w-2.5 h-2.5" />
+                                       </div>
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>Repeats {(() => {
+                                         if (event.originalTask.repeat && event.originalTask.repeat !== 'none') {
+                                           return event.originalTask.repeat;
+                                         }
+                                         // For task instances, find the base task to get repeat pattern
+                                         if (event.originalTask.originalBaseId) {
+                                           const savedTasks = localStorage.getItem('tasks');
+                                           if (savedTasks) {
+                                             const tasks = JSON.parse(savedTasks);
+                                             const baseTask = tasks.all?.find(t => t.id === event.originalTask.originalBaseId);
+                                             return baseTask?.repeat || 'unknown';
+                                           }
+                                         }
+                                         return 'unknown';
+                                       })()}</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               )}
+                               {event.originalTask?.tag && (
+                                 <TooltipProvider>
+                                   <Tooltip delayDuration={0}>
+                                     <TooltipTrigger asChild>
+                                       <div className="inline-flex items-center justify-center w-[16px] h-[16px] bg-white dark:bg-dark-bg-light border border-light-border dark:border-dark-border text-xs rounded-[3px]">
+                                         <Tag className="w-2.5 h-2.5" style={{ color: event.originalTask.tag.color }} />
+                                       </div>
+                                     </TooltipTrigger>
+                                     <TooltipContent>
+                                       <p>{event.originalTask.tag.label}</p>
+                                     </TooltipContent>
+                                   </Tooltip>
+                                 </TooltipProvider>
+                               )}
+                             </div>
                           </div>
                           {/* Add resize handles if needed in the future */}
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top" align="start">
-                        <EventTooltipContent event={event} />
-                      </TooltipContent>
+                      {!event.isTask && (
+                        <TooltipContent side="top" align="start">
+                          <EventTooltipContent event={event} />
+                        </TooltipContent>
+                      )}
                     </Tooltip>
                   </TooltipProvider>
                 );
@@ -822,12 +940,14 @@ export const useEventRendering = (
                       <TooltipTrigger asChild>
                         <div
                           // key={event.id} // Key moved to TooltipProvider
-                          className={`z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10 ${
-                            event.isTask ? 'border-2 border-dashed' : ''
+                          className={`z-10 overflow-hidden cursor-pointer ${
+                            event.isTask 
+                              ? `border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg hover:bg-gray-100/90 dark:hover:bg-gray-700/90 hover:border-primary hover:ring-2 hover:ring-primary/20`
+                              : `bg-primary/5 backdrop-blur-md rounded-[9px] hover:ring-2 hover:ring-white/10`
                           }`}
                           style={{
                             backgroundColor: event.isTask
-                              ? (event.color ? `${event.color}10` : "#f3f4f6")
+                              ? undefined
                               : (event.color ? `${event.color}20` : "#80808020"),
                             opacity: isPastEvent ? 0.5 : 1
                           }}
@@ -861,7 +981,13 @@ export const useEventRendering = (
                               style={{ backgroundColor: event.color || "#808080" }}
                             />
                           )}
-                          <div className="px-3 py-1">
+                          {event.isTask && event.color && (
+                            <div
+                              className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
+                              style={{ backgroundColor: event.color }}
+                            />
+                          )}
+                          <div className="px-2 py-1 relative">
                             <div className="font-medium text-xs flex items-center gap-1">
                               {event.isTask && (
                                 <Checkbox 
@@ -874,6 +1000,50 @@ export const useEventRendering = (
                                 />
                               )}
                               {event.title}
+                              <div className="flex items-center gap-1 ml-auto">
+                                 {((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || (event.originalTask?.seriesId && event.originalTask?.originalBaseId)) && (
+                                   <TooltipProvider>
+                                     <Tooltip delayDuration={0}>
+                                       <TooltipTrigger asChild>
+                                         <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
+                                           <Repeat className="w-2.5 h-2.5" />
+                                         </div>
+                                       </TooltipTrigger>
+                                       <TooltipContent>
+                                         <p>Repeats {(() => {
+                                           if (event.originalTask.repeat && event.originalTask.repeat !== 'none') {
+                                             return event.originalTask.repeat;
+                                           }
+                                           // For task instances, find the base task to get repeat pattern
+                                           if (event.originalTask.originalBaseId) {
+                                             const savedTasks = localStorage.getItem('tasks');
+                                             if (savedTasks) {
+                                               const tasks = JSON.parse(savedTasks);
+                                               const baseTask = tasks.all?.find(t => t.id === event.originalTask.originalBaseId);
+                                               return baseTask?.repeat || 'unknown';
+                                             }
+                                           }
+                                           return 'unknown';
+                                         })()}</p>
+                                       </TooltipContent>
+                                     </Tooltip>
+                                   </TooltipProvider>
+                                 )}
+                                 {event.originalTask?.tag && (
+                                   <TooltipProvider>
+                                     <Tooltip delayDuration={0}>
+                                       <TooltipTrigger asChild>
+                                         <div className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[4px]">
+                                           <Tag className="w-2.5 h-2.5" style={{ color: event.originalTask.tag.color }} />
+                                         </div>
+                                       </TooltipTrigger>
+                                       <TooltipContent>
+                                         <p>{event.originalTask.tag.label}</p>
+                                       </TooltipContent>
+                                     </Tooltip>
+                                   </TooltipProvider>
+                                 )}
+                               </div>
                             </div>
                             {event.isMultiDay && (
                               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
@@ -883,9 +1053,11 @@ export const useEventRendering = (
                           </div>
                         </div>
                       </TooltipTrigger>
-                      <TooltipContent side="top" align="start">
-                        <EventTooltipContent event={event} />
-                      </TooltipContent>
+                      {!event.isTask && (
+                        <TooltipContent side="top" align="start">
+                          <EventTooltipContent event={event} />
+                        </TooltipContent>
+                      )}
                     </Tooltip>
                   </TooltipProvider>
                 );
@@ -910,7 +1082,7 @@ export const useEventRendering = (
     };
 
     const handleDelete = () => {
-      handleTaskDelete(taskContextMenu.task);
+      handleTaskDeleteInternal(taskContextMenu.task);
       handleClose();
     };
 

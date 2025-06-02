@@ -6,6 +6,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "./Sidebar";
 import DeleteEventModal from "./DeleteEventModal";
 import RepeatEditModal from "./RepeatEditModal";
+import RepeatTaskEditModal from "./RepeatTaskEditModal";
+import DeleteTaskModal from "./DeleteTaskModal";
 import CommandBar from "./CommandBar";
 import GoToDateCommand from "./GoToDateCommand";
 import Day from "./views/Day";
@@ -86,6 +88,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleRepeatEditDiscard,
   } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents);
 
+  // Task modal state management
+  const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
+  const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  const [taskToEdit, setTaskToEdit] = useState(null);
+  const [taskToDelete, setTaskToDelete] = useState(null);
+  const [draggedTask, setDraggedTask] = useState(null);
+
   const {
     setClickState,
     pendingEventCell,
@@ -158,17 +167,34 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   // Handler for task editing that checks for recurring tasks
   const handleTaskEdit = useCallback((task) => {
-    const isRecurringTask = task.repeat && task.repeat !== 'none';
+    const isRecurringTask = task.repeat && task.repeat !== 'none' || task.seriesId || task.isRepeat;
     
     if (isRecurringTask) {
-      // For recurring tasks, fallback to direct command bar opening
-      // The RepeatTaskEditModal will be handled in Sidebar component
-      commandBarRef?.current?.openForTaskEdit(task);
+      // For recurring tasks, open the RepeatTaskEditModal
+      setTaskToEdit(task);
+      setDraggedTask(task);
+      setIsRepeatTaskEditModalOpen(true);
     } else {
       // For non-recurring tasks, open command bar directly
       commandBarRef?.current?.openForTaskEdit(task);
     }
   }, [commandBarRef]);
+
+  // Handler for task deletion that checks for recurring tasks
+  const handleTaskDelete = useCallback((task) => {
+    const isRecurringTask = task.repeat && task.repeat !== 'none' || task.seriesId || task.isRepeat;
+    
+    if (isRecurringTask) {
+      // For recurring tasks, open the DeleteTaskModal
+      setTaskToDelete(task);
+      setIsDeleteTaskModalOpen(true);
+      return true; // Indicate we handled it
+    } else {
+      // For non-recurring tasks, delete directly (existing logic will be handled by useEventRendering)
+      // This will fall back to the default deletion behavior in useEventRendering
+      return null; // Let useEventRendering handle it
+    }
+  }, []);
 
   const { renderEvents, renderAllDayEvents, TaskContextMenuPopover } = useEventRendering(
     displayEvents,
@@ -182,7 +208,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     eventStyleGetter,
     commandBarRef,
     handleToggleTaskCompletion,
-    handleTaskEdit
+    handleTaskEdit,
+    handleTaskDelete
   );
   // Handle date selection from GoToDateCommand
   const handleGoToDate = useCallback((date) => {
@@ -712,6 +739,66 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           draggedEvent={repeatEditModalState.draggedEvent}
           isEditOperation={repeatEditModalState.isEditOperation}
           commandBarRef={commandBarRef}
+        />
+        
+        {/* Task Modals */}
+        <RepeatTaskEditModal
+          isOpen={isRepeatTaskEditModalOpen}
+          taskTitle={taskToEdit?.title}
+          onClose={() => {
+            setIsRepeatTaskEditModalOpen(false);
+            setTaskToEdit(null);
+            setDraggedTask(null);
+          }}
+          onEditConfirm={({ scope, task }) => {
+            // Handle the edit confirmation based on scope
+            if (scope === 'single') {
+              // For single instance edits, prepare the task for detachment but don't process yet
+              const taskForEdit = {
+                ...task,
+                _detachedTask: true,
+                _editScope: 'single',
+                _originalTask: taskToEdit
+              };
+              
+              // Open CommandBar for editing - detachment will occur on save
+              commandBarRef.current.openForTaskEdit(taskForEdit);
+            } else {
+              // Edit the series (future or all) - pass the task with scope information
+              const taskForEdit = {
+                ...taskToEdit,
+                _editScope: scope,
+                _updateSeries: scope === 'all',
+                _originalTask: taskToEdit
+              };
+              
+              commandBarRef.current.openForTaskEdit(taskForEdit);
+            }
+            
+            // Close the modal
+            setIsRepeatTaskEditModalOpen(false);
+            setTaskToEdit(null);
+            setDraggedTask(null);
+          }}
+          originalTask={taskToEdit}
+          draggedTask={draggedTask}
+          isEditOperation={true}
+          commandBarRef={commandBarRef}
+        />
+        
+        <DeleteTaskModal
+          isOpen={isDeleteTaskModalOpen}
+          taskTitle={taskToDelete?.title}
+          onClose={() => {
+            setIsDeleteTaskModalOpen(false);
+            setTaskToDelete(null);
+          }}
+          onDelete={(scope) => {
+            // Handle task deletion with scope
+            handleUpdateTask({ ...taskToDelete, _deleteScope: scope });
+            setIsDeleteTaskModalOpen(false);
+            setTaskToDelete(null);
+          }}
         />
         <GoToDateCommand
           isOpen={isGoToDateOpen}

@@ -4,21 +4,32 @@ const nextConfig = {
   output: 'export',
   // Disable image optimization since we're running locally
   images: { unoptimized: true },
-  // Optimize bundle for production
+  
   experimental: {
+    // Optimize package imports
     optimizePackageImports: [
       'framer-motion',
       '@radix-ui/react-popover',
       '@radix-ui/react-tooltip',
       'date-fns'
-    ]
+    ],
   },
 
-  devIndicators: false,
+  devIndicators: {
+    buildActivity: false,
+    buildActivityPosition: 'bottom-right',
+  },
   // Disable server components for Tauri
   reactStrictMode: true,
-  webpack: (config) => {
-    // Optimize bundle size
+  
+  // Webpack config only for production builds
+  webpack: (config, { dev }) => {
+    // Skip webpack optimizations in development when using Turbopack
+    if (dev) {
+      return config;
+    }
+    
+    // Optimize bundle size for production
     config.optimization = {
       ...config.optimization,
       moduleIds: 'deterministic',
@@ -28,7 +39,7 @@ const nextConfig = {
         maxSize: 70000,
         cacheGroups: {
           commons: {
-            test: /[\\/]node_modules[\\/]/,
+            test: /[\\\\/]node_modules[\\\\/]/,
             name: 'vendors',
             chunks: 'all',
           },

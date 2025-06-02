@@ -24,6 +24,17 @@ export default function RecurrenceModal({ isOpen, onOpenChange, initialValue, on
     setCurrentOptions(initialValue);
   }, [initialValue, isOpen]); // Reset if initialValue changes or modal reopens
 
+  // Handle options change with comparison to prevent infinite loops
+  const handleOptionsChange = (newOptions) => {
+    setCurrentOptions(prevOptions => {
+      // Only update if the options have actually changed
+      if (JSON.stringify(prevOptions) !== JSON.stringify(newOptions)) {
+        return newOptions;
+      }
+      return prevOptions;
+    });
+  };
+
   const handleSave = () => {
     onSave?.(currentOptions);
     onOpenChange?.(false); // Close the modal
@@ -56,7 +67,7 @@ export default function RecurrenceModal({ isOpen, onOpenChange, initialValue, on
         {/* Embed the RecurrenceEditor */}
         <RecurrenceEditor
           value={currentOptions}
-          onChange={setCurrentOptions} // Update internal state as editor changes
+          onChange={handleOptionsChange} // Update internal state as editor changes
           startDate={effectiveStartDate} // Pass start date for preview
         />
 

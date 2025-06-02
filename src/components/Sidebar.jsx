@@ -32,6 +32,10 @@ import RepeatTaskEditModal from "./RepeatTaskEditModal";
 import { TAG_COLORS } from "../constants/colors";
 import { Chevron } from "../assets/icons/Chevron";
 import { Calendar } from "../assets/icons/Calendar";
+import { Tomorrow } from "../assets/icons/Tomorrow";
+import { Soon } from "../assets/icons/Soon";
+import { Inbox as InboxAlt } from "../assets/icons/InboxAlt";
+import { Clock as ClockIcon } from "../assets/icons/Clock";
 import { Tag } from "../assets/icons/Tag";
 import { Flag } from "../assets/icons/Flag";
 import { Add } from "../assets/icons/Add";
@@ -74,7 +78,7 @@ export default function Sidebar({
         try {
           return savedTab;
         } catch (e) {
-          console.error("Error parsing activeTab:", e);
+          // Error parsing activeTab
         }
       }
     }
@@ -98,13 +102,17 @@ export default function Sidebar({
         try {
           return JSON.parse(savedState);
         } catch (e) {
-          console.error("Error parsing expandedSections:", e);
+          // Error parsing expandedSections
         }
       }
     }
 
     // Initialize with default sections expanded if no saved state
     return {
+      overdue: true,
+      dueToday: true,
+      dueTomorrow: true,
+      dueSoon: true,
       today: true,
       scheduled: false,
       tags: false,
@@ -122,6 +130,8 @@ export default function Sidebar({
       localStorage.setItem("expandedSections", JSON.stringify(expandedSections));
     }
   }, [expandedSections]);
+
+
 
   const [selectedView, setSelectedView] = useState("all"); // 'all', 'today', 'upcoming', or 'completed'
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -148,7 +158,7 @@ export default function Sidebar({
         try {
           return JSON.parse(savedTags);
         } catch (e) {
-          console.error("Error parsing tags:", e);
+          // Error parsing tags
         }
       }
     }
@@ -178,7 +188,7 @@ export default function Sidebar({
             ...parsed,
           };
         } catch (e) {
-          console.error("Error parsing tasks:", e);
+          // Error parsing tasks
         }
       }
     }
@@ -210,7 +220,6 @@ export default function Sidebar({
   // Call ensureActiveRecurringInstances once on mount
   useEffect(() => {
     if (ensureActiveRecurringInstances) {
-      console.log('DEBUG: Calling ensureActiveRecurringInstances');
       ensureActiveRecurringInstances();
     }
     // Reload tasks from local storage after ensuring instances, 
@@ -219,11 +228,10 @@ export default function Sidebar({
     if (savedTasks) {
       try {
         const parsed = JSON.parse(savedTasks);
-        console.log('DEBUG: Reloading tasks after ensuring instances:', parsed);
         // Preserve structure of initialTasks if needed, or merge carefully.
         setTasks(prevTasks => ({ ...prevTasks, ...parsed })); 
       } catch (e) {
-        console.error("Error parsing tasks after ensuring instances:", e);
+        // Error parsing tasks after ensuring instances
       }
     }
   }, [ensureActiveRecurringInstances]); // Dependency array ensures it runs if the function reference changes, though typically it won't.
@@ -264,7 +272,6 @@ export default function Sidebar({
       // Handle both event.detail and event.detail.tasks formats
       const newTasks = event.detail.tasks || event.detail;
       setTasks(newTasks);
-      console.log('[Sidebar] Tasks updated from event:', event.type);
     };
 
     // Add event listeners for both event types
@@ -390,7 +397,6 @@ export default function Sidebar({
   };
 
   const handleDeleteTask = (taskId, scope = 'single') => {
-    console.log(`[DEBUG] Deleting task ${taskId} with scope: ${scope}`);
     
     setTasks((prev) => {
       const newTasks = { ...prev };
@@ -412,22 +418,10 @@ export default function Sidebar({
         }
       });
       
-      console.log(`[DEBUG] Found task to delete:`, taskToDelete);
-      console.log(`[DEBUG] Task seriesId: ${taskSeriesId}, isRepeat: ${taskToDelete?.isRepeat}, scope: ${scope}`);
       
       if (!taskToDelete) {
-        console.warn(`Task with ID ${taskId} not found for deletion`);
         return prev; // No changes if task not found
       }
-      
-      // Add enhanced debugging for task properties
-      console.log(`[DEBUG] Task properties:`, {
-        id: taskToDelete.id,
-        isRepeat: taskToDelete.isRepeat,
-        seriesId: taskToDelete.seriesId,
-        originalBaseId: taskToDelete.originalBaseId,
-        scheduledDate: taskToDelete.scheduledDate
-      });
       
       // Strengthen instance detection logic
       const isRecurringInstance = taskToDelete.isRepeat === true || 
@@ -437,13 +431,10 @@ export default function Sidebar({
       // Additional check: if task has seriesId but no explicit isRepeat, it's likely an instance
       const isLikelyInstance = taskSeriesId && !taskToDelete.repeat && taskToDelete.id !== taskSeriesId;
       
-      console.log(`[DEBUG] Enhanced instance detection - isRecurringInstance: ${isRecurringInstance}`);
-      console.log(`[DEBUG] Additional check - isLikelyInstance: ${isLikelyInstance}`);
-      console.log(`[DEBUG] Final instance determination: ${isRecurringInstance || isLikelyInstance}`);
+
 
       // Handle different deletion scopes
       if (taskSeriesId && scope === 'all') {
-        console.log(`[DEBUG] Taking 'all' deletion path for series ${taskSeriesId}`);
         // For 'all' scope, delete all tasks in the series
         Object.keys(newTasks).forEach((group) => {
           if (Array.isArray(newTasks[group])) {
@@ -454,7 +445,6 @@ export default function Sidebar({
         });
       }
       else if (taskSeriesId && scope === 'future' && taskScheduledDate) {
-        console.log(`[DEBUG] Taking 'future' deletion path for series ${taskSeriesId}`);
         // For 'future' scope, delete this task and all future tasks in the series
         const taskDate = new Date(taskScheduledDate);
         
@@ -477,23 +467,14 @@ export default function Sidebar({
         });
       }
       else if (scope === 'single') {
-        console.log(`[DEBUG] Taking 'single' deletion path for task ${taskId}`);
         
         // For 'single' scope deletion of recurring tasks: Delete the instance and generate next
         if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
-          console.log(`[DEBUG] Single deletion of recurring instance ${taskId} - will generate next instance`);
           
           // Find the base task definition
-          console.log(`[DEBUG] Looking for base task with seriesId: ${taskSeriesId}`);
           const allTasks = Object.values(newTasks).flat();
-          console.log(`[DEBUG] All tasks in collections:`, allTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title})));
           const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
-          console.log(`[DEBUG] Tasks with matching seriesId:`, candidateTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, isRepeatType: typeof t.isRepeat, title: t.title})));
-          candidateTasks.forEach(t => {
-            console.log(`[DEBUG] Candidate task ${t.id}: isRepeat=${t.isRepeat}, type=${typeof t.isRepeat}, isRepeat===false: ${t.isRepeat === false}, typeof isRepeat === 'undefined': ${typeof t.isRepeat === 'undefined'}`);
-          });
           const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
-          console.log(`[DEBUG] Found base task:`, baseTaskDefinition ? {id: baseTaskDefinition.id, seriesId: baseTaskDefinition.seriesId, isRepeat: baseTaskDefinition.isRepeat, title: baseTaskDefinition.title} : 'None');
           
           if (baseTaskDefinition) {
             // Remove the current task from all collections first
@@ -511,7 +492,6 @@ export default function Sidebar({
                 const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskToDelete.scheduledDate));
                 
                 if (nextInstance) {
-                  console.log('[DEBUG] Adding new next instance after single deletion:', nextInstance);
                   
                   // Update React state in a separate cycle
                   setTasks(currentTasks => {
@@ -544,7 +524,6 @@ export default function Sidebar({
                         if (instanceDate.toDateString() === today.toDateString()) {
                           if (!updatedTasks.today) updatedTasks.today = [];
                           updatedTasks.today.push(nextInstance);
-                          console.log('[DEBUG] Added next instance to today collection:', nextInstance);
                         }
                       }
                       
@@ -562,14 +541,13 @@ export default function Sidebar({
                     return updatedTasks;
                   });
                 } else {
-                  console.log('[DEBUG] No further instances to generate for series:', taskSeriesId);
+                  // No further instances to generate for series
                 }
               }).catch(error => {
-                console.error('Error importing generateNextDisplayableTaskInstance:', error);
+                // Error importing generateNextDisplayableTaskInstance
               });
             }, 0);
           } else {
-            console.log(`[DEBUG] No base task found for series ${taskSeriesId}, promoting next instance to base task`);
             
             // Find the next instance in the series to promote as the new base task
             const allSeriesInstances = Object.values(newTasks)
@@ -577,11 +555,8 @@ export default function Sidebar({
               .filter(t => t.seriesId === taskSeriesId && t.id !== taskId)
               .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
             
-            console.log(`[DEBUG] Found ${allSeriesInstances.length} other instances in series:`, allSeriesInstances.map(t => ({id: t.id, scheduledDate: t.scheduledDate, title: t.title})));
-            
             if (allSeriesInstances.length > 0) {
               const nextInstance = allSeriesInstances[0];
-              console.log(`[DEBUG] Promoting instance ${nextInstance.id} to base task for series ${taskSeriesId}`);
               
               // Create new base task from the next instance
               const newBaseTask = {
@@ -607,9 +582,8 @@ export default function Sidebar({
                 newTasks[tagGroup].push(newBaseTask);
               }
               
-              console.log(`[DEBUG] Created new base task:`, newBaseTask);
+
             } else {
-              console.log(`[DEBUG] No other instances found, creating new base task and generating next instance`);
               
               // Create a new base task from the current instance being deleted
               const newBaseTask = {
@@ -636,7 +610,7 @@ export default function Sidebar({
                 newTasks[tagGroup].push(newBaseTask);
               }
               
-              console.log(`[DEBUG] Created new base task from current instance:`, newBaseTask);
+
               
               // Generate the next instance asynchronously
               setTimeout(() => {
@@ -644,7 +618,6 @@ export default function Sidebar({
                   const nextInstance = generateNextDisplayableTaskInstance(newBaseTask, new Date(taskToDelete.scheduledDate));
                   
                   if (nextInstance) {
-                    console.log(`[DEBUG] Generated next instance:`, nextInstance);
                     
                     setTasks(currentTasks => {
                       const updatedTasks = { ...currentTasks };
@@ -695,11 +668,11 @@ export default function Sidebar({
                       return updatedTasks;
                     });
                   } else {
-                    console.log(`[DEBUG] No next instance generated, series will end`);
-                  }
-                }).catch(error => {
-                  console.error(`[DEBUG] Error generating next instance:`, error);
-                });
+                    // No next instance generated, series will end
+                      }
+                    }).catch(error => {
+                      // Error generating next instance
+                    });
               }, 0);
             }
             
@@ -713,12 +686,10 @@ export default function Sidebar({
             });
           }
         } else {
-          console.log(`[DEBUG] Single deletion of non-recurring task ${taskId}`);
           
           // Special handling for base task definitions (isRepeat: false with seriesId)
           // Only treat as base task if it's explicitly marked as non-repeat AND has no originalBaseId
           if (taskSeriesId && taskToDelete.isRepeat === false && !taskToDelete.originalBaseId) {
-            console.log(`[DEBUG] Attempting to delete base task definition ${taskId} for series ${taskSeriesId}`);
             
             // Check if there are any active instances of this series
             const hasActiveInstances = Object.values(newTasks)
@@ -730,11 +701,8 @@ export default function Sidebar({
               );
             
             if (hasActiveInstances) {
-              console.log(`[DEBUG] Cannot delete base task ${taskId} - active instances exist for series ${taskSeriesId}`);
-              console.warn('Cannot delete the base recurring task while active instances exist. Please delete the instances first or use "Delete all" to remove the entire series.');
               return prev; // Prevent deletion
             } else {
-              console.log(`[DEBUG] No active instances found, treating base task as single instance and generating next occurrence`);
               
               // Remove the current base task from all collections first
               Object.keys(newTasks).forEach((group) => {
@@ -751,7 +719,6 @@ export default function Sidebar({
                   const nextInstance = generateNextDisplayableTaskInstance(taskToDelete, new Date(taskToDelete.scheduledDate));
                   
                   if (nextInstance) {
-                    console.log('[DEBUG] Adding new next instance after base task single deletion:', nextInstance);
                     
                     // Update React state in a separate cycle
                     setTasks(currentTasks => {
@@ -781,9 +748,8 @@ export default function Sidebar({
                           updatedTasks.today.push(nextInstance);
                         }
                         
-                        console.log('[DEBUG] Successfully added next instance to state');
                       } else {
-                        console.log('[DEBUG] Next instance already exists, skipping addition');
+                        // Next instance already exists, skipping addition
                       }
                       
                       // Save to localStorage
@@ -792,10 +758,10 @@ export default function Sidebar({
                       return updatedTasks;
                     });
                   } else {
-                    console.log('[DEBUG] No next instance generated for base task');
+                    // No next instance generated for base task
                   }
                 }).catch(error => {
-                  console.error('[DEBUG] Error generating next instance:', error);
+                  // Error generating next instance
                 });
               }, 0);
               
@@ -815,24 +781,16 @@ export default function Sidebar({
         }
       }
       // For other cases (continuation logic for recurring instances) - but NOT for 'single' scope
-       else if (scope !== 'single') {
-         // Only generate next instance if:
-         // 1. We're deleting a recurring INSTANCE (using enhanced detection), not the base task
-         // 2. There's a valid base task definition to generate from
-         if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
-          console.log(`[DEBUG] Other deletion case - recurring task instance ${taskId} and generating next instance`);
-          
-          // Find the base task definition
-          console.log(`[DEBUG] Looking for base task with seriesId: ${taskSeriesId}`);
-          const allTasks = Object.values(newTasks).flat();
-          console.log(`[DEBUG] All tasks in collections:`, allTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, title: t.title})));
-          const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
-          console.log(`[DEBUG] Tasks with matching seriesId:`, candidateTasks.map(t => ({id: t.id, seriesId: t.seriesId, isRepeat: t.isRepeat, isRepeatType: typeof t.isRepeat, title: t.title})));
-          candidateTasks.forEach(t => {
-            console.log(`[DEBUG] Candidate task ${t.id}: isRepeat=${t.isRepeat}, type=${typeof t.isRepeat}, isRepeat===false: ${t.isRepeat === false}, typeof isRepeat === 'undefined': ${typeof t.isRepeat === 'undefined'}`);
-          });
-          const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
-          console.log(`[DEBUG] Found base task:`, baseTaskDefinition ? {id: baseTaskDefinition.id, seriesId: baseTaskDefinition.seriesId, isRepeat: baseTaskDefinition.isRepeat, title: baseTaskDefinition.title} : 'None');
+        else if (scope !== 'single') {
+          // Only generate next instance if:
+          // 1. We're deleting a recurring INSTANCE (using enhanced detection), not the base task
+          // 2. There's a valid base task definition to generate from
+          if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
+           
+           // Find the base task definition
+           const allTasks = Object.values(newTasks).flat();
+           const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
+           const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
           
           if (baseTaskDefinition) {
             // Remove the current task from all collections first
@@ -850,7 +808,6 @@ export default function Sidebar({
                 const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskToDelete.scheduledDate));
                 
                 if (nextInstance) {
-                  console.log('Adding new next instance after deletion:', nextInstance);
                   
                   // Update React state in a separate cycle
                   setTasks(currentTasks => {
@@ -883,7 +840,7 @@ export default function Sidebar({
                         if (instanceDate.toDateString() === today.toDateString()) {
                           if (!updatedTasks.today) updatedTasks.today = [];
                           updatedTasks.today.push(nextInstance);
-                          console.log('Added next instance to today collection:', nextInstance);
+                          // Added next instance to today collection
                         }
                       }
                       
@@ -901,10 +858,10 @@ export default function Sidebar({
                     return updatedTasks;
                   });
                 } else {
-                  console.log('No further instances to generate for series:', taskSeriesId);
+                  // No further instances to generate for series
                 }
               }).catch(error => {
-                console.error('Error importing generateNextDisplayableTaskInstance:', error);
+                // Error importing generateNextDisplayableTaskInstance
               });
             }, 0);
           }
@@ -914,7 +871,6 @@ export default function Sidebar({
         else if (scope !== 'single') {
           // Check if this is a recurring instance without a base task
           if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
-            console.log(`[DEBUG] No base task found for series ${taskSeriesId} in non-single scope, promoting next instance to base task`);
              
              // Find the next instance in the series to promote as the new base task
              const allSeriesInstances = Object.values(newTasks)
@@ -922,11 +878,8 @@ export default function Sidebar({
                .filter(t => t.seriesId === taskSeriesId && t.id !== taskId)
                .sort((a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate));
              
-             console.log(`[DEBUG] Found ${allSeriesInstances.length} other instances in series:`, allSeriesInstances.map(t => ({id: t.id, scheduledDate: t.scheduledDate, title: t.title})));
-             
              if (allSeriesInstances.length > 0) {
               const nextInstance = allSeriesInstances[0];
-              console.log(`[DEBUG] Promoting instance ${nextInstance.id} to base task for series ${taskSeriesId}`);
               
               // Create new base task from the next instance
               const newBaseTask = {
@@ -952,9 +905,8 @@ export default function Sidebar({
                 newTasks[tagGroup].push(newBaseTask);
               }
               
-              console.log(`[DEBUG] Created new base task:`, newBaseTask);
+
             } else {
-              console.log(`[DEBUG] No other instances found, creating new base task and generating next instance`);
               
               // Create a new base task from the current instance being deleted
               const newBaseTask = {
@@ -981,7 +933,7 @@ export default function Sidebar({
                 newTasks[tagGroup].push(newBaseTask);
               }
               
-              console.log(`[DEBUG] Created new base task from current instance:`, newBaseTask);
+
               
               // Generate the next instance asynchronously
               setTimeout(() => {
@@ -989,7 +941,6 @@ export default function Sidebar({
                   const nextInstance = generateNextDisplayableTaskInstance(newBaseTask, new Date(taskToDelete.scheduledDate));
                   
                   if (nextInstance) {
-                    console.log(`[DEBUG] Generated next instance:`, nextInstance);
                     
                     setTasks(currentTasks => {
                       const updatedTasks = { ...currentTasks };
@@ -1040,11 +991,11 @@ export default function Sidebar({
                       return updatedTasks;
                     });
                   } else {
-                    console.log(`[DEBUG] No next instance generated, series will end`);
-                  }
-                }).catch(error => {
-                  console.error(`[DEBUG] Error generating next instance:`, error);
-                });
+                    // No next instance generated, series will end
+                      }
+                    }).catch(error => {
+                      // Error generating next instance
+                    });
               }, 0);
             }
           }
@@ -1086,9 +1037,8 @@ export default function Sidebar({
         try {
           const newTasks = JSON.parse(e.newValue);
           setTasks(newTasks);
-          console.log('[Sidebar] Tasks updated from storage event.');
         } catch (e) {
-          console.error("Error parsing tasks from storage event:", e);
+          // Error parsing tasks from storage event
         }
       } else if (e.key === "tags") {
         try {
@@ -1105,7 +1055,7 @@ export default function Sidebar({
             return updated;
           });
         } catch (e) {
-          console.error("Error parsing tags from storage event:", e);
+          // Error parsing tags from storage event
         }
       }
     };
@@ -1134,7 +1084,7 @@ export default function Sidebar({
   };
 
   // Get all unique tasks with their complete data
-  // console.log('[Sidebar] Processing tasks from state:', tasks); // Keep this if needed for deep debugging task state
+  // Processing tasks from state
   
   const allTasks = Object.values(tasks)
     .filter(Array.isArray) // Filter out any non-array values
@@ -1149,22 +1099,15 @@ export default function Sidebar({
         if (task.repeat && task.repeat !== 'none') {
           // For base tasks (isRepeat === false), we should check if there's an active instance
           if (task.isRepeat === false) {
-            // console.log(`[Sidebar] Processing base recurring task: ${task.id}`);
             const hasActiveInstance = Object.values(tasks)
               .filter(Array.isArray)
               .some(taskGroup => 
                 taskGroup.some(t => {
-                  // Detailed log for diagnosing hasActiveInstance
-                  if (t.seriesId === task.seriesId) {
-                    console.log(`[Sidebar][hasActiveInstance check] For base series ${task.seriesId} (base ID ${task.id}), checking instance: ID=${t.id}, title=${t.title}, isRepeat=${t.isRepeat}, completed=${t.completed}, scheduledDate=${t.scheduledDate}`);
-                  }
                   return t.seriesId === task.seriesId && 
                          t.isRepeat === true && 
                          !t.completed;
                 })
               );
-            
-            console.log(`[Sidebar] Base task ${task.id} (series ${task.seriesId}) has active instance: ${hasActiveInstance}`);
             
             if (hasActiveInstance) {
               return; // Skip the base task if an active instance exists
@@ -1211,24 +1154,52 @@ export default function Sidebar({
     }, {});
 
   const allTasksArray = Object.values(allTasks);
-  // console.log('[Sidebar] All unique, non-completed tasks for display consideration:', allTasksArray);
+  // All unique, non-completed tasks for display consideration
 
-  // Separate overdue recurring tasks
+  // Separate tasks by due date categories
   const todayForComparison = new Date();
   todayForComparison.setHours(0, 0, 0, 0); 
   
   const overdueTasks = allTasksArray.filter(task => {
-    if (!task.scheduledDate) return false;
+    if (!task.scheduledDate || task.completed) return false;
     try {
       const taskDate = parseISO(task.scheduledDate);
-      return isPast(taskDate) && !isToday(taskDate) && !task.completed;
+      return isPast(taskDate) && !isToday(taskDate);
     } catch (error) {
-      // console.error('Error parsing date for overdue check:', task.id, error);
       return false;
     }
   });
   
-  // console.log(`[Sidebar] Overdue tasks count: ${overdueTasks.length}`);
+  const dueTodayTasks = allTasksArray.filter(task => {
+    if (!task.scheduledDate || task.completed) return false;
+    try {
+      const taskDate = parseISO(task.scheduledDate);
+      return isToday(taskDate);
+    } catch (error) {
+      return false;
+    }
+  });
+  
+  const dueTomorrowTasks = allTasksArray.filter(task => {
+    if (!task.scheduledDate || task.completed) return false;
+    try {
+      const taskDate = parseISO(task.scheduledDate);
+      return isTomorrow(taskDate);
+    } catch (error) {
+      return false;
+    }
+  });
+  
+  const dueSoonTasks = allTasksArray.filter(task => {
+    if (!task.scheduledDate || task.completed) return false;
+    try {
+      const taskDate = parseISO(task.scheduledDate);
+      const soonDate = addDays(new Date(), 7); // Next 7 days
+      return isAfter(taskDate, new Date()) && !isToday(taskDate) && !isTomorrow(taskDate) && taskDate <= soonDate;
+    } catch (error) {
+      return false;
+    }
+  });
   
   const activeTasks = allTasksArray.filter(task => {
     if (task.completed) return false; 
@@ -1237,48 +1208,67 @@ export default function Sidebar({
       const taskDate = parseISO(task.scheduledDate);
       return isToday(taskDate) || isAfter(taskDate, todayForComparison);
     } catch (error) {
-      // console.error('Error parsing date for active check:', task.id, error);
       return true; 
     }
   });
-  
-  // console.log(`[Sidebar] Active tasks (today or future, or anytime) count: ${activeTasks.length}`);
   
   const displayableTasks = activeTasks;
 
   const sections =
     selectedView === "all"
       ? [
+          // Overdue section
           {
-            id: "all",
-            label: "All tasks",
-            icon: LayoutGrid,
-            color: "#22C55E",
-            count: displayableTasks.length + (overdueTasks.length > 0 ? 1 : 0), // Count overdue section as 1 if it exists
-            subsections: [
-              // Always include Overdue section, even if empty
-              {
-                id: "overdue",
-                label: "Overdue",
-                tasks: overdueTasks,
-                isOverdue: true // Flag to style differently
-              },
-              {
-                id: "scheduled",
-                label: "Scheduled",
-                tasks: displayableTasks
-                  .filter((task) => task.scheduledDate)
-                  .sort(
-                    (a, b) =>
-                      new Date(a.scheduledDate) - new Date(b.scheduledDate)
-                  ),
-              },
-              {
-                id: "anytime",
-                label: "Anytime",
-                tasks: displayableTasks.filter((task) => !task.scheduledDate),
-              },
-            ],
+            id: "overdue",
+            label: "Overdue",
+            icon: ClockIcon,
+            color: "#EF4444",
+            count: overdueTasks.length,
+            tasks: overdueTasks.sort(
+              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
+            ),
+          },
+          // Due today section
+          {
+            id: "dueToday",
+            label: "Due today",
+            icon: Calendar,
+            color: "#F59E0B",
+            count: dueTodayTasks.length,
+            tasks: dueTodayTasks.sort(
+              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
+            ),
+          },
+          // Due tomorrow section
+          {
+            id: "dueTomorrow",
+            label: "Due tomorrow",
+            icon: Tomorrow,
+            color: "#3B82F6",
+            count: dueTomorrowTasks.length,
+            tasks: dueTomorrowTasks.sort(
+              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
+            ),
+          },
+          // Due soon section
+          {
+            id: "dueSoon",
+            label: "Due soon",
+            icon: Soon,
+            color: "#8B5CF6",
+            count: dueSoonTasks.length,
+            tasks: dueSoonTasks.sort(
+              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
+            ),
+          },
+          // Inbox section - all tasks without tags, regardless of schedule date
+          {
+            id: "inbox",
+            label: "Inbox",
+            icon: InboxAlt,
+            color: "#6B7280",
+            count: displayableTasks.filter((task) => !task.tag || !task.tag.id).length,
+            tasks: displayableTasks.filter((task) => !task.tag || !task.tag.id),
           },
           // Add all tags as sections
           ...tags.map((tag) => ({
@@ -1295,6 +1285,45 @@ export default function Sidebar({
           })),
         ]
       : [];
+
+  // Auto-collapse sections when they become empty
+  useEffect(() => {
+    const sectionsToCollapse = [];
+    
+    // Check each expanded section to see if it's now empty
+    Object.keys(expandedSections).forEach(sectionId => {
+      if (expandedSections[sectionId]) {
+        // Find the section data
+        const sectionData = [
+          { id: "overdue", count: overdueTasks.length },
+          { id: "dueToday", count: dueTodayTasks.length },
+          { id: "dueTomorrow", count: dueTomorrowTasks.length },
+          { id: "dueSoon", count: dueSoonTasks.length },
+          { id: "inbox", count: displayableTasks.filter((task) => !task.tag || !task.tag.id).length },
+          ...tags.map(tag => ({
+            id: tag.id,
+            count: displayableTasks.filter((task) => task.tag && task.tag.id === tag.id).length
+          }))
+        ].find(section => section.id === sectionId);
+        
+        // If section exists and is empty, mark it for collapse
+        if (sectionData && sectionData.count === 0) {
+          sectionsToCollapse.push(sectionId);
+        }
+      }
+    });
+    
+    // Collapse empty sections
+    if (sectionsToCollapse.length > 0) {
+      setExpandedSections(prev => {
+        const updated = { ...prev };
+        sectionsToCollapse.forEach(sectionId => {
+          updated[sectionId] = false;
+        });
+        return updated;
+      });
+    }
+  }, [expandedSections, overdueTasks.length, dueTodayTasks.length, dueTomorrowTasks.length, dueSoonTasks.length, displayableTasks, tags]);
 
   // Update expandedSections when tags change
   useEffect(() => {
@@ -1448,24 +1477,32 @@ export default function Sidebar({
                   </button>
                 </div>
                 <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg">
-                  <div className="space-y-1 flex flex-col gap-2">
+                  <div className="space-y-1 flex flex-col">
                     {selectedView === "all" ? (
-                      sections.map((section) => (
-                        <div
-                          key={section.id}
-                          className="overflow-hidden flex-col gap-2 border-b border-light-border dark:border-dark-border last:border-none pb-2 ml-2"
-                        >
+                      <>
+                        {sections.map((section, index) => (
+                          <div key={section.id}>
+                            <div className="overflow-hidden flex-col gap-2 ml-3">
                           <div
                             role="button"
-                            onClick={() =>
-                              setExpandedSections((prev) => ({
-                                ...prev,
-                                [section.id]: !prev[section.id],
-                              }))
-                            }
+                            onClick={() => {
+                              // Only allow toggling if the section has tasks
+                              if (section.count > 0) {
+                                setExpandedSections((prev) => ({
+                                  ...prev,
+                                  [section.id]: !prev[section.id],
+                                }))
+                              }
+                            }}
                             onContextMenu={(e) => {
                               e.preventDefault();
-                              if (section.id !== "all") {
+                              if (![
+                                "overdue",
+                                "dueToday", 
+                                "dueTomorrow",
+                                "dueSoon",
+                                "inbox"
+                              ].includes(section.id)) {
                                 setColorMenuPosition({
                                   x: e.clientX,
                                   y: e.clientY,
@@ -1475,10 +1512,9 @@ export default function Sidebar({
                               }
                             }}
                             style={{
-                              backgroundColor:
-                                section.id !== "all" ? `` : "transparent",
+                              backgroundColor: "transparent",
                             }}
-                            className={`w-full font-medium flex items-center gap-2 py-2 ${
+                            className={`group w-full font-medium flex items-center gap-2 py-3 ${
                               expandedSections[section.id]
                                 ? "bg-light-selected dark:bg-dark-selected"
                                 : ""
@@ -1493,7 +1529,13 @@ export default function Sidebar({
                                 }`}
                               />
                             </div>
-                            {section.id !== "all" && (
+                            {![
+                              "overdue",
+                              "dueToday", 
+                              "dueTomorrow",
+                              "dueSoon",
+                              "inbox"
+                            ].includes(section.id) ? (
                               <div className="w-3 h-3 items-center">
                                 <div
                                   className="w-[12px] h-[12px] rounded-[5px] "
@@ -1502,6 +1544,10 @@ export default function Sidebar({
                                     border: `2px solid ${section.color}`,
                                   }}
                                 />
+                              </div>
+                            ) : (
+                              <div className="w-4 h-4 flex items-center justify-center">
+                                <section.icon className="w-4 h-4" style={{ color: section.color }} />
                               </div>
                             )}
                             <span className="flex items-end justify-center text-left text-sm">
@@ -1512,24 +1558,65 @@ export default function Sidebar({
                                 {section.count}
                               </span>
                             )}
-                            {section.id !== "all" && (
-                              <div className="flex w-full justify-end">
+                            {/* Add icon for all sections except overdue and dueSoon */}
+                            {!["overdue", "dueSoon"].includes(section.id) && (
+                              <div className="flex justify-end items-center gap-1 ml-auto">
+                                {/* Add icon - visible on hover */}
                                 <button
                                   onClick={(e) => {
-                                    e.stopPropagation(); // Prevent the click from reaching the parent button
-                                    if (section.id !== "all") {
+                                    e.stopPropagation();
+                                    
+                                    if (commandBarRef?.current) {
+                                      // Reset task state first
+                                      // Open with no date for inbox, current date for others
+                                      const initialDate = section.id === "inbox" ? null : new Date();
+                                      commandBarRef.current.openForNewTask(initialDate);
+                                      
+                                      // Set pre-filled values based on section
+                                      setTimeout(() => {
+                                        if (section.id === "dueToday") {
+                                          // Set scheduled date to today
+                                          const today = new Date();
+                                          commandBarRef.current.setScheduledDate?.(today);
+                                        } else if (section.id === "dueTomorrow") {
+                                          // Set scheduled date to tomorrow
+                                          const tomorrow = new Date();
+                                          tomorrow.setDate(tomorrow.getDate() + 1);
+                                          commandBarRef.current.setScheduledDate?.(tomorrow);
+                                        } else if (section.id === "inbox") {
+                                          // No pre-filled values for inbox
+                                        } else {
+                                          // For user-defined tag groups, set the tag
+                                          const tag = tags.find(t => t.id === section.id);
+                                          if (tag) {
+                                            commandBarRef.current.setSelectedTag?.(tag);
+                                          }
+                                        }
+                                      }, 50);
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 flex px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+                                >
+                                  <Add className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                </button>
+                                
+                                {/* More icon for user-defined tag groups only */}
+                                {!["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setColorMenuPosition({
                                         x: e.clientX,
                                         y: e.clientY,
                                       });
                                       setSelectedTagId(section.id);
                                       setColorMenuOpen(true);
-                                    }
-                                  }}
-                                  className="flex group px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
-                                >
-                                  <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
-                                </button>
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 flex px-1 py-1 rounded-[5px] items-center hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter"
+                                  >
+                                    <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                  </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1548,77 +1635,42 @@ export default function Sidebar({
                               >
                                 <div className="flex flex-col gap-2 py-1">
                                   <div className="mt-1 flex flex-col gap-1">
-                                    {section.id === "all"
-                                      ? // Render subsections for All Tasks
-                                        section.subsections.map(
-                                          (subsection) => (
-                                            <div
-                                              key={subsection.id}
-                                              className="flex flex-col gap-1"
-                                            >
-                                              <div className={`px-2 py-1 text-xs font-medium ${
-                                                  subsection.isOverdue 
-                                                    ? "text-red-500 dark:text-red-400"
-                                                    : "text-light-text/50 dark:text-dark-text/50"
-                                                }`}>
-                                                {subsection.label} (
-                                                {subsection.tasks.length})
-                                              </div>
-                                              {subsection.tasks.map((task) => (
-                                                <TaskItem
-                                                  key={task.id}
-                                                  task={{
-                                                    ...task,
-                                                    tag: task.tag || null,
-                                                  }}
-                                                  onComplete={handleToggleTaskCompletion}
-                                                  onDelete={handleDeleteTask}
-                                                  onEdit={handleEditTaskIconClick}
-                                                  onDoubleClickEdit={
-                                                    handleEditTaskIconClick
-                                                  }
-                                                  onClick={() =>
-                                                    setSelectedTaskId(task.id)
-                                                  }
-                                                  isSelected={
-                                                    selectedTaskId === task.id
-                                                  }
-                                                  hideTag={false}
-                                                  isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
-                                                />
-                                              ))}
-                                            </div>
-                                          )
-                                        )
-                                      : // Render tasks for tag groups
-                                        section.tasks.map((task) => (
-                                          <TaskItem
-                                            key={task.id}
-                                            task={{
-                                              ...task,
-                                              tag: task.tag || null,
-                                            }}
-                                            onComplete={handleToggleTaskCompletion}
-                                            onDelete={handleDeleteTask}
-                                            onEdit={handleEditTaskIconClick}
-                                            onDoubleClickEdit={handleEditTaskIconClick}
-                                            onClick={() =>
-                                              setSelectedTaskId(task.id)
-                                            }
-                                            isSelected={
-                                              selectedTaskId === task.id
-                                            }
-                                            hideTag={section.id !== "all"}
-                                            isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
-                                          />
-                                        ))}
+                                    {section.tasks.map((task) => (
+                                      <TaskItem
+                                        key={task.id}
+                                        task={{
+                                          ...task,
+                                          tag: task.tag || null,
+                                        }}
+                                        onComplete={handleToggleTaskCompletion}
+                                        onDelete={handleDeleteTask}
+                                        onEdit={handleEditTaskIconClick}
+                                        onDoubleClickEdit={handleEditTaskIconClick}
+                                        onClick={() =>
+                                          setSelectedTaskId(task.id)
+                                        }
+                                        isSelected={
+                                          selectedTaskId === task.id
+                                        }
+                                        hideTag={["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id) ? false : true}
+                                        isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
+                                      />
+                                    ))}
                                   </div>
                                 </div>
                               </motion.div>
                             )}
                           </AnimatePresence>
-                        </div>
-                      ))
+                            </div>
+                            {/* Add divider after inbox section to separate pre-determined sections from user-created tag groups */}
+                            {section.id === "inbox" && (
+                              <div className="ml-3 my-3">
+                                <div className="h-px bg-light-border dark:bg-dark-border"></div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </>
                     ) : (
                       // Today, Upcoming, and Completed views
                       <div className="flex flex-col pl-3 gap-1 mt-2">
@@ -1718,7 +1770,7 @@ export default function Sidebar({
                     tasks={allTasksArray}
                     selectedDate={selectedDate}
                     onDateSelect={(date) => {
-                      console.log('Sidebar: AgendaView date selected:', date);
+                      // AgendaView date selected
                       // Ensure we're passing a fresh date object to prevent reference issues
                       onDateSelect(new Date(date));
                     }}

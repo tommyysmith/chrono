@@ -3,11 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbo",
+    "dev:webpack": "next dev",
+    "dev:clean": "rm -rf .next && next dev --turbo",
+    "dev:fresh": "rm -rf .next node_modules/.cache && npm install && next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "scan": "next dev & npx react-scan@latest localhost:3000",
+    "scan": "next dev --turbo & npx react-scan@latest localhost:3000",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

@@ -751,12 +751,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskToEdit(null);
       
       // Set the scheduled date to the provided date
-      setScheduledDate(new Date(date));
+      setScheduledDate(date ? new Date(date) : null);
       
       // Open the CommandBar in task creation mode
       setIsOpen(true);
       setIsAddingTask(true);
       setIsAddingEvent(false);
+    },
+    // Expose setter methods for pre-filling task creation form
+    setScheduledDate: (date) => {
+      setScheduledDate(date);
+    },
+    setSelectedTag: (tag) => {
+      setSelectedTag(tag);
+      setDraftTag(tag);
     },
     openForEdit,
     openForTaskEdit
@@ -971,7 +979,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             // First, find the base task definition for the series BEFORE removing anything
             const baseTask = updatedTasks.all.find(t => 
               t.seriesId === originalTask.seriesId && 
-              !t.isRepeat && 
+              (t.isRepeat === false || typeof t.isRepeat === 'undefined') && 
               t.repeat && 
               t.repeat !== 'none'
             );
@@ -1015,7 +1023,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             if (baseTask) {
               // Import generateNextDisplayableTaskInstance dynamically
               import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
-                const nextInstance = generateNextDisplayableTaskInstance(baseTask, originalTask.scheduledDate);
+                // Use the current instance's scheduledDate to generate the next occurrence
+                // This ensures proper advancement regardless of which instance in the series is being edited
+                const currentInstanceDate = originalTask.scheduledDate;
+                const nextInstance = generateNextDisplayableTaskInstance(baseTask, currentInstanceDate);
                 
                 if (nextInstance) {
                   console.log('Generated next instance for recurring series:', nextInstance);
@@ -1023,40 +1034,64 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   // Get current tasks from localStorage to ensure we have the latest state
                   const currentTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
                   
-                  // Add next instance to collections if it doesn't already exist
+                  // Update the base task's scheduledDate to advance the series
                   if (!currentTasks.all) currentTasks.all = [];
-                  if (!currentTasks.all.find(t => t.id === nextInstance.id)) {
-                    currentTasks.all.push(nextInstance);
-                    
-                    // Add to tag collection
-                    if (nextInstance.tag && nextInstance.tag.id) {
-                      const instanceTagGroup = nextInstance.tag.id;
-                      if (!currentTasks[instanceTagGroup]) currentTasks[instanceTagGroup] = [];
-                      currentTasks[instanceTagGroup].push(nextInstance);
+                  currentTasks.all = currentTasks.all.map(t => {
+                    if (t.id === baseTask.id) {
+                      return {
+                        ...t,
+                        scheduledDate: nextInstance.scheduledDate,
+                        updatedAt: new Date().toISOString()
+                      };
                     }
-                    
-                    // Add to today if scheduled for today
-                    if (nextInstance.scheduledDate && isToday(parseISO(nextInstance.scheduledDate))) {
-                      if (!currentTasks.today) currentTasks.today = [];
-                      currentTasks.today.push(nextInstance);
+                    return t;
+                  });
+                  
+                  // Update base task in tag collections
+                  for (const groupKey in currentTasks) {
+                    if (groupKey !== 'all' && Array.isArray(currentTasks[groupKey])) {
+                      currentTasks[groupKey] = currentTasks[groupKey].map(t => {
+                        if (t.id === baseTask.id) {
+                          return {
+                            ...t,
+                            scheduledDate: nextInstance.scheduledDate,
+                            updatedAt: new Date().toISOString()
+                          };
+                        }
+                        return t;
+                      });
                     }
-                    
-                    // Save updated tasks
-                    localStorage.setItem('tasks', JSON.stringify(currentTasks));
-                    
-                    // Dispatch events to update UI
-                    window.dispatchEvent(new StorageEvent('storage', {
-                      key: 'tasks',
-                      newValue: JSON.stringify(currentTasks),
-                      url: window.location.href
-                    }));
-                    
-                    window.dispatchEvent(new CustomEvent('tasksUpdated', {
-                      detail: currentTasks
-                    }));
-                    
-                    console.log('Successfully advanced recurring series');
                   }
+                  
+                  // Update base task in today collection if it exists
+                  if (currentTasks.today) {
+                    currentTasks.today = currentTasks.today.map(t => {
+                      if (t.id === baseTask.id) {
+                        return {
+                          ...t,
+                          scheduledDate: nextInstance.scheduledDate,
+                          updatedAt: new Date().toISOString()
+                        };
+                      }
+                      return t;
+                    });
+                  }
+                  
+                  // Save updated tasks
+                  localStorage.setItem('tasks', JSON.stringify(currentTasks));
+                  
+                  // Dispatch events to update UI
+                  window.dispatchEvent(new StorageEvent('storage', {
+                    key: 'tasks',
+                    newValue: JSON.stringify(currentTasks),
+                    url: window.location.href
+                  }));
+                  
+                  window.dispatchEvent(new CustomEvent('tasksUpdated', {
+                    detail: currentTasks
+                  }));
+                  
+                  console.log('Successfully advanced recurring series to next occurrence:', nextInstance.scheduledDate);
                 }
               }).catch(error => {
                 console.error('Error importing recurrenceUtils:', error);
@@ -1193,11 +1228,42 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           addToCalendar: addToCalendar
         };
         
-        // For recurring tasks, ensure they have a scheduled date
+        // For recurring tasks, calculate the appropriate scheduled date
         if (taskRepeatOption && taskRepeatOption !== 'none' && !newTask.scheduledDate) {
-          // If no scheduled date was set, use today's date
-          newTask.scheduledDate = new Date().toISOString();
-          console.log('Added default scheduled date for recurring task:', newTask.scheduledDate);
+          if (taskRepeatOption === 'custom' && taskRruleOptions) {
+            // For custom recurrence patterns, calculate the first occurrence date
+            try {
+              const { RRule } = require('rrule');
+              const options = { ...taskRruleOptions };
+              
+              // Ensure dtstart is a proper Date object
+              if (options.dtstart) {
+                options.dtstart = new Date(options.dtstart);
+              } else {
+                options.dtstart = new Date(); // Use current date as fallback
+              }
+              
+              const rule = new RRule(options);
+              const firstOccurrence = rule.after(new Date(options.dtstart.getTime() - 1000), false);
+              
+              if (firstOccurrence) {
+                newTask.scheduledDate = firstOccurrence.toISOString();
+                console.log('Set custom recurrence first occurrence date:', newTask.scheduledDate);
+              } else {
+                // Fallback to dtstart if no occurrence found
+                newTask.scheduledDate = options.dtstart.toISOString();
+                console.log('No occurrence found, using dtstart as scheduled date:', newTask.scheduledDate);
+              }
+            } catch (error) {
+              console.error('Error calculating first occurrence for custom recurrence:', error);
+              // Fallback to current date
+              newTask.scheduledDate = new Date().toISOString();
+            }
+          } else {
+            // For simple repeat patterns, use today's date as default
+            newTask.scheduledDate = new Date().toISOString();
+            console.log('Added default scheduled date for recurring task:', newTask.scheduledDate);
+          }
         }
         
         console.log('Creating new task with recurring options:', {
@@ -1210,7 +1276,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         updatedTasks.all.push(newTask);
 
         // Add to today if scheduled for today
-        if (scheduledDate && isToday(scheduledDate)) {
+        if (newTask.scheduledDate && isToday(parseISO(newTask.scheduledDate))) {
           updatedTasks.today.push(newTask);
         }
 
@@ -1324,6 +1390,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       try {
         // Clone options to avoid modifying original
         const options = {...rruleOptions};
+        
+        // Ensure dtstart is a proper Date object
+        if (options.dtstart) {
+          if (typeof options.dtstart === 'string') {
+            options.dtstart = new Date(options.dtstart);
+          } else if (!(options.dtstart instanceof Date)) {
+            // If it's not a Date object, try to convert it
+            options.dtstart = new Date(options.dtstart);
+          }
+        }
         
         // Convert weekday objects to RRule Weekday instances if needed
         if (options.byweekday) {

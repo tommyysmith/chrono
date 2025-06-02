@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { RRule, RRuleSet, rrulestr, Weekday } from 'rrule';
 import { format, parseISO } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -156,18 +156,33 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
     });
   }, [value]);
 
-  // Recalculate preview text and call onChange when options change
+  // Recalculate preview text when options or startDate change
   useEffect(() => {
     try {
-      setPreviewParts(generatePreviewParts(options, startDate)); // Generate parts instead
-      onChange?.(options); // Notify parent about the change
+      setPreviewParts(generatePreviewParts(options, startDate));
     } catch (error) {
       console.error("Error generating recurrence preview:", error);
       setPreviewParts([{ text: 'Invalid rule', highlight: false }]);
-      // Potentially notify parent of invalid state if needed
-      // onChange?.(null); // Or indicate error state
     }
-  }, [options, onChange, startDate]);
+  }, [options, startDate]);
+
+  // Memoize the dtstart to prevent infinite loops
+  const memoizedDtstart = useMemo(() => {
+    return startDate || new Date();
+  }, [startDate]);
+
+  // Notify parent when options change (separate effect to avoid infinite loops)
+  useEffect(() => {
+    if (!onChange) return;
+    
+    // Create options with dtstart for the parent
+    const optionsWithDtstart = {
+      ...options,
+      dtstart: memoizedDtstart
+    };
+    
+    onChange(optionsWithDtstart);
+  }, [options, memoizedDtstart, onChange]);
 
   const handleOptionChange = (key, newValue) => {
     setOptions(prev => ({ ...prev, [key]: newValue }));

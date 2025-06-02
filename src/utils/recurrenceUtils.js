@@ -184,15 +184,19 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
     if (ruleOptions.dtstart) ruleOptions.dtstart = new Date(ruleOptions.dtstart);
     if (ruleOptions.until) ruleOptions.until = new Date(ruleOptions.until);
 
-    // ---> Explicitly set dtstart from baseEvent.start <---
-    // This ensures the RRule starts at the time specified in CommandBar
-    // when creating a new event with custom recurrence.
-    if (baseEvent.start instanceof Date && !isNaN(baseEvent.start)) {
+    // ---> Set dtstart appropriately for custom recurrence <---
+    // For custom recurrence patterns, respect the dtstart in rruleOptions if it exists
+    // Only override if there's a specific start time on the event
+    if (!ruleOptions.dtstart && baseEvent.start instanceof Date && !isNaN(baseEvent.start)) {
+        // Only set dtstart if it's not already specified in the custom rule
         ruleOptions.dtstart = new Date(baseEvent.start); // Use a clean copy
-        console.log(`[generateRecurringEvents] Explicitly setting dtstart in ruleOptions to: ${ruleOptions.dtstart.toISOString()}`);
+        console.log(`[generateRecurringEvents] Setting dtstart from baseEvent.start: ${ruleOptions.dtstart.toISOString()}`);
+    } else if (ruleOptions.dtstart) {
+        // Ensure dtstart from rruleOptions is a proper Date object
+        ruleOptions.dtstart = new Date(ruleOptions.dtstart);
+        console.log(`[generateRecurringEvents] Using dtstart from rruleOptions: ${ruleOptions.dtstart.toISOString()}`);
     } else {
-        console.warn(`[generateRecurringEvents] baseEvent.start is not a valid Date for event ${baseEvent.id}. RRule might use default start time.`);
-        // Consider falling back to a default or handling the error if baseEvent.start is invalid
+        console.warn(`[generateRecurringEvents] No valid dtstart found in rruleOptions or baseEvent.start for event ${baseEvent.id}. Using current date as fallback.`);
         ruleOptions.dtstart = new Date(); // Fallback to now, but log warning
     }
 
@@ -298,8 +302,24 @@ export function generateRecurringTasks(baseTask, endDate, maxInstances = 52) {
     // Create a new rule with the task scheduledDate as dtstart
     // Ensure we have a clean copy of the options
     const ruleOptions = JSON.parse(JSON.stringify(baseTask.rruleOptions));
-    const startDate = baseTask.scheduledDate ? new Date(baseTask.scheduledDate) : 
-                     baseTask.createdAt ? new Date(baseTask.createdAt) : new Date();
+    
+    // For custom recurrence patterns, respect the dtstart in rruleOptions if it exists
+    // Only override if there's a specific scheduledDate on the task
+    let startDate;
+    if (ruleOptions.dtstart) {
+      // Use the dtstart from the custom rule options
+      startDate = new Date(ruleOptions.dtstart);
+      console.log('Using dtstart from rruleOptions:', startDate.toISOString());
+    } else if (baseTask.scheduledDate) {
+      startDate = new Date(baseTask.scheduledDate);
+    } else if (baseTask.createdAt) {
+      startDate = new Date(baseTask.createdAt);
+    } else {
+      // Only fall back to current date if no other option is available
+      startDate = new Date();
+      console.warn('No dtstart in rruleOptions, scheduledDate, or createdAt found. Using current date as fallback.');
+    }
+    
     rrule = new RRule({
       ...ruleOptions,
       dtstart: startDate
@@ -873,7 +893,12 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
   try {
     if (baseTaskDefinition.rruleOptions && typeof baseTaskDefinition.rruleOptions === 'object') {
       const options = JSON.parse(JSON.stringify(baseTaskDefinition.rruleOptions)); 
-      options.dtstart = new Date(options.dtstart || seriesStartDate); 
+      // Prioritize dtstart from rruleOptions, only fall back to seriesStartDate if not present
+      if (options.dtstart) {
+        options.dtstart = new Date(options.dtstart);
+      } else {
+        options.dtstart = seriesStartDate;
+      }
       if (options.until && typeof options.until === 'string') {
         options.until = new Date(options.until);
       }
@@ -936,10 +961,10 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
     pointInTimeForRruleAfter = new Date(lastInstanceScheduledDate);
     console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Last instance scheduled date provided: ${pointInTimeForRruleAfter.toISOString()}`);
   } else {
-    // This case would be for generating the very first instance if this function were used for that.
-    // For generating the *next* after completion, lastInstanceScheduledDate should always be valid.
-    pointInTimeForRruleAfter = new Date(rule.options.dtstart); 
-    console.warn(`[RecurrenceUtils][generateNextDisplayableTaskInstance] No lastInstanceScheduledDate provided. Using rule's dtstart for 'after' calculation: ${pointInTimeForRruleAfter.toISOString()}`);
+    // This case is for generating the very first instance.
+    // To get the first occurrence, we need to use a date before dtstart
+    pointInTimeForRruleAfter = new Date(rule.options.dtstart.getTime() - 1000); // 1 second before dtstart
+    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] No lastInstanceScheduledDate provided. Using date before dtstart for 'after' calculation to get first occurrence: ${pointInTimeForRruleAfter.toISOString()}`);
   }
 
   try {

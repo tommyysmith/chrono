@@ -106,7 +106,11 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         setIsPopoverOpen(false);
       }}
     >
-      <div className={`checkbox flex-shrink-0 ${shouldAlignTop ? 'mt-[1px]' : 'mt-[2px]'}`}>
+      <div 
+        className={`checkbox flex-shrink-0 ${shouldAlignTop ? 'mt-[1px]' : 'mt-[2px]'}`}
+        onMouseEnter={(e) => e.stopPropagation()}
+        onMouseLeave={(e) => e.stopPropagation()}
+      >
         <Checkbox 
           checked={checked !== undefined ? checked : task.completed}
           onChange={() => onComplete(task.id)}
@@ -122,7 +126,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         <div className="flex items-center flex-wrap flex-row gap-1">
         {/* Always show scheduled date if available, regardless of tags */}
         {!hideScheduledDate && task.scheduledDate && (
-          <div className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px] bg-primary/10 text-primary">
+          <div className="inline-flex self-start mt-1 items-center px-1 h-[20px] text-[11px] rounded-[5px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-primary">
             <Calendar className="h-3 w-3" />
             <span className="px-1">
             {format(new Date(task.scheduledDate), 'd MMM')}
@@ -131,7 +135,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         )}
         {/* Always show recurring indicator if task is recurring */}
         {taskIsRecurring && (
-          <div className="inline-flex self-start mt-1 items-center px-1.5 h-[24px] text-xs rounded-[5px] bg-blue-500/10 text-blue-500">
+          <div className="inline-flex self-start mt-1 items-center px-1 h-[20px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[5px] bg-white dark:bg-dark-bg-light text-blue-500">
             <Repeat className="h-3 w-3" />
           </div>
         )}
@@ -139,9 +143,9 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         {!hideTag && task.tag && (
           <div 
             key={`tag-${task.tag.id || 'default'}`}
-            className="inline-flex self-start mt-1 items-center px-1.5 py-1 text-xs rounded-[5px]"
+            className="inline-flex self-start mt-1 items-center px-1 h-[20px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[11px] rounded-[5px]"
             style={{
-              backgroundColor: `${task.tag.color}15`,
+          
               color: task.tag.color
             }}
           >
