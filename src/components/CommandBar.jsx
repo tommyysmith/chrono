@@ -211,6 +211,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     window.dispatchEvent(event);
   }, []);
 
+  // Listen for tags-updated events from other components
+  useEffect(() => {
+    const handleTagsUpdated = (event) => {
+      if (event.detail) {
+        setTags(event.detail);
+      }
+    };
+
+    window.addEventListener('tags-updated', handleTagsUpdated);
+    return () => {
+      window.removeEventListener('tags-updated', handleTagsUpdated);
+    };
+  }, []);
+
   // Don't automatically save tags to localStorage
   // Tags will be saved when a task is created or updated
   const [taskNotes, setTaskNotes] = useState('');

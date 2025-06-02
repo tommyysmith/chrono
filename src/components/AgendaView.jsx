@@ -290,9 +290,17 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
       setCurrentDate(prev => new Date(prev.getTime()));
     };
     
+    // Listen for tags-updated events to refresh task data when tag names change
+    const handleTagsUpdated = (event) => {
+      console.log('[AgendaView] Received tags-updated event');
+      // Force a re-render by updating the current date to refresh task data
+      setCurrentDate(prev => new Date(prev.getTime()));
+    };
+    
     // Add event listeners
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('tasksUpdated', handleTasksUpdated);
+    window.addEventListener('tags-updated', handleTagsUpdated);
     
     // Listen for specific events from useTaskManagement hook
     window.addEventListener('tasks-updated', handleTasksUpdated);
@@ -301,6 +309,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('tasksUpdated', handleTasksUpdated);
+      window.removeEventListener('tags-updated', handleTagsUpdated);
       window.removeEventListener('tasks-updated', handleTasksUpdated);
     };
   }, []);

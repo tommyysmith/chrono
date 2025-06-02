@@ -41,7 +41,14 @@ export const useEventRendering = (
   handleTaskDelete = null
 ) => {
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
+  const [tagUpdateKey, setTagUpdateKey] = useState(0);
   const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+
+  // Helper function to get fresh tag data from localStorage
+  const getFreshTagData = useCallback((tagId) => {
+    const tags = JSON.parse(localStorage.getItem('tags') || '{}');
+    return tags[tagId] || null;
+  }, [tagUpdateKey]); // Include tagUpdateKey to force re-computation when tags update
 
 
   // Task context menu handlers
@@ -140,7 +147,7 @@ export const useEventRendering = (
             localStorage.setItem('tasks', JSON.stringify(updatedTasks));
             const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
             window.dispatchEvent(event);
-            setTaskUpdateTrigger(prev => prev + 1);
+            // Task update handled by parent component
           }).catch(error => {
             console.error('Error importing generateNextDisplayableTaskInstance:', error);
           });
@@ -156,7 +163,7 @@ export const useEventRendering = (
         localStorage.setItem('tasks', JSON.stringify(updatedTasks));
         const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
         window.dispatchEvent(event);
-        setTaskUpdateTrigger(prev => prev + 1);
+        // Task update handled by parent component
       }
     } else {
       // For non-recurring tasks, just remove directly
@@ -169,7 +176,7 @@ export const useEventRendering = (
       localStorage.setItem('tasks', JSON.stringify(updatedTasks));
       const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
       window.dispatchEvent(event);
-      setTaskUpdateTrigger(prev => prev + 1);
+      // Task update handled by parent component
     }
     
     setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
@@ -178,15 +185,27 @@ export const useEventRendering = (
   // Listen for task updates to refresh the calendar
   useEffect(() => {
     const handleTaskUpdate = () => {
-      setTaskUpdateTrigger(prev => prev + 1);
+      // Use setTimeout to avoid React state update during render
+      setTimeout(() => {
+        setTaskUpdateTrigger(prev => prev + 1);
+      }, 0);
+    };
+
+    // Listen for tags-updated events to refresh tag display only
+    const handleTagsUpdated = () => {
+      setTagUpdateKey(prev => prev + 1);
     };
 
     window.addEventListener('storage', handleTaskUpdate);
     window.addEventListener('tasksUpdated', handleTaskUpdate);
+    window.addEventListener('tasks-updated', handleTaskUpdate);
+    window.addEventListener('tags-updated', handleTagsUpdated);
 
     return () => {
       window.removeEventListener('storage', handleTaskUpdate);
       window.removeEventListener('tasksUpdated', handleTaskUpdate);
+      window.removeEventListener('tasks-updated', handleTaskUpdate);
+      window.removeEventListener('tags-updated', handleTagsUpdated);
     };
   }, []);
 
@@ -507,7 +526,10 @@ export const useEventRendering = (
                               </div>
                             </TooltipTrigger>
                             <TooltipContent>
-                              <p>{event.originalTask.tag.label}</p>
+                              <p>{(() => {
+                                const freshTag = getFreshTagData(event.originalTask.tag.id);
+                                return freshTag ? freshTag.label : event.originalTask.tag.label;
+                              })()}</p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -533,6 +555,8 @@ export const useEventRendering = (
     handleEventClick,
     handleEventContextMenu,
     handleResizeStart,
+    taskUpdateTrigger,
+    tagUpdateKey,
   ]);
 
   // Add this import at the top if not already present
@@ -879,7 +903,10 @@ export const useEventRendering = (
                                        </div>
                                      </TooltipTrigger>
                                      <TooltipContent>
-                                       <p>{event.originalTask.tag.label}</p>
+                                       <p>{(() => {
+                                         const freshTag = getFreshTagData(event.originalTask.tag.id);
+                                         return freshTag ? freshTag.label : event.originalTask.tag.label;
+                                       })()}</p>
                                      </TooltipContent>
                                    </Tooltip>
                                  </TooltipProvider>
@@ -1038,7 +1065,10 @@ export const useEventRendering = (
                                          </div>
                                        </TooltipTrigger>
                                        <TooltipContent>
-                                         <p>{event.originalTask.tag.label}</p>
+                                         <p>{(() => {
+                                           const freshTag = getFreshTagData(event.originalTask.tag.id);
+                                           return freshTag ? freshTag.label : event.originalTask.tag.label;
+                                         })()}</p>
                                        </TooltipContent>
                                      </Tooltip>
                                    </TooltipProvider>
@@ -1066,7 +1096,7 @@ export const useEventRendering = (
         </div>
       </div>
     );
-  }, [events, selectedDate, viewType, handleEventClick, handleEventContextMenu, commandBarRef, taskUpdateTrigger]);
+  }, [events, selectedDate, viewType, handleEventClick, handleEventContextMenu, commandBarRef, taskUpdateTrigger, tagUpdateKey]);
 
   // Task Context Menu Popover Component
   const TaskContextMenuPopover = () => {

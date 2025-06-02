@@ -5,6 +5,7 @@ import { format, isToday, isTomorrow, isPast, isAfter, parseISO, addDays } from 
 import { useTaskManagement } from "../hooks/useTaskManagement";
 import { Completed } from "../assets/icons/Completed";
 import { Check } from "../assets/icons/Check"; 
+import { Edit } from "../assets/icons/Edit";
 // import ThemeToggle from '../components/ThemeToggle';
 import {
   ChevronDown,
@@ -202,6 +203,8 @@ export default function Sidebar({
   const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
+  const [editingTagId, setEditingTagId] = useState(null);
+  const [editingTagName, setEditingTagName] = useState("");
 
   // Save tasks to localStorage whenever they change
   useEffect(() => {
@@ -1550,9 +1553,86 @@ export default function Sidebar({
                                 <section.icon className="w-4 h-4" style={{ color: section.color }} />
                               </div>
                             )}
-                            <span className="flex items-end justify-center text-left text-sm">
-                              {section.label}
-                            </span>
+                            {editingTagId === section.id ? (
+                              <input
+                                type="text"
+                                value={editingTagName}
+                                onChange={(e) => setEditingTagName(e.target.value)}
+                                onBlur={() => {
+                                  if (editingTagName.trim()) {
+                                    const updatedTags = tags.map((t) =>
+                                       t.id === section.id ? { ...t, label: editingTagName.trim() } : t
+                                     );
+                                     setTags(updatedTags);
+                                     
+                                     // Dispatch tags-updated event to notify other components
+                                     window.dispatchEvent(new CustomEvent('tags-updated', {
+                                       detail: updatedTags
+                                     }));
+                                     
+                                     // Update all tasks that use this tag
+                                     setTasks((prevTasks) => {
+                                       const updatedTasksState = { ...prevTasks };
+                                       Object.keys(updatedTasksState).forEach((group) => {
+                                         if (Array.isArray(updatedTasksState[group])) {
+                                           updatedTasksState[group] = updatedTasksState[group].map((task) =>
+                                             task.tag?.id === section.id
+                                               ? {
+                                                   ...task,
+                                                   tag: {
+                                                     ...task.tag,
+                                                     label: editingTagName.trim(),
+                                                   },
+                                                 }
+                                               : task
+                                           );
+                                         }
+                                       });
+                                       
+                                       // Dispatch tasks-updated event to notify other components
+                                       window.dispatchEvent(new CustomEvent('tasks-updated', {
+                                         detail: updatedTasksState
+                                       }));
+                                       
+                                       return updatedTasksState;
+                                     });
+                                  }
+                                  setEditingTagId(null);
+                                  setEditingTagName("");
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.target.blur();
+                                  } else if (e.key === 'Escape') {
+                                    setEditingTagId(null);
+                                    setEditingTagName("");
+                                  }
+                                }}
+                                className="bg-transparent border-none outline-none text-sm text-light-text dark:text-dark-text min-w-0 flex-1"
+                                autoFocus
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <span 
+                                className="flex items-end justify-center select-none text-left text-sm cursor-pointer"
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  // Only allow renaming for custom tags (not built-in sections)
+                                  if (![
+                                    "overdue",
+                                    "dueToday", 
+                                    "dueTomorrow",
+                                    "dueSoon",
+                                    "inbox"
+                                  ].includes(section.id)) {
+                                    setEditingTagId(section.id);
+                                    setEditingTagName(section.label);
+                                  }
+                                }}
+                              >
+                                {section.label}
+                              </span>
+                            )}
                             {section.count > 0 && (
                               <span className="text-[10px] py-0.5 font-medium text-light-text/50 dark:text-dark-text/50">
                                 {section.count}
@@ -1817,6 +1897,11 @@ export default function Sidebar({
                             );
                             setTags(updatedTags);
 
+                            // Dispatch tags-updated event to notify other components
+                            window.dispatchEvent(new CustomEvent('tags-updated', {
+                              detail: updatedTags
+                            }));
+
                             // Update all tasks that use this tag
                             setTasks((prevTasks) => {
                               const updatedTasksState = { ...prevTasks };
@@ -1835,6 +1920,12 @@ export default function Sidebar({
                                   );
                                 }
                               });
+                              
+                              // Dispatch tasks-updated event to notify other components
+                              window.dispatchEvent(new CustomEvent('tasks-updated', {
+                                detail: updatedTasksState
+                              }));
+                              
                               return updatedTasksState;
                             });
 
@@ -1852,11 +1943,31 @@ export default function Sidebar({
                     {selectedTagId && (
                       <>
                         <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-                        <div className="p-1">
+                        <div className="p-1 space-y-1">
+                          <button
+                            className="w-full group flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-light-text dark:text-dark-text hover:bg-white/15 dark:hover:bg-dark-bg"
+                            onClick={() => {
+                              const tagToRename = tags.find(t => t.id === selectedTagId);
+                              if (tagToRename) {
+                                setEditingTagId(selectedTagId);
+                                setEditingTagName(tagToRename.label);
+                              }
+                              setColorMenuOpen(false);
+                            }}
+                          >
+                            <Edit className="w-3 h-3 text-white/50 group-hover:text-white" />
+                            <span className="text-white"> Rename </span>
+                          </button>
                           <button
                             className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
                             onClick={() => {
-                              setTags((prevTags) => prevTags.filter((tag) => tag.id !== selectedTagId));
+                              const updatedTags = tags.filter((tag) => tag.id !== selectedTagId);
+                              setTags(updatedTags);
+                              
+                              // Dispatch tags-updated event to notify other components
+                              window.dispatchEvent(new CustomEvent('tags-updated', {
+                                detail: updatedTags
+                              }));
                               setColorMenuOpen(false);
                             }}
                           >
