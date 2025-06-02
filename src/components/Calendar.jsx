@@ -518,7 +518,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 </svg>
               </div>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+            <PopoverContent align="end" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
               <div className="flex flex-col gap-1">
                 {Object.values(ViewType).map((type) => (
                   <button
@@ -637,6 +637,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   getTimeFromMousePosition={getTimeFromMousePosition}
                   getColumnFromMousePosition={getColumnFromMousePosition}
                   renderEvents={renderEvents}
+                  renderAllDayEvents={renderAllDayEvents}
                   timeGridRef={timeGridRef}
                   commandBarRef={commandBarRef}
                 />

@@ -19,6 +19,7 @@ export default function Day({
   getTimeFromMousePosition,
   getColumnFromMousePosition,
   renderEvents,
+  renderAllDayEvents,
   timeGridRef,
   commandBarRef,
 }) {
@@ -32,8 +33,8 @@ export default function Day({
             <div className="h-12" />
           </div>
           <div className="h-12 flex gap-1 flex-row items-center justify-start relative">
-            <div className="absolute left-1/2 -translate-x-[60px] flex gap-1 items-center">
-              <div className="text-xs text-light-text/50 dark:text-dark-text/50 font-medium">
+            <div className=" flex gap-1 translate-x-[-50px] items-center">
+              <div className="text-xs  text-light-text/50 dark:text-dark-text/50 font-medium">
                 {DAYS[selectedDate.getDay()]}
               </div>
               <div className="text-xs text-light-text dark:text-dark-text font-semibold">
@@ -55,40 +56,7 @@ export default function Day({
             All-day
           </div>
           <div className="relative">
-            <div className="flex flex-col gap-1 p-1">
-              {events
-                .filter(
-                  (event) =>
-                    event.isAllDay && isSameDay(event.start, selectedDate)
-                )
-                .map((event, index) => (
-                  <div
-                    key={`${event.id}-${index}`}
-                    className="z-10 bg-primary/5 backdrop-blur-md rounded-[9px] overflow-hidden cursor-pointer hover:ring-2 hover:ring-white/10"
-                    style={{
-                      backgroundColor: event.color
-                        ? `${event.color}20`
-                        : "#80808020",
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleEventClick(event);
-                    }}
-                    onContextMenu={(e) => handleEventContextMenu(e, event.id)}
-                  >
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-1"
-                      style={{ backgroundColor: event.color || "#808080" }}
-                    />
-                    <div className="px-2 py-1">
-                      <div className="font-medium text-xs">{event.title}</div>
-                    </div>
-                  </div>
-                ))}
-            </div>
+            {renderAllDayEvents && renderAllDayEvents()}
           </div>
         </div>
       </div>

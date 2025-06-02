@@ -25,16 +25,11 @@ const RepeatTaskEditModal = ({
       hasSubmitted.current = false;
     }
   }, [isOpen]);
-  
-  // Handle radio button selection
-  const handleRadioSelect = (scope) => {
-    setEditScope(scope);
-  };
-  
+
   // Handle clicking the Discard button
-  const handleDiscard = () => {
+  const handleDiscard = useCallback(() => {
     onClose();
-  };
+  }, [onClose]);
   
   // Handle the Continue editing button click
   const handleContinue = useCallback(() => {
@@ -94,12 +89,10 @@ const RepeatTaskEditModal = ({
       isDragging: updatedTask._isDragging,
       isResizing: updatedTask._isResizing,
       editScope,
-      start: updatedTask.start.toISOString(),
-      end: updatedTask.end.toISOString(),
-      exactPosition: updatedTask._exactPosition ? {
-        start: updatedTask._exactPosition.start.toISOString(),
-        end: updatedTask._exactPosition.end.toISOString()
-      } : null
+      updateSeries: updatedTask._updateSeries,
+      preserveRepeat: updatedTask._preserveRepeat,
+      detachedTask: updatedTask._detachedTask,
+      preserveExactPosition: updatedTask._preserveExactPosition
     });
 
     // Always update through onEditConfirm to ensure consistent handling
@@ -111,6 +104,35 @@ const RepeatTaskEditModal = ({
     // Close the modal
     onClose();
   }, [editScope, draggedTask, originalTask, onEditConfirm, onClose, isEditOperation, commandBarRef]);
+
+  // Handle keyboard shortcuts when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDiscard();
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleContinue();
+      }
+    };
+
+    // Add event listener with capture to ensure it runs before CommandBar's listener
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isOpen, handleDiscard, handleContinue]);
+  
+  // Handle radio button selection
+  const handleRadioSelect = (scope) => {
+    setEditScope(scope);
+  };
 
   // Don't render anything if not open or if we don't have the tasks
   if (!isOpen || !originalTask || !draggedTask) return null;
@@ -289,7 +311,7 @@ const RepeatTaskEditModal = ({
           onClick={handleDiscard}
           className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
         >
-          <span className="flex items-center pl-1 pr-3">Discard</span>
+          <span className="flex items-center pl-1 pr-3">Cancel</span>
           <div className="flex flex-row h-[20px] items-center outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border bg-black/5 dark:bg-white/5 px-1.5 rounded-[5px]">
             <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
           </div>

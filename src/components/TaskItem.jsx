@@ -116,10 +116,10 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <div className="flex flex-col flex-grow min-w-0">
+      <div className="flex flex-col flex-grow gap-1 min-w-0">
         <span 
           ref={textSpanRef}
-          className={`text-sm ${task.completed ? 'line-through opacity-50' : ''} break-words`}
+          className={`text-sm/[16px]  ${task.completed ? 'line-through opacity-50' : ''} break-words`}
         >
           {task.title}
         </span>
@@ -133,13 +133,6 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             </span>
           </div>
         )}
-        {/* Always show recurring indicator if task is recurring */}
-        {taskIsRecurring && (
-          <div className="inline-flex self-start mt-1 items-center px-1 h-[20px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[5px] bg-white dark:bg-dark-bg-light text-blue-500">
-            <Repeat className="h-3 w-3" />
-          </div>
-        )}
-        {/* Show tag if not hidden */}
         {!hideTag && task.tag && (
           <div 
             key={`tag-${task.tag.id || 'default'}`}
@@ -156,6 +149,14 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             </span>
           </div>
         )}
+
+        {taskIsRecurring && (
+          <div className="inline-flex self-start mt-1 items-center px-1 h-[20px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[5px] bg-white dark:bg-dark-bg-light text-blue-500">
+            <Repeat className="h-3 w-3" />
+          </div>
+        )}
+
+        
         </div>
       </div>
 
@@ -169,7 +170,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.1 }}
-                className="flex group absolute top-2 right-2 h-[24px] w-[24px] px-1 py-1 rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
+                className="flex items-center justify-center group absolute top-2 right-2 h-[20px] w-[20px] rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>

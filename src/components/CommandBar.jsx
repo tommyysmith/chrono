@@ -371,6 +371,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskRepeatSeriesId(null); // Reset task repeat series ID
     setTaskRruleOptions(null); // Reset task custom rule
     setIsRecurrenceModalOpen(false); // Close recurrence modal if open
+    // Reset schedule-related fields
+    setIsScheduleOpen(false); // Reset schedule dropdown state
+    setScheduleOption('today'); // Reset schedule option to default
+    setIsScheduling(false); // Reset scheduling state
+    setScheduledDate(null); // Reset scheduled date
     
     onClose();
   }, [onClose]);

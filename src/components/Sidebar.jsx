@@ -1432,10 +1432,10 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex rounded-[9px] ml-3 p-1 bg-black/5 dark:bg-dark-bg-lighter gap-2">
+                <div className="flex rounded-[7px] ml-3 p-0.5 bg-black/5 dark:bg-dark-bg-lighter gap-2">
                   {/* "All" Button */}
                   <button
-                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[28px] rounded-[5px] transition-colors duration-150 ease-in-out
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out
                                 ${
                                   selectedView === "all"
                                     ? "font-medium text-light-text dark:text-dark-text"
@@ -1458,7 +1458,7 @@ export default function Sidebar({
 
                   {/* "Completed" Button */}
                   <button
-                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[28px] rounded-[5px] transition-colors duration-150 ease-in-out
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out
                                 ${
                                   selectedView === "completed"
                                     ? "font-medium text-light-text dark:text-dark-text"
@@ -1713,7 +1713,7 @@ export default function Sidebar({
                                 }}
                                 className=""
                               >
-                                <div className="flex flex-col gap-2 py-1">
+                                <div className="flex flex-col gap-1">
                                   <div className="mt-1 flex flex-col gap-1">
                                     {section.tasks.map((task) => (
                                       <TaskItem
@@ -1945,7 +1945,7 @@ export default function Sidebar({
                         <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
                         <div className="p-1 space-y-1">
                           <button
-                            className="w-full group flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-light-text dark:text-dark-text hover:bg-white/15 dark:hover:bg-dark-bg"
+                            className="w-full group flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-light-text dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/10"
                             onClick={() => {
                               const tagToRename = tags.find(t => t.id === selectedTagId);
                               if (tagToRename) {

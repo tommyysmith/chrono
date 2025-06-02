@@ -25,16 +25,16 @@ const RepeatEditModal = ({
       hasSubmitted.current = false;
     }
   }, [isOpen]);
-  
+
   // Handle radio button selection
   const handleRadioSelect = (scope) => {
     setEditScope(scope);
   };
   
   // Handle clicking the Discard button
-  const handleDiscard = () => {
+  const handleDiscard = useCallback(() => {
     onClose();
-  };
+  }, [onClose]);
   
   // Handle the Continue editing button click
   const handleContinue = useCallback(() => {
@@ -109,6 +109,30 @@ const RepeatEditModal = ({
     // Close the modal
     onClose();
   }, [editScope, draggedEvent, originalEvent, onEditConfirm, onClose, isEditOperation, commandBarRef]);
+
+  // Handle keyboard shortcuts when modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleDiscard();
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleContinue();
+      }
+    };
+
+    // Add event listener with capture to ensure it runs before CommandBar's listener
+    document.addEventListener('keydown', handleKeyDown, true);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true);
+    };
+  }, [isOpen, handleDiscard, handleContinue]);
 
   // Don't render anything if not open or if we don't have the events
   if (!isOpen || !originalEvent || !draggedEvent) return null;

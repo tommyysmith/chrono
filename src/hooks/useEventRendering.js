@@ -559,7 +559,16 @@ export const useEventRendering = (
     tagUpdateKey,
   ]);
 
-  // Add this import at the top if not already present
+  // Shared styling function for both week and day views
+  const getEventClasses = (event, isPastEvent) => {
+    return `relative flex items-center text-xs mx-1 mt-1 mb-1 cursor-pointer select-none overflow-hidden z-10 ${
+      event.isTask 
+        ? `border border-dashed rounded-[5px] py-1 border-light-border dark:border-dark-border backdrop-blur-sm hover:bg-gray-100/90 dark:hover:bg-dark-bg-lighter `
+        : `backdrop-blur-md rounded-[5px] hover:bg-black/10 dark:hover:bg-white/10`
+    } ${
+      isPastEvent ? 'opacity-50' : ''
+    }`.trim();
+  };
 
   // In the renderAllDayEvents function, modify the section that processes events
   const renderAllDayEvents = useMemo(() => () => {
@@ -802,14 +811,7 @@ export const useEventRendering = (
                     : (event.color ? `${event.color}20` : undefined),
                 };
                 
-                // Tailwind classes for styling
-                const eventClasses = `relative flex items-center text-xs mx-1 mt-1 mb-1 cursor-pointer select-none overflow-hidden z-10 ${
-                  event.isTask 
-                    ? `border border-dashed rounded-[5px] py-2 px-1 border-gray-300 dark:border-gray-600 dark:bg-gray-800/80 backdrop-blur-sm hover:bg-gray-100/90 dark:hover:bg-light-bg `
-                    : `backdrop-blur-md rounded-[5px] hover:bg-black/10 dark:hover:bg-white/10`
-                } ${
-                  isPastEvent ? 'opacity-50' : ''
-                }`.trim();
+                // Use shared styling function
   
                 return (
                   <TooltipProvider key={event.id} delayDuration={2000}>
@@ -817,7 +819,7 @@ export const useEventRendering = (
                       <TooltipTrigger asChild>
                         <div
                           // key={event.id} // Key moved to TooltipProvider
-                          className={eventClasses}
+                          className={getEventClasses(event, isPastEvent)}
                           style={eventStyle}
                           onDoubleClick={(e) => {
                             e.stopPropagation();
@@ -931,14 +933,44 @@ export const useEventRendering = (
       );
     }
 
-    return (
-      <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border dark:border-dark-border">
-        <div className="flex items-start px-2 pt-2 text-[11px] text-light-text/30 dark:text-dark-text/30 font-medium">
-          All-day
-        </div>
-        <div className="relative">
-          <div className="flex flex-col gap-1 p-1">
-            {events
+    // Day view
+    if (viewType === ViewType.DAY) {
+      // Get tasks from localStorage and filter for calendar tasks on the selected day
+      const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+      const now = new Date();
+
+      const isPastEvent = new Date(event.end) < now;
+
+      const allTasks = tasks.all || [];
+      const selectedDateObj = new Date(selectedDate);
+      const calendarTasks = allTasks.filter(task => 
+        task.addToCalendar && 
+        task.scheduledDate && 
+        !task.completed &&
+        isSameDay(new Date(task.scheduledDate), selectedDateObj)
+      );
+
+      // Convert tasks to event-like objects for rendering
+      const taskEvents = calendarTasks.map(task => ({
+        id: `task-${task.id}`,
+        title: task.title,
+        start: task.scheduledDate,
+        end: task.scheduledDate,
+        allDay: true,
+        isAllDay: true,
+        color: task.tag?.color || '#6B7280', // Use tag color or default gray
+        isTask: true, // Flag to identify this as a task
+        originalTask: task // Keep reference to original task
+      }));
+
+      // Combine events and task events
+      const allEventsAndTasks = [...events, ...taskEvents];
+
+
+ 
+     return (
+           <div className="flex flex-col p-1">
+             {allEventsAndTasks
               .filter(
                 (event) => {
                   // Check both allDay and isAllDay properties to ensure compatibility
@@ -966,12 +998,7 @@ export const useEventRendering = (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <div
-                          // key={event.id} // Key moved to TooltipProvider
-                          className={`z-10 overflow-hidden cursor-pointer ${
-                            event.isTask 
-                              ? `border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-lg hover:bg-gray-100/90 dark:hover:bg-gray-700/90 hover:border-primary hover:ring-2 hover:ring-primary/20`
-                              : `bg-primary/5 backdrop-blur-md rounded-[9px] hover:ring-2 hover:ring-white/10`
-                          }`}
+                          className={getEventClasses(event, isPastEvent)}
                           style={{
                             backgroundColor: event.isTask
                               ? undefined
@@ -1008,14 +1035,10 @@ export const useEventRendering = (
                               style={{ backgroundColor: event.color || "#808080" }}
                             />
                           )}
-                          {event.isTask && event.color && (
-                            <div
-                              className="absolute left-0 top-0 bottom-0 w-1 rounded-l-lg"
-                              style={{ backgroundColor: event.color }}
-                            />
-                          )}
-                          <div className="px-2 py-1 relative">
-                            <div className="font-medium text-xs flex items-center gap-1">
+                         
+                          <div className="px-2 py-1 w-full relative">
+                            <div className="flex flex-grow w-full justify-between flex-row gap-2">
+                            <div className="font-medium text-xs flex items-center gap-2">
                               {event.isTask && (
                                 <Checkbox 
                                   checked={event.originalTask?.completed || false}
@@ -1027,6 +1050,7 @@ export const useEventRendering = (
                                 />
                               )}
                               {event.title}
+                              </div>
                               <div className="flex items-center gap-1 ml-auto">
                                  {((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || (event.originalTask?.seriesId && event.originalTask?.originalBaseId)) && (
                                    <TooltipProvider>
@@ -1093,9 +1117,11 @@ export const useEventRendering = (
                 );
               })}
           </div>
-        </div>
-      </div>
     );
+    }
+
+    // Default fallback for other view types
+    return null;
   }, [events, selectedDate, viewType, handleEventClick, handleEventContextMenu, commandBarRef, taskUpdateTrigger, tagUpdateKey]);
 
   // Task Context Menu Popover Component
