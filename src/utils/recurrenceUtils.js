@@ -461,7 +461,6 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
   console.log('Final operation flags:', { editScope, isDragging, isResizing, hasTimeChange: !!timeChange });
 
   // --- DEBUG LOGGING: Check seriesId before filtering ---
-  console.log('[DEBUG] updatedEvent.seriesId before filtering:', updatedEvent?.seriesId);
 
   if (!updatedEvent.seriesId) {
     console.warn('updateSeriesEvents called with non-series event');
@@ -902,7 +901,7 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
       if (options.until && typeof options.until === 'string') {
         options.until = new Date(options.until);
       }
-      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from rruleOptions:', options);
+
       rule = new RRule(options);
     } else if (typeof baseTaskDefinition.repeat === 'string' && baseTaskDefinition.repeat.startsWith('RRULE:')) {
       const rruleString = baseTaskDefinition.repeat;
@@ -926,7 +925,7 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
       if (tempOpts.until && typeof tempOpts.until === 'string') {
         tempOpts.until = new Date(tempOpts.until);
       }
-      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from parsed string options:', tempOpts);
+
       rule = new RRule(tempOpts);
     } else if (typeof baseTaskDefinition.repeat === 'string' && baseTaskDefinition.repeat !== 'none') {
       const options = {
@@ -940,7 +939,7 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
           options.count = baseTaskDefinition.rruleOptions.count;
         }
       }
-      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] Creating RRule from simple repeat pattern:', baseTaskDefinition.repeat, 'with options:', options);
+
       rule = createRRuleFromRepeatPattern(baseTaskDefinition.repeat, options, seriesStartDate);
     } else {
       console.warn('[RecurrenceUtils][generateNextDisplayableTaskInstance] Invalid recurrence format on base task.', baseTaskDefinition);
@@ -968,13 +967,9 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
   }
 
   try {
-    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] Calling rule.after() with date: ${pointInTimeForRruleAfter.toISOString()}, inclusive: false`);
     const nextOccurrenceDate = rule.after(pointInTimeForRruleAfter, false); 
     
-    console.log(`[RecurrenceUtils][generateNextDisplayableTaskInstance] RRule returned nextOccurrenceDate: ${nextOccurrenceDate ? nextOccurrenceDate.toISOString() : 'null'}`);
-    
     if (!nextOccurrenceDate) {
-      console.log('[RecurrenceUtils][generateNextDisplayableTaskInstance] No next occurrence found based on rule and pointInTimeForRruleAfter.');
       return null; 
     }
     
@@ -986,6 +981,55 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
     return generateNextTaskInstance(baseTaskDefinition, nextOccurrenceDate);
   } catch (error) {
     console.error('[RecurrenceUtils][generateNextDisplayableTaskInstance] Error in rule.after() or during call to generateNextTaskInstance:', error);
+    return null;
+  }
+}
+
+/**
+ * Get the next recurrence date for a task given its current date and repeat pattern
+ * @param {string} currentDate - The current scheduled date (ISO string)
+ * @param {string} repeatPattern - The repeat pattern (e.g., 'daily', 'weekly', 'monthly')
+ * @returns {string|null} The next occurrence date as ISO string, or null if no next date
+ */
+export function getNextRecurrenceDate(currentDate, repeatPattern) {
+  if (!currentDate || !repeatPattern || repeatPattern === 'none') {
+    return null;
+  }
+
+  try {
+    const current = new Date(currentDate);
+    if (isNaN(current.getTime())) {
+      console.error('[getNextRecurrenceDate] Invalid currentDate:', currentDate);
+      return null;
+    }
+
+    // Create a simple RRule to get the next occurrence
+    const options = {
+      dtstart: current,
+      count: 2 // We only need the current and next occurrence
+    };
+
+    const rule = createRRuleFromRepeatPattern(repeatPattern, options, current);
+    if (!rule) {
+      console.error('[getNextRecurrenceDate] Failed to create RRule for pattern:', repeatPattern);
+      return null;
+    }
+
+    // Get all occurrences (should be 2: current and next)
+    const occurrences = rule.all();
+    
+    // Return the second occurrence (next after current)
+    if (occurrences.length >= 2) {
+      return occurrences[1].toISOString();
+    } else if (occurrences.length === 1) {
+      // If only one occurrence, try to get the next one using 'after'
+      const nextOccurrence = rule.after(current, false);
+      return nextOccurrence ? nextOccurrence.toISOString() : null;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[getNextRecurrenceDate] Error calculating next date:', error);
     return null;
   }
 }

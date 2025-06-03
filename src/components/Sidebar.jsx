@@ -220,13 +220,10 @@ export default function Sidebar({
     }
   }, [tags]);
 
-  // Call ensureActiveRecurringInstances once on mount
+  // Note: ensureActiveRecurringInstances is now handled automatically by useTaskManagement
+  // No need to call it manually from components to avoid race conditions and duplicates
   useEffect(() => {
-    if (ensureActiveRecurringInstances) {
-      ensureActiveRecurringInstances();
-    }
-    // Reload tasks from local storage after ensuring instances, 
-    // as useTaskManagement might have updated them.
+    // Reload tasks from local storage on mount
     const savedTasks = localStorage.getItem("tasks");
     if (savedTasks) {
       try {
@@ -234,10 +231,10 @@ export default function Sidebar({
         // Preserve structure of initialTasks if needed, or merge carefully.
         setTasks(prevTasks => ({ ...prevTasks, ...parsed })); 
       } catch (e) {
-        // Error parsing tasks after ensuring instances
+        // Error parsing tasks on mount
       }
     }
-  }, [ensureActiveRecurringInstances]); // Dependency array ensures it runs if the function reference changes, though typically it won't.
+  }, []); // Empty dependency array since we only want this to run on mount
 
   // Listen for tags-updated event from CommandBar
   useEffect(() => {

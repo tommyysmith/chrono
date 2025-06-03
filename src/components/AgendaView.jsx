@@ -326,21 +326,8 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     setCurrentDate(prev => new Date(prev.getTime()));
   }, [onTaskDelete]);
   
-  // Add an effect to ensure active recurring instances when component mounts
-  useEffect(() => {
-    if (ensureActiveRecurringInstances) {
-      console.log('[AgendaView] Calling ensureActiveRecurringInstances');
-      ensureActiveRecurringInstances();
-      
-      // After ensuring active instances, force a refresh of the current view
-      setTimeout(() => {
-        setCurrentDate(prev => {
-          console.log('[AgendaView] Refreshing view after ensuring active instances');
-          return new Date(prev.getTime());
-        });
-      }, 200); // Small delay to allow state updates to propagate
-    }
-  }, [ensureActiveRecurringInstances]);
+  // Note: ensureActiveRecurringInstances is now handled automatically by useTaskManagement
+  // No need to call it manually from components to avoid race conditions and duplicates
 
   // Determine if we need to show the selector
   const showSelector = filteredEvents.length > 0 && filteredTasks.length > 0;

@@ -570,9 +570,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       id: originalEventState?.id,
       title: eventState.title.trim(),
       description: eventState.description,
-      start: eventState.isAllDay || eventState.isMultiDay ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+      start: (eventState.isAllDay || eventState.isMultiDay) ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
       end: eventState.isMultiDay 
-        ? (eventState.isAllDay ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.endDate} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
+        ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date())
         : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date())),
       allDay: eventState.isAllDay || eventState.isMultiDay,
       isAllDay: eventState.isAllDay || eventState.isMultiDay,
@@ -591,9 +591,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       _originalSeriesId: originalEventState?._originalSeriesId || originalEventState?.seriesId,
       _originalEvent: originalEventState?._originalEvent || originalEventState,
       _exactPosition: {
-        start: eventState.isAllDay || eventState.isMultiDay ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+        start: (eventState.isAllDay || eventState.isMultiDay) ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
         end: eventState.isMultiDay 
-          ? (eventState.isAllDay ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.endDate} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
+          ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date())
           : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
       },
       // Preserve repeat properties for series updates
@@ -973,22 +973,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             _originalTask: undefined
           };
           
-          // Add detached task to collections
-          updatedTasks.all.push(detachedTask);
-          
-          // Add to today if scheduled for today
-          if (scheduledDate && isToday(scheduledDate)) {
-            updatedTasks.today.push(detachedTask);
-          }
-          
-          // Add to tag collection if it exists
-          if (finalTag) {
-            const tagId = finalTag.id;
-            if (!Array.isArray(updatedTasks[tagId])) {
-              updatedTasks[tagId] = [];
-            }
-            updatedTasks[tagId].push(detachedTask);
-          }
+          // Let onCreateTask handle all collection management for detached task
+          onCreateTask(detachedTask);
           
           // Handle detachment logic
           const originalTask = taskToEdit._originalTask;
@@ -1032,9 +1018,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             } else {
               console.log('Original task is the base task, keeping it for series continuation');
             }
-           
-           // Save the updated tasks after processing the original instance
-           localStorage.setItem('tasks', JSON.stringify(updatedTasks));
            
            // Advance the recurring series by generating the next instance
            console.log('Advancing recurring series after detachment');
@@ -1237,7 +1220,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           title: taskTitle.trim(),
           notes: taskNotes.trim(),
           tag: finalTag,
-          scheduledDate: scheduledDate?.toISOString(),
+          // For recurring tasks, don't set scheduledDate on the base task - it will be set on instances
+          scheduledDate: (taskRepeatOption && taskRepeatOption !== 'none') ? undefined : scheduledDate?.toISOString(),
           completed: false,
           createdAt: new Date().toISOString(),
           repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
@@ -1247,43 +1231,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           addToCalendar: addToCalendar
         };
         
-        // For recurring tasks, calculate the appropriate scheduled date
-        if (taskRepeatOption && taskRepeatOption !== 'none' && !newTask.scheduledDate) {
-          if (taskRepeatOption === 'custom' && taskRruleOptions) {
-            // For custom recurrence patterns, calculate the first occurrence date
-            try {
-              const { RRule } = require('rrule');
-              const options = { ...taskRruleOptions };
-              
-              // Ensure dtstart is a proper Date object
-              if (options.dtstart) {
-                options.dtstart = new Date(options.dtstart);
-              } else {
-                options.dtstart = new Date(); // Use current date as fallback
-              }
-              
-              const rule = new RRule(options);
-              const firstOccurrence = rule.after(new Date(options.dtstart.getTime() - 1000), false);
-              
-              if (firstOccurrence) {
-                newTask.scheduledDate = firstOccurrence.toISOString();
-                console.log('Set custom recurrence first occurrence date:', newTask.scheduledDate);
-              } else {
-                // Fallback to dtstart if no occurrence found
-                newTask.scheduledDate = options.dtstart.toISOString();
-                console.log('No occurrence found, using dtstart as scheduled date:', newTask.scheduledDate);
-              }
-            } catch (error) {
-              console.error('Error calculating first occurrence for custom recurrence:', error);
-              // Fallback to current date
-              newTask.scheduledDate = new Date().toISOString();
-            }
-          } else {
-            // For simple repeat patterns, use today's date as default
-            newTask.scheduledDate = new Date().toISOString();
-            console.log('Added default scheduled date for recurring task:', newTask.scheduledDate);
-          }
+        // For recurring tasks, preserve the user's scheduled date for startDateOfSeries calculation
+        if (taskRepeatOption && taskRepeatOption !== 'none' && scheduledDate) {
+          newTask._originalScheduledDate = scheduledDate.toISOString();
         }
+        
+        // Note: For recurring tasks, the scheduled date logic is handled in useTaskManagement.js
+        // The base task will have scheduledDate = undefined, and instances will be generated with proper dates
         
         console.log('Creating new task with recurring options:', {
           repeat: taskRepeatOption,
@@ -1291,41 +1245,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           seriesId: seriesId
         });
 
-        // Add to all tasks
-        updatedTasks.all.push(newTask);
-
-        // Add to today if scheduled for today
-        if (newTask.scheduledDate && isToday(parseISO(newTask.scheduledDate))) {
-          updatedTasks.today.push(newTask);
-        }
-
-        // Add to tag collection if it exists
-        if (finalTag) {
-          if (!Array.isArray(updatedTasks[finalTag.id])) {
-            updatedTasks[finalTag.id] = [];
-          }
-          updatedTasks[finalTag.id].push(newTask);
-        }
-
+        // Let onCreateTask handle all collection management
         onCreateTask(newTask);
       }
-
-      // Save to localStorage and dispatch event
-      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-      dispatchTasksUpdated(updatedTasks);
-      
-      // Dispatch a custom event for in-app components to listen for
-      window.dispatchEvent(new CustomEvent('tasksUpdated', {
-        detail: { tasks: updatedTasks }
-      }));
-      
-      // Trigger a storage event to notify other components about the change
-      // This is particularly important for AgendaView to refresh recurring tasks
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'tasks',
-        newValue: JSON.stringify(updatedTasks),
-        url: window.location.href
-      }));
 
       // Reset form and states
       setTaskTitle('');
@@ -2069,33 +1991,42 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     {/* Time and Date Group - No Divider Between */}
                     <div className="flex flex-col">
                       {/* Time Section */}
-                      <div className="flex items-top gap-2 px-4 py-4">
+                      <div className={`flex items-top gap-2 px-4 py-4 ${eventState.isMultiDay ? 'opacity-50' : ''}`}>
                         <div className="w-5 h-5 flex items-center justify-center">
-                          <Clock className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                          <Clock className={`w-4 h-4 ${eventState.isMultiDay ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`} />
                         </div>
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
                             {/* Start Time Popover Input */}
-                            <Popover open={isStartTimePickerOpen} onOpenChange={setIsStartTimePickerOpen}>
+                            <Popover open={!eventState.isMultiDay && isStartTimePickerOpen} onOpenChange={eventState.isMultiDay ? () => {} : setIsStartTimePickerOpen}>
                               <PopoverTrigger asChild>
                                 <input
                                   type="text"
                                   placeholder="Start"
                                   value={startTimeSearch || format(parse(eventState.startTime, 'HH:mm', new Date()), 'h:mm a')}
+                                  disabled={eventState.isMultiDay}
                                   onFocus={(e) => {
-                                    setTimeout(() => e.target.select(), 0);
-                                    setStartTimeSearch(''); // Clear search on focus to show all
+                                    if (!eventState.isMultiDay) {
+                                      setTimeout(() => e.target.select(), 0);
+                                      setStartTimeSearch(''); // Clear search on focus to show all
+                                    }
                                   }}
                                   onChange={(e) => {
-                                    const inputText = e.target.value;
-                                    setStartTimeSearch(inputText); // Update search term for filtering
-                                    const parsedTime = parseTimeString(inputText);
-                                    if (parsedTime) {
-                                      // Only update if valid parse - popover selection handles other cases
-                                      handleEventChange('startTime', parsedTime);
-                                    } 
+                                    if (!eventState.isMultiDay) {
+                                      const inputText = e.target.value;
+                                      setStartTimeSearch(inputText); // Update search term for filtering
+                                      const parsedTime = parseTimeString(inputText);
+                                      if (parsedTime) {
+                                        // Only update if valid parse - popover selection handles other cases
+                                        handleEventChange('startTime', parsedTime);
+                                      } 
+                                    }
                                   }}
-                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-[64px] p-0 cursor-pointer focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                  className={`text-sm bg-transparent border-none w-[64px] p-0 focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden ${
+                                    eventState.isMultiDay 
+                                      ? 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed' 
+                                      : 'text-light-text dark:text-dark-text cursor-pointer'
+                                  }`}
                                 />
                               </PopoverTrigger>
                               <PopoverContent 
@@ -2127,29 +2058,38 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </PopoverContent>
                             </Popover>
 
-                            <span className="text-light-text/50 dark:text-dark-text/50">→</span>
+                            <span className={`${eventState.isMultiDay ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`}>→</span>
 
                             {/* End Time Popover Input */}
-                            <Popover open={isEndTimePickerOpen} onOpenChange={setIsEndTimePickerOpen}>
+                            <Popover open={!eventState.isMultiDay && isEndTimePickerOpen} onOpenChange={eventState.isMultiDay ? () => {} : setIsEndTimePickerOpen}>
                               <PopoverTrigger asChild>
                                  <input
                                   type="text"
                                   placeholder="End"
                                   value={endTimeSearch || format(parse(eventState.endTime, 'HH:mm', new Date()), 'h:mm a')}
+                                  disabled={eventState.isMultiDay}
                                   onFocus={(e) => {
-                                    setTimeout(() => e.target.select(), 0);
-                                    setEndTimeSearch(''); // Clear search on focus
+                                    if (!eventState.isMultiDay) {
+                                      setTimeout(() => e.target.select(), 0);
+                                      setEndTimeSearch(''); // Clear search on focus
+                                    }
                                   }}
                                   onChange={(e) => {
-                                    const inputText = e.target.value;
-                                    setEndTimeSearch(inputText);
-                                    const parsedTime = parseTimeString(inputText);
-                                     if (parsedTime) {
-                                        // Only update if valid parse
-                                       handleEventChange('endTime', ensureMinimumGap(eventState.startTime, parsedTime));
-                                     }
+                                    if (!eventState.isMultiDay) {
+                                      const inputText = e.target.value;
+                                      setEndTimeSearch(inputText);
+                                      const parsedTime = parseTimeString(inputText);
+                                       if (parsedTime) {
+                                          // Only update if valid parse
+                                         handleEventChange('endTime', ensureMinimumGap(eventState.startTime, parsedTime));
+                                       }
+                                    }
                                   }}
-                                  className="text-sm text-light-text dark:text-dark-text bg-transparent border-none w-[64px] p-0 cursor-pointer focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden"
+                                  className={`text-sm bg-transparent border-none w-[64px] p-0 focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden ${
+                                    eventState.isMultiDay 
+                                      ? 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed' 
+                                      : 'text-light-text dark:text-dark-text cursor-pointer'
+                                  }`}
                                 />
                               </PopoverTrigger>
                               <PopoverContent 

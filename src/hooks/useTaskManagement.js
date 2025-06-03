@@ -1,6 +1,7 @@
 import { generateRecurringTasks, generateNextDisplayableTaskInstance } from '../utils/recurrenceUtils';
-import { useEffect, useCallback } from 'react'; // Added useCallback
+import { useEffect, useCallback, useRef } from 'react'; // Added useCallback and useRef
 import { isToday, parseISO } from 'date-fns'; // Import date-fns functions
+import { getNextRecurrenceDate } from '../utils/recurrenceUtils';
 
 export function useTaskManagement() {
   /**
@@ -29,6 +30,7 @@ export function useTaskManagement() {
 
       // Generate seriesId for new base recurring tasks
       if (newTask.repeat && newTask.repeat !== 'none' && !newTask.isRepeat && !newTask.seriesId) {
+        
         newTask.seriesId = `series_${Date.now().toString()}_${Math.random().toString(36).substring(2, 9)}`;
         // Ensure startDateOfSeries is set for rrule generation for the base task
         if (!newTask.startDateOfSeries && newTask.scheduledDate) {
@@ -44,27 +46,53 @@ export function useTaskManagement() {
             newTask.startDateOfSeries = newTask.createdAt;
         }
       }
+      
+      // For a new recurring base task, preserve the original scheduled date for startDateOfSeries
+      // then set scheduledDate to undefined to prevent the base task from being displayed
+      let originalScheduledDate = null;
+      if (newTask.repeat && newTask.repeat !== 'none' && !newTask.isRepeat) {
+        // Use _originalScheduledDate from CommandBar if available, otherwise fall back to scheduledDate
+        originalScheduledDate = newTask._originalScheduledDate || newTask.scheduledDate;
+        newTask.scheduledDate = undefined;
+        // Clean up the temporary field
+        delete newTask._originalScheduledDate;
+      }
 
       // Add/Update the newTask (which could be a base definition or a single task/instance) to 'all' and its tag group
       // Remove existing task if it's an update to prevent duplicates, before adding the new/updated one.
+      
+      // Always add/update tasks in the 'all' collection for reference
       tasks.all = tasks.all.filter(t => t.id !== newTask.id);
       tasks.all.push(newTask);
-
-      if (tagGroup !== "all") {
+      
+      // For recurring base tasks, don't add them to other collections
+      // as they should not appear as completable tasks in the UI - only their instances should
+      const isRecurringBaseTask = newTask.repeat && newTask.repeat !== 'none' && !newTask.isRepeat;
+      
+      if (!isRecurringBaseTask && tagGroup !== "all") {
         tasks[tagGroup] = tasks[tagGroup].filter(t => t.id !== newTask.id);
         tasks[tagGroup].push(newTask);
       }
       
       // If it's a new base recurring task, generate only the first instance
       if (newTask.repeat && newTask.repeat !== 'none' && !newTask.isRepeat) {
+
+        
         // Ensure baseTask has required fields for instance generation
         const baseTaskForRRule = { ...newTask }; 
+        
+        // Crucially, ensure the baseTaskForRRule also has its scheduledDate undefined
+        // if it's a recurring task, to align with the modification made to newTask.
+        if (baseTaskForRRule.repeat && baseTaskForRRule.repeat !== 'none' && !baseTaskForRRule.isRepeat) {
+          baseTaskForRRule.scheduledDate = undefined;
+        }
+        
         if (!baseTaskForRRule.startDateOfSeries) {
           // For custom recurring tasks, use the dtstart from rruleOptions if available
           if (baseTaskForRRule.rruleOptions && baseTaskForRRule.rruleOptions.dtstart) {
             baseTaskForRRule.startDateOfSeries = new Date(baseTaskForRRule.rruleOptions.dtstart).toISOString();
-          } else if (baseTaskForRRule.scheduledDate) {
-            baseTaskForRRule.startDateOfSeries = baseTaskForRRule.scheduledDate;
+          } else if (originalScheduledDate) {
+            baseTaskForRRule.startDateOfSeries = originalScheduledDate;
           } else if (baseTaskForRRule.createdAt) {
             baseTaskForRRule.startDateOfSeries = baseTaskForRRule.createdAt;
           } else {
@@ -77,33 +105,67 @@ export function useTaskManagement() {
         const firstInstance = generateNextDisplayableTaskInstance(baseTaskForRRule, null);
 
         if (firstInstance) {
-          // Ensure the instance has proper properties
-          const instanceToAdd = {
-            ...firstInstance,
-            seriesId: baseTaskForRRule.seriesId,
-            isRepeat: true,
-            tag: firstInstance.tag || baseTaskForRRule.tag,
-            originalBaseId: baseTaskForRRule.id
-          };
+          // Check if an instance with this scheduled date already exists to prevent duplicates
+          const expectedInstanceId = `${baseTaskForRRule.seriesId}_repeat_${new Date(firstInstance.scheduledDate).getTime()}`;
+          const instanceAlreadyExists = tasks.all.some(instance => 
+            instance.seriesId === baseTaskForRRule.seriesId && 
+            instance.isRepeat === true &&
+            (instance.id === expectedInstanceId || 
+             instance.id === firstInstance.id ||
+             (instance.scheduledDate && firstInstance.scheduledDate && 
+              new Date(instance.scheduledDate).getTime() === new Date(firstInstance.scheduledDate).getTime()))
+          );
+          
+          if (!instanceAlreadyExists) {
+            // Ensure the instance has proper properties
+            const instanceToAdd = {
+              ...firstInstance,
+              seriesId: baseTaskForRRule.seriesId,
+              isRepeat: true,
+              tag: firstInstance.tag || baseTaskForRRule.tag,
+              originalBaseId: baseTaskForRRule.id,
+              id: firstInstance.id && !String(firstInstance.id).includes('undefined') && !String(firstInstance.id).includes('null')
+                  ? firstInstance.id 
+                  : expectedInstanceId
+            };
 
-          // Add instance to 'all' if not already present
-          if (!tasks.all.some(t => t.id === instanceToAdd.id)) {
-            tasks.all.push(instanceToAdd);
-          }
-          // Add instance to its tag group
-          const instanceTagGroup = instanceToAdd.tag ? instanceToAdd.tag.id : "all";
-          if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
-          if (instanceTagGroup !== "all" && !tasks[instanceTagGroup].some(t => t.id === instanceToAdd.id)) {
-            tasks[instanceTagGroup].push(instanceToAdd);
-          }
-          // Add instance to 'today' collection if scheduled for today
-          if (instanceToAdd.scheduledDate && isToday(parseISO(instanceToAdd.scheduledDate))) {
-            if (!tasks.today.some(t => t.id === instanceToAdd.id)) {
-              tasks.today.push(instanceToAdd);
+            console.log('[CREATION DEBUG] Adding new instance to collections:', {
+              instanceId: instanceToAdd.id,
+              seriesId: instanceToAdd.seriesId,
+              scheduledDate: instanceToAdd.scheduledDate,
+              timestamp: new Date().toISOString()
+            });
+
+            // Add instance to 'all' if not already present
+            const existsInAll = tasks.all.some(t => t.id === instanceToAdd.id);
+            if (!existsInAll) {
+              tasks.all.push(instanceToAdd);
             }
+            
+            // Add instance to its tag group
+            const instanceTagGroup = instanceToAdd.tag ? instanceToAdd.tag.id : "all";
+            if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
+            const existsInTagGroup = instanceTagGroup !== "all" && tasks[instanceTagGroup].some(t => t.id === instanceToAdd.id);
+            if (instanceTagGroup !== "all" && !existsInTagGroup) {
+              tasks[instanceTagGroup].push(instanceToAdd);
+            }
+            
+            // Add instance to 'today' collection if scheduled for today
+            if (instanceToAdd.scheduledDate && isToday(parseISO(instanceToAdd.scheduledDate))) {
+              const existsInToday = tasks.today.some(t => t.id === instanceToAdd.id);
+              if (!existsInToday) {
+                tasks.today.push(instanceToAdd);
+              }
+            }
+          } else {
+            console.log('[CREATION DEBUG] Skipping instance creation - already exists:', {
+              seriesId: baseTaskForRRule.seriesId,
+              expectedInstanceId,
+              timestamp: new Date().toISOString()
+            });
           }
         }
-      } else if (newTask.scheduledDate && isToday(parseISO(newTask.scheduledDate))) {
+      } else if (!isRecurringBaseTask && newTask.scheduledDate && isToday(parseISO(newTask.scheduledDate))) {
         // If it's a non-recurring task OR a single existing instance being updated, and scheduled for today
         // Ensure it's in the 'today' array (handles cases where a task is moved to today)
         tasks.today = tasks.today.filter(t => t.id !== newTask.id); // Remove if present to re-add (updates position or ensures no dupes)
@@ -952,413 +1014,6 @@ export function useTaskManagement() {
         newValue: JSON.stringify(tasks),
         url: window.location.href
       }));
-      
-      return true;
-    } catch (error) {
-      console.error('Error in handleUpdateTask:', error);
-      return false;
-    }
-  }, []);
-
-  const handleToggleTaskCompletion = useCallback((taskIdOrObject, scope = 'single') => {
-
-    try {
-      const savedTasks = localStorage.getItem("tasks") || "{}";
-      const tasks = JSON.parse(savedTasks);
-      
-      // Ensure basic collections exist
-      if (!tasks.all) tasks.all = [];
-      if (!tasks.today) tasks.today = [];
-      if (!tasks.completed) tasks.completed = [];
-      
-      let taskId;
-      let taskToToggle = null;
-      let seriesId = null;
-      let isRecurringInstance = false;
-      let newCompletionState = false;
-      let baseTask = null;
-
-      if (typeof taskIdOrObject === 'object' && taskIdOrObject !== null) {
-        taskToToggle = { ...taskIdOrObject }; // Clone the task object
-        taskId = taskToToggle.id;
-        isRecurringInstance = !!taskToToggle.isRepeat;
-        seriesId = taskToToggle.seriesId;
-        newCompletionState = !taskToToggle.completed;
-
-
-        // Data recovery for object: If it's a repeat task but seriesId is missing, try to get it from base task via originalBaseId
-        if (isRecurringInstance && !seriesId && taskToToggle.originalBaseId) {
-          console.warn(`[handleToggleTaskCompletion] Object: Recurring instance ${taskId} is missing seriesId. Attempting recovery via originalBaseId: ${taskToToggle.originalBaseId}`);
-          baseTask = tasks.all.find(t => t.id === taskToToggle.originalBaseId && (t.isRepeat === false || typeof t.isRepeat === 'undefined'));
-          if (baseTask && baseTask.seriesId) {
-            taskToToggle.seriesId = baseTask.seriesId;
-            seriesId = baseTask.seriesId; // Update local variable too
-
-          } else {
-            console.error(`[handleToggleTaskCompletion] Object: Could not recover seriesId for ${taskId} using originalBaseId ${taskToToggle.originalBaseId}. Base task for recovery:`, baseTask);
-          }
-        } else if (isRecurringInstance && !seriesId && !taskToToggle.originalBaseId) {
-          console.error(`[handleToggleTaskCompletion] CRITICAL (Object): Recurring instance ${taskId} is missing BOTH seriesId and originalBaseId. Cannot reliably find base task.`);
-        }
-      } else if (typeof taskIdOrObject === 'string') {
-        taskId = taskIdOrObject;
-        // Check if it's a recurring instance ID (e.g., "seriesId_repeat_timestamp")
-        const match = taskId.match(/^(series_.*?)_repeat_(\d+)$/);
-        if (match) {
-          isRecurringInstance = true;
-          seriesId = match[1]; // This is the extracted seriesId
-          newCompletionState = true; // Default to completing if it's a new instance being created on-the-fly
-
-        } else {
-
-          // It might be a regular task ID, isRecurringInstance remains false, seriesId remains null
-        }
-      } else {
-        console.error('[handleToggleTaskCompletion] Invalid taskIdOrObject type:', taskIdOrObject);
-        return false;
-      }
-
-      // If we have a task object (either passed in or to be found by ID), try to use it or find it.
-      // If taskToToggle is already populated, it means an object was passed in.
-      // If not, and taskId is available, try to find it in localStorage.
-      if (!taskToToggle && taskId) {
-
-        for (const groupKey in tasks) {
-          if (Array.isArray(tasks[groupKey])) {
-            const taskIndex = tasks[groupKey].findIndex(t => t.id === taskId);
-            if (taskIndex !== -1) {
-              taskToToggle = { ...tasks[groupKey][taskIndex] }; // Clone the task
-              isRecurringInstance = !!taskToToggle.isRepeat;
-              seriesId = taskToToggle.seriesId; // Get seriesId from the found task
-              newCompletionState = !taskToToggle.completed;
-
-
-              // Data recovery: If it's a repeat task but seriesId is missing, try to get it from base task via originalBaseId
-              if (taskToToggle.isRepeat && !taskToToggle.seriesId && taskToToggle.originalBaseId) {
-                console.warn(`[handleToggleTaskCompletion] Recurring instance ${taskToToggle.id} is missing seriesId. Attempting recovery via originalBaseId: ${taskToToggle.originalBaseId}`);
-                const baseTaskForRecovery = tasks.all.find(t => t.id === taskToToggle.originalBaseId && (t.isRepeat === false || typeof t.isRepeat === 'undefined'));
-                if (baseTaskForRecovery && baseTaskForRecovery.seriesId) {
-                  taskToToggle.seriesId = baseTaskForRecovery.seriesId;
-                  seriesId = baseTaskForRecovery.seriesId; // Update local variable too
-
-                } else {
-                  console.error(`[handleToggleTaskCompletion] Could not find base task or seriesId for recovery for instance ${taskToToggle.id} using originalBaseId ${taskToToggle.originalBaseId}`);
-                }
-              }
-              break; // Found it, no need to continue searching
-            }
-          }
-        }
-      }
-
-      // If we still don't have a task (e.g. string ID didn't match localStorage), try to handle it as a recurring instance
-      if (!taskToToggle) {
-
-        if (isRecurringInstance && seriesId) { // seriesId would have been extracted from string ID or recovered
-
-
-          baseTask = tasks.all.find(
-            (t) => t.seriesId === seriesId && (t.isRepeat === false || typeof t.isRepeat === 'undefined')
-          );
-
-
-          if (!baseTask) {
-            console.error(`[handleToggleTaskCompletion] CRITICAL: Could not find base task for seriesId: '${seriesId}'. This is likely the root cause of 'Task not found' error.`);
-            const potentialBaseTasks = tasks.all.filter(t => (t.isRepeat === false || typeof t.isRepeat === 'undefined') && t.repeat && t.repeat !== 'none');
-            const similarSeriesIdTasks = tasks.all.filter(t => t.seriesId && seriesId && (t.seriesId.includes(seriesId) || seriesId.includes(t.seriesId)));
-          } else {
-
-          }
-          
-          // If baseTask found, proceed to create the instance object (taskToToggle)
-          if (baseTask) {
-            // Create a new instance based on the updated task data
-            let newInstance;
-            
-            if (typeof taskIdOrObject === 'object') {
-              // If we have a task object, use its properties
-              newInstance = {
-                ...baseTask, // Start with base task properties
-                ...taskIdOrObject, // Override with provided properties
-                id: taskId, // Ensure ID is consistent
-                isRepeat: true,
-                seriesId: seriesId,
-                createdAt: new Date().toISOString(),
-                completed: !taskIdOrObject.completed // Toggle the completion state
-              };
-            } else {
-              // If we only have an ID, create a minimal instance
-              newInstance = {
-                ...baseTask,
-                id: taskId,
-                isRepeat: true,
-                seriesId: seriesId,
-                createdAt: new Date().toISOString(),
-                completed: true // Default to completing the task
-              };
-            }
-            
-            newCompletionState = newInstance.completed;
-            
-            // Add the new instance to collections
-            const instanceTagGroup = newInstance.tag ? newInstance.tag.id : "all";
-            if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
-            
-            // Remove any existing instance with the same ID to avoid duplicates
-            tasks[instanceTagGroup] = tasks[instanceTagGroup].filter(t => t.id !== taskId);
-            tasks.all = tasks.all.filter(t => t.id !== taskId);
-            
-            // Add the new instance
-            tasks[instanceTagGroup].push(newInstance);
-            tasks.all.push(newInstance);
-            
-            // Set taskToToggle to this new instance
-            taskToToggle = newInstance;
-            
-
-          } else {
-            console.error('Could not find base task definition for series:', seriesId);
-            return false;
-          }
-        } else {
-          console.error("Task not found for completion toggle:", taskId);
-          return false;
-        }
-      }
-      
-
-      
-      // Update the task's completion state IN PLACE in all collections where it exists
-      for (const groupKey in tasks) {
-        if (Array.isArray(tasks[groupKey])) {
-          tasks[groupKey] = tasks[groupKey].map(t => {
-            if (t.id === taskId) {
-              const updatedInstance = { ...t, completed: newCompletionState };
-              if (newCompletionState) {
-                updatedInstance.completedAt = new Date().toISOString();
-              } else {
-                delete updatedInstance.completedAt;
-              }
-              return updatedInstance;
-            }
-            return t;
-          });
-        }
-      }
-
-      // If task is being marked as completed, move it to the 'completed' collection
-      // and remove from other active collections (like 'today', tag groups, but not 'all')
-      if (newCompletionState) {
-
-        let taskMovedToCompleted = null;
-
-        // First, find the task in 'all' to ensure we have the most up-to-date version
-        const taskFromAll = tasks.all.find(t => t.id === taskId);
-        if (taskFromAll) {
-          taskMovedToCompleted = { 
-            ...taskFromAll, 
-            completed: true, 
-            completedAt: new Date().toISOString(),
-            // Preserve the original scheduled date for recurring tasks
-            scheduledDate: taskFromAll.scheduledDate || taskFromAll.startDateOfSeries
-          };
-        }
-
-        // Remove from active collections
-        if (tasks.today) {
-          tasks.today = tasks.today.filter(t => t.id !== taskId);
-        }
-        
-        // Remove from specific tag groups
-        if (taskToToggle.tag && taskToToggle.tag.id && tasks[taskToToggle.tag.id]) {
-          tasks[taskToToggle.tag.id] = tasks[taskToToggle.tag.id].filter(t => t.id !== taskId);
-        }
-        
-        // Ensure the task is in 'all' with updated completion status
-        if (taskMovedToCompleted) {
-          tasks.all = tasks.all.map(t => t.id === taskId ? taskMovedToCompleted : t);
-          
-          // Add to completed collection
-          if (!tasks.completed) tasks.completed = [];
-          tasks.completed = tasks.completed.filter(t => t.id !== taskId); // Remove if already there
-          tasks.completed.push(taskMovedToCompleted);
-          
-
-        }
-        
-        // If a recurring task instance was completed, generate the next instance
-        const isRecurringSeriesRelated = taskToToggle.isRepeat || (taskToToggle.seriesId && taskToToggle.repeat && taskToToggle.repeat !== 'none');
-
-
-        if (isRecurringSeriesRelated) {
-
-          if (!newCompletionState) { // Task is being marked as INCOMPLETE
-            // If an incomplete task is part of a series and its base definition might have been hidden,
-            // we might need to re-evaluate. For now, just ensuring it's in active lists.
-            // (Future: Consider if base task needs to be explicitly shown if all instances are removed/incomplete)
-
-          } else { // Task is being marked as COMPLETE
-
-            // Find the base task definition using its seriesId
-            // The task being toggled might be an instance or a base definition of a recurring series
-            const baseTaskDefinition = tasks.all.find(
-              (t) => t.seriesId === taskToToggle.seriesId && (t.isRepeat === false || typeof t.isRepeat === 'undefined')
-            );
-
-
-            if (baseTaskDefinition) {
-
-              // Use the original scheduledDate of the task *just completed* to find the next one
-              const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskToToggle.scheduledDate)); // taskToToggle.scheduledDate IS the original date of the item just completed
-
-              
-              if (nextInstance) {
-                // Check if this exact instance (by ID or by seriesId + scheduledDate) already exists and is active
-                const instanceExists = (tasks.all || []).some(t => 
-                  t.id === nextInstance.id || 
-                  (t.seriesId === nextInstance.seriesId && t.scheduledDate === nextInstance.scheduledDate && !t.completed)
-                );
-
-                if (!instanceExists) {
-
-                  // Add to 'all' collection
-                  if (!tasks.all) tasks.all = [];
-                  tasks.all.push(nextInstance);
-
-                  // Add to specific tag group if applicable
-                  if (nextInstance.tag && nextInstance.tag.id) {
-                    const nextInstanceTagGroup = nextInstance.tag.id;
-                    if (!tasks[nextInstanceTagGroup]) tasks[nextInstanceTagGroup] = [];
-                    tasks[nextInstanceTagGroup].push(nextInstance);
-                  }
-
-                  // Add to 'today' collection if scheduled for today
-                  if (nextInstance.scheduledDate && isToday(parseISO(nextInstance.scheduledDate))) {
-                    if (!tasks.today) tasks.today = [];
-                    tasks.today.push(nextInstance);
-
-                  }
-                } else {
-
-                }
-              } else {
-
-              }
-            } else {
-
-            }
-          }
-        }
-      } else {
-        // Task is being marked as NOT completed (incomplete)
-
-        let taskMovedFromCompleted = null;
-
-        // Find the task in 'all' to get the most up-to-date version
-        const taskFromAll = tasks.all.find(t => t.id === taskId);
-        if (taskFromAll) {
-          taskMovedFromCompleted = { 
-            ...taskFromAll, 
-            completed: false, 
-            completedAt: undefined
-          };
-          
-          // If this was a recurring task, handle detachment based on type
-          if (taskMovedFromCompleted.seriesId && (taskMovedFromCompleted.isRepeat === true || taskMovedFromCompleted.isRepeat === false)) {
-
-            
-            if (taskMovedFromCompleted.isRepeat === true) {
-              // For instances, simply detach them from the series
-              taskMovedFromCompleted.isRepeat = false;
-              taskMovedFromCompleted.seriesId = null;
-              taskMovedFromCompleted.originalBaseId = null;
-              taskMovedFromCompleted.repeat = 'none';
-
-            } else if (taskMovedFromCompleted.isRepeat === false) {
-              // For base definitions, create a new standalone task and preserve the original base
-              const originalSeriesId = taskMovedFromCompleted.seriesId;
-              const originalRepeat = taskMovedFromCompleted.repeat;
-              const originalRruleOptions = taskMovedFromCompleted.rruleOptions;
-              
-              // Create a new standalone task from the base definition
-              const standaloneTask = {
-                ...taskMovedFromCompleted,
-                id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                isRepeat: false,
-                seriesId: null,
-                originalBaseId: null,
-                repeat: 'none',
-                rruleOptions: null,
-                completed: false,
-                completedAt: undefined
-              };
-              
-              // Add the standalone task to collections
-              tasks.all.push(standaloneTask);
-              
-              // Add to 'today' if scheduled for today
-              if (standaloneTask.scheduledDate && isToday(parseISO(standaloneTask.scheduledDate))) {
-                if (!tasks.today) tasks.today = [];
-                tasks.today.push(standaloneTask);
-              }
-              
-              // Add to its specific tag group if applicable
-              if (standaloneTask.tag && standaloneTask.tag.id) {
-                const tagId = standaloneTask.tag.id;
-                if (!tasks[tagId]) tasks[tagId] = [];
-                tasks[tagId].push(standaloneTask);
-              }
-              
-              // Restore the original base task definition to preserve the series
-              taskMovedFromCompleted.seriesId = originalSeriesId;
-              taskMovedFromCompleted.repeat = originalRepeat;
-              taskMovedFromCompleted.rruleOptions = originalRruleOptions;
-              taskMovedFromCompleted.isRepeat = false;
-              taskMovedFromCompleted.completed = true; // Keep it completed to hide from active view
-              
-
-            }
-          }
-          
-          // Update in 'all' collection
-          tasks.all = tasks.all.map(t => t.id === taskId ? taskMovedFromCompleted : t);
-          
-          // Remove from completed collection
-          if (tasks.completed) {
-            tasks.completed = tasks.completed.filter(t => t.id !== taskId);
-          }
-          
-          // Add back to 'today' if scheduled for today
-          if (taskMovedFromCompleted.scheduledDate && isToday(parseISO(taskMovedFromCompleted.scheduledDate))) {
-            if (!tasks.today) tasks.today = [];
-            if (!tasks.today.some(t => t.id === taskId)) {
-              tasks.today.push(taskMovedFromCompleted);
-            }
-          }
-          
-          // Add back to its specific tag group if applicable
-          if (taskMovedFromCompleted.tag && taskMovedFromCompleted.tag.id) {
-            const tagId = taskMovedFromCompleted.tag.id;
-            if (!tasks[tagId]) tasks[tagId] = [];
-            if (!tasks[tagId].some(t => t.id === taskId)) {
-              tasks[tagId].push(taskMovedFromCompleted);
-            }
-          }
-          
-
-        }
-      }
-      
-      // Save all changes to localStorage
-      localStorage.setItem("tasks", JSON.stringify(tasks));
-
-      
-      // Dispatch events to ensure UI updates immediately
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'tasks',
-        newValue: JSON.stringify(tasks),
-        url: window.location.href
-      }));
       window.dispatchEvent(new CustomEvent('tasksUpdated', {
         detail: { tasks: tasks } // Send the fully updated tasks object
       }));
@@ -1366,6 +1021,137 @@ export function useTaskManagement() {
       return true;
     } catch (error) {
 
+      return false;
+    }
+  }, []);
+
+  const handleToggleTaskCompletion = useCallback((taskOrId, scope = 'single') => {
+    console.log('[COMPLETION DEBUG] handleToggleTaskCompletion called with:', { taskOrId, scope });
+    
+    try {
+      const savedTasks = localStorage.getItem("tasks") || "{}";
+      const tasks = JSON.parse(savedTasks);
+      
+      // Handle both task object and task ID
+      let taskToComplete;
+      if (typeof taskOrId === 'string') {
+        // Find task by ID
+        taskToComplete = tasks.all?.find(t => t.id === taskOrId);
+        if (!taskToComplete) {
+          console.error('[COMPLETION DEBUG] Task not found with ID:', taskOrId);
+          return false;
+        }
+      } else {
+        taskToComplete = taskOrId;
+      }
+      
+      console.log('[COMPLETION DEBUG] Task to complete:', {
+        id: taskToComplete.id,
+        title: taskToComplete.title,
+        isRepeat: taskToComplete.isRepeat,
+        seriesId: taskToComplete.seriesId,
+        completed: taskToComplete.completed
+      });
+      
+      // Toggle completion status
+      const newCompletedStatus = !taskToComplete.completed;
+      
+      // Update the task in all collections
+      const updateTaskInCollection = (collection, taskId, updates) => {
+        const index = collection.findIndex(t => t.id === taskId);
+        if (index !== -1) {
+          collection[index] = { ...collection[index], ...updates };
+          return true;
+        }
+        return false;
+      };
+      
+      // Update in all collection
+      updateTaskInCollection(tasks.all, taskToComplete.id, { completed: newCompletedStatus });
+      
+      // Update in tag-specific collections
+      Object.keys(tasks).forEach(key => {
+        if (key !== 'all' && Array.isArray(tasks[key])) {
+          updateTaskInCollection(tasks[key], taskToComplete.id, { completed: newCompletedStatus });
+        }
+      });
+      
+      // If this is a recurring task instance being completed, generate next instance
+      if (newCompletedStatus && taskToComplete.isRepeat === true && taskToComplete.seriesId) {
+        console.log('[COMPLETION DEBUG] Generating next instance for completed recurring task');
+        
+        // Find the base task
+        const baseTask = tasks.all.find(t => t.seriesId === taskToComplete.seriesId && (t.isRepeat === false || typeof t.isRepeat === 'undefined'));
+        
+        if (baseTask && baseTask.repeat && baseTask.repeat !== 'none') {
+          console.log('[COMPLETION DEBUG] Base task found:', {
+            id: baseTask.id,
+            title: baseTask.title,
+            repeat: baseTask.repeat,
+            seriesId: baseTask.seriesId
+          });
+          
+          // Generate next instance
+          const nextDate = getNextRecurrenceDate(taskToComplete.scheduledDate, baseTask.repeat);
+          
+          if (nextDate) {
+            const nextInstanceId = `${baseTask.seriesId}_${nextDate}`;
+            
+            // Check if next instance already exists
+            const existingNextInstance = tasks.all.find(t => t.id === nextInstanceId);
+            
+            if (!existingNextInstance) {
+              console.log('[COMPLETION DEBUG] Creating next instance with date:', nextDate);
+              
+              const nextInstance = {
+                ...baseTask,
+                id: nextInstanceId,
+                scheduledDate: nextDate,
+                isRepeat: true,
+                originalBaseId: baseTask.id,
+                completed: false,
+                createdAt: new Date().toISOString()
+              };
+              
+              // Add to all collection
+              tasks.all.push(nextInstance);
+              
+              // Add to tag collection if task has a tag
+              if (nextInstance.tag && nextInstance.tag.id && tasks[nextInstance.tag.id]) {
+                tasks[nextInstance.tag.id].push(nextInstance);
+              }
+              
+              console.log('[COMPLETION DEBUG] Next instance created:', {
+                id: nextInstance.id,
+                scheduledDate: nextInstance.scheduledDate,
+                title: nextInstance.title
+              });
+            } else {
+              console.log('[COMPLETION DEBUG] Next instance already exists:', nextInstanceId);
+            }
+          }
+        }
+      }
+      
+      // Save to localStorage
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+      
+      // Dispatch events
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'tasks',
+        newValue: JSON.stringify(tasks),
+        url: window.location.href
+      }));
+      
+      window.dispatchEvent(new CustomEvent('tasksUpdated', {
+        detail: { tasks: tasks }
+      }));
+      
+      console.log('[COMPLETION DEBUG] Task completion handled successfully');
+      return true;
+      
+    } catch (error) {
+      console.error('[COMPLETION DEBUG] Error in handleToggleTaskCompletion:', error);
       return false;
     }
   }, []);
@@ -1399,7 +1185,8 @@ export function useTaskManagement() {
 
 
       if (!activeInstanceExists) {
-
+        // Check if there's already an instance for the expected first occurrence date
+        // to prevent creating duplicates when addTask just created one
         if (!baseTask.startDateOfSeries && baseTask.scheduledDate) {
           baseTask.startDateOfSeries = baseTask.scheduledDate;
         } else if (!baseTask.startDateOfSeries && baseTask.createdAt) {
@@ -1408,44 +1195,58 @@ export function useTaskManagement() {
           baseTask.startDateOfSeries = new Date().toISOString(); 
         }
 
-        
         let rawFirstInstance = generateNextDisplayableTaskInstance(baseTask, null); 
         
         if (rawFirstInstance) {
-
-          const firstInstance = {
-            ...rawFirstInstance,
-            seriesId: baseTask.seriesId, 
-            isRepeat: true,              
-            tag: rawFirstInstance.tag || baseTask.tag, 
-            originalBaseId: baseTask.id,     
-            id: rawFirstInstance.id && !String(rawFirstInstance.id).includes('undefined') && !String(rawFirstInstance.id).includes('null')
-                ? rawFirstInstance.id 
-                : `${baseTask.seriesId}_repeat_${new Date(rawFirstInstance.scheduledDate).getTime()}`,
-            // Ensure scheduledDate is in ISO format if it's a Date object
-            scheduledDate: rawFirstInstance.scheduledDate instanceof Date ? rawFirstInstance.scheduledDate.toISOString() : rawFirstInstance.scheduledDate
-          };
-
-
+          const expectedInstanceId = `${baseTask.seriesId}_repeat_${new Date(rawFirstInstance.scheduledDate).getTime()}`;
           
-          const tagGroup = firstInstance.tag ? firstInstance.tag.id : "all";
-          if (!tasks[tagGroup]) tasks[tagGroup] = [];
-          if (!tasks[tagGroup].some(t => t.id === firstInstance.id)) {
-            tasks[tagGroup].push(firstInstance);
-          }
+          // Check if an instance with this ID or scheduled date already exists
+          const instanceAlreadyExists = existingInstancesForSeries.some(instance => 
+            instance.id === expectedInstanceId || 
+            instance.id === rawFirstInstance.id ||
+            (instance.scheduledDate && rawFirstInstance.scheduledDate && 
+             new Date(instance.scheduledDate).getTime() === new Date(rawFirstInstance.scheduledDate).getTime())
+          );
           
-          if (!tasks.all.some(t => t.id === firstInstance.id)) {
-             tasks.all.push(firstInstance);
-             updated = true;
+          if (!instanceAlreadyExists) {
+            const firstInstance = {
+              ...rawFirstInstance,
+              seriesId: baseTask.seriesId, 
+              isRepeat: true,              
+              tag: rawFirstInstance.tag || baseTask.tag, 
+              originalBaseId: baseTask.id,     
+              id: rawFirstInstance.id && !String(rawFirstInstance.id).includes('undefined') && !String(rawFirstInstance.id).includes('null')
+                  ? rawFirstInstance.id 
+                  : expectedInstanceId,
+              // Ensure scheduledDate is in ISO format if it's a Date object
+              scheduledDate: rawFirstInstance.scheduledDate instanceof Date ? rawFirstInstance.scheduledDate.toISOString() : rawFirstInstance.scheduledDate
+            };
 
+            console.log('[CREATION DEBUG] ensureActive adding instance:', {
+              instanceId: firstInstance.id,
+              seriesId: firstInstance.seriesId,
+              scheduledDate: firstInstance.scheduledDate,
+              timestamp: new Date().toISOString()
+            });
+
+            const tagGroup = firstInstance.tag ? firstInstance.tag.id : "all";
+            if (!tasks[tagGroup]) tasks[tagGroup] = [];
+            if (!tasks[tagGroup].some(t => t.id === firstInstance.id)) {
+              tasks[tagGroup].push(firstInstance);
+            }
+            
+            if (!tasks.all.some(t => t.id === firstInstance.id)) {
+               tasks.all.push(firstInstance);
+               updated = true;
+            }
           } else {
-
+            console.log('[CREATION DEBUG] ensureActive skipping - instance exists:', {
+              seriesId: baseTask.seriesId,
+              expectedInstanceId,
+              timestamp: new Date().toISOString()
+            });
           }
-        } else {
-
         }
-      } else {
-
       }
     });
 
@@ -1465,10 +1266,15 @@ export function useTaskManagement() {
     }
   }, [generateNextDisplayableTaskInstance]); // Added generateNextDisplayableTaskInstance to dependency array
 
+  // Use a ref to ensure ensureActiveRecurringInstances only runs once across all component instances
+  const hasInitialized = useRef(false);
+  
   useEffect(() => {
-
-    ensureActiveRecurringInstances();
-  }, [ensureActiveRecurringInstances]); // ensureActiveRecurringInstances is a callback, include it in deps
+    if (!hasInitialized.current) {
+      hasInitialized.current = true;
+      ensureActiveRecurringInstances();
+    }
+  }, []); // Empty dependency array to run only once per hook instance
 
   /**
    * Get all recurring task instances for a given time range
