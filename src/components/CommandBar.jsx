@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
+import { useMeasure } from '@uidotdev/usehooks';
 // Add addDays, isBefore, isEqual imports
 import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual, differenceInMilliseconds, add, parseISO } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
@@ -299,29 +300,43 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const previousSizeRef = useRef({ width: 0, height: 0 });
   const exitingRef = useRef(false);
   const prevStateRef = useRef(null);
+  
+  // New state variables for jakub.kr approach
+  const [contentRef, contentBounds] = useMeasure();
+  const [activeContentKey, setActiveContentKey] = useState('default');
+  const [direction, setDirection] = useState(0);
+  const [previousContentKey, setPreviousContentKey] = useState(null);
+  
+  // Base height for the command bar (when in default state)
+  const BASE_HEIGHT = 52;
+
+  // Track content changes and calculate direction for animations
+  useEffect(() => {
+    const newContentKey = isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default';
+    
+    if (newContentKey !== activeContentKey) {
+      const contentOrder = ['default', 'task', 'event', 'go-to-date'];
+      const currentIndex = contentOrder.indexOf(activeContentKey);
+      const newIndex = contentOrder.indexOf(newContentKey);
+      
+      setPreviousContentKey(activeContentKey);
+      setDirection(newIndex > currentIndex ? 1 : -1);
+      setActiveContentKey(newContentKey);
+      
+      setIsAnimating(true);
+      animationTimeoutRef.current = setTimeout(() => {
+        setIsAnimating(false);
+      }, 300); // Match animation duration
+    }
+  }, [isAddingEvent, isAddingTask, isGoToDateMode, activeContentKey]);
 
   useEffect(() => {
     // Capture dimensions when component mounts or state changes
-    // This ensures we have accurate dimensions for exit animations
     if (containerRef.current && isOpen) {
       const { width, height } = containerRef.current.getBoundingClientRect();
       previousSizeRef.current = { width, height };
     }
-    
-    // Track state changes for animation coordination
-    const prevState = prevStateRef.current;
-    if (prevState && (prevState.isGoToDateMode !== isGoToDateMode || prevState.isAddingEvent !== isAddingEvent || prevState.isAddingTask !== isAddingTask)) {
-      setIsAnimating(true);
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-      }, 25); // Short delay to allow animation to start
-    }
-    prevStateRef.current = {
-      isGoToDateMode,
-      isAddingEvent,
-      isAddingTask
-    };
-  }, [isOpen, isAddingEvent, isAddingTask, isGoToDateMode]);
+  }, [isOpen]);
 
   // Fix layout animation state tracking
   useEffect(() => {
@@ -843,28 +858,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, [isRepeatDropdownOpen]);
 
-  useEffect(() => {
-    // Capture dimensions when component mounts or state changes
-    // This ensures we have accurate dimensions for exit animations
-    if (containerRef.current && isOpen) {
-      const { width, height } = containerRef.current.getBoundingClientRect();
-      previousSizeRef.current = { width, height };
-    }
-    
-    // Track state changes for animation coordination
-    const prevState = prevStateRef.current;
-    if (prevState && (prevState.isGoToDateMode !== isGoToDateMode || prevState.isAddingEvent !== isAddingEvent || prevState.isAddingTask !== isAddingTask)) {
-      setIsAnimating(true);
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-      }, 25); // Short delay to allow animation to start
-    }
-    prevStateRef.current = {
-      isGoToDateMode,
-      isAddingEvent,
-      isAddingTask
-    };
-  }, [isOpen, isAddingEvent, isAddingTask, isGoToDateMode]);
+
 
   // Fix layout animation state tracking
   useEffect(() => {
@@ -1402,24 +1396,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           <motion.div 
             key="commandBar-container"
             ref={containerRef}
-            layout
-            layoutId={`commandBar-container-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
             initial={{ 
               opacity: 0,
               scale: 0.95,
               y: 20,
-              width: 'auto',
-              height: 'auto',
               backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
             }}
-            animate={{
-              opacity: 1,
-              scale: 1,
-              y: 0,
-              width: 'auto',
-              height: 'auto',
-              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
-            }}
+            animate={{              opacity: 1,              scale: 1,              y: 0,              width: activeContentKey === 'default' ? (contentBounds.width || 'auto') : ((contentBounds.width || 0) + 32),              height: Math.max(contentBounds.height || BASE_HEIGHT, BASE_HEIGHT),              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"            }}
             exit={{
               opacity: 0,
               scale: 0.95,
@@ -1428,100 +1411,122 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               height: previousSizeRef.current.height || 'auto'
             }}
             style={{
-
-              willChange: "transform, opacity, background-color",
+              willChange: "transform, opacity, background-color, width, height",
               transformOrigin: "bottom"
             }}
             transition={{
               type: "spring",
-              stiffness: 500,
-              damping: 30,
+              stiffness: 600,
+              damping: 60,
               mass: 1,
               opacity: { duration: 0.15 },
               scale: { duration: 0.15 },
               y: { 
                 type: "spring",
-                stiffness: 500,
-                damping: 30
+                stiffness: 600,
+                damping: 40,
+                duration: 0.15
               },
-              layout: { 
-                duration: 0.3, 
+              width: {
                 type: "spring",
-                bounce: 0.2,
-                // Only use layout animations when not exiting or animating
-                ease: exitingRef.current || isAnimating ? "linear" : "easeInOut"
+                stiffness: 800,
+                damping: 50,
+                duration: 0.02
+              },
+              height: {
+                type: "spring",
+                stiffness: 800,
+                damping: 50,
+                duration: 0.02
               }
             }}
             className={`bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border ${!isAddingEvent && !isAddingTask && !isGoToDateMode ? 'px-0' : 'px-4'}`}
           >
-            <LayoutGroup id={`commandBar-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}>
-              <motion.div 
-                key={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
-                layout 
-                layoutId={`commandBar-content-${isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default'}`}
-                transition={{
-                  type: "spring",
-                  stiffness: 300,
-                  damping: 30,
-                  duration: 0.3
+            <div 
+              ref={contentRef}
+              className="relative"
+              style={{
+                width: 'max-content',
+                minHeight: BASE_HEIGHT
+              }}
+            >
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={activeContentKey}
+                initial={{
+                  opacity: 0
                 }}
-                className="flex items-center"
+                animate={{
+                  opacity: 1
+                }}
+                exit={{
+                  opacity: 0
+                }}
+                transition={{
+                  opacity: {
+
+                    duration: 0.1,
+                    ease: "easeInOut"
+                  },
+                  exit: {
+                    opacity: {
+                      delay: 0,
+                      duration: 0.1,
+                      ease: "easeInOut"
+                    }
+                  }
+                }}
+                className="flex items-center w-full"
               >
-                <AnimatePresence mode="popLayout">
-                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
-                    <div className="flex items-center gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <motion.button 
-                            layout
-                        
-                            className="flex group py-4 px-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
-                          >
-                            <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
-                            <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
-                          </motion.button>
-                        </PopoverTrigger>
-                        <PopoverContent 
-                          className="w-[364.09px] !z-1 flex flex-row p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
-                          align="start"
-                          sideOffset={2}
-                          
-
+                {activeContentKey === 'default' && (
+                  <div className="flex items-center gap-2">
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <motion.button 
+                          layout
+                      
+                          className="flex group py-4 px-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
                         >
-                          <button
-                            onClick={() => {
-                              setIsAddingTask(true);
-                              setIsOpen(true);
-                            }}
-                            className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
-                          >
-                            <Completed className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
-                            <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
-                            </button>
-                          <button
-                            onClick={() => {
-                              handleAddEventClick();
-                              setIsOpen(true);
-                            }}
-                            className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
-                          >
-                            <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
-                            <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
-                          </button>
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  )}
+                          <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                          <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
+                        </motion.button>
+                      </PopoverTrigger>
+                      <PopoverContent 
+                        className="w-[364.09px] !z-1 flex flex-row p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                        align="start"
+                        sideOffset={2}
+                        
 
-                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
+                      >
+                        <button
+                          onClick={() => {
+                            setIsAddingTask(true);
+                            setIsOpen(true);
+                          }}
+                          className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                        >
+                          <Completed className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
+                          <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
+                          </button>
+                        <button
+                          onClick={() => {
+                            handleAddEventClick();
+                            setIsOpen(true);
+                          }}
+                          className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                        >
+                          <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
+                          <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
+                        </button>
+                      </PopoverContent>
+                    </Popover>
+                    
                     <motion.div 
                       layout
                       key="commandBar-divider"
                       className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                     />
-                  )}
-
-                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
+                    
                     <motion.div 
                       layout
                       key="commandBar-date-buttons"
@@ -1542,17 +1547,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         onClick={onNext}
                       />
                     </motion.div>
-                  )}
-
-                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
+                    
                     <motion.div 
                       layout
                       key="commandBar-divider-2"
                       className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                     />
-                  )}
-
-                  {!isAddingEvent && !isAddingTask && !isGoToDateMode && (
+                    
                     <motion.button 
                       key="commandBar-ask-me"
                       layout
@@ -1568,9 +1569,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       </ArrowAlt>
                       <span className="group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Go to date</span>
                     </motion.button>
-                  )}
-
-                  {isAddingTask && (
+                  </div>
+                )}
+                
+                {activeContentKey === 'task' && (
                     <motion.div
                       layout
                       key="commandBar-adding-task"
@@ -1911,7 +1913,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   </div>
                 </motion.div>
               )}
-              {isAddingEvent && (
+
+                {activeContentKey === 'event' && (
                 <motion.div
                   layout
                   key="commandBar-adding-event"
@@ -2367,7 +2370,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   </motion.div>
                 </motion.div>
               )}
-              {isGoToDateMode && (
+
+                {activeContentKey === 'go-to-date' && (
                 <motion.div
                   layout
                   key="commandBar-go-to-date"
@@ -2440,12 +2444,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
           </motion.div>
-        </LayoutGroup>
-      </motion.div>
-    )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
 
     {/* Recurrence Modal */}
     <RecurrenceModal
