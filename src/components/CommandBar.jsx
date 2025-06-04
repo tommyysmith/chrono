@@ -10,7 +10,7 @@ import { Clock } from '../assets/icons/Clock';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
 import { Return } from '../assets/icons/Return';
 import { User } from '../assets/icons/User';
-import { Pin } from '../assets/icons/Pin';
+import { Flag } from '../assets/icons/Flag';
 import { Repeat } from '../assets/icons/Repeat';
 import { Add } from '../assets/icons/Add';
 import { Chevron } from '../assets/icons/Chevron';
@@ -29,6 +29,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from '@/components/ui/tooltip';
 import { RRule, Weekday } from 'rrule'; // Import RRule and Weekday
 import RecurrenceModal from './RecurrenceModal'; // Import RecurrenceModal
 
@@ -50,6 +56,12 @@ const REPEAT_OPTIONS = [
   { id: 'monthlyLastWeekday', label: 'Every month', sublabel: 'on the last Mon' },
   { id: 'yearly', label: 'Every year', sublabel: 'on Dec 30' },
   { id: 'custom', label: 'Custom...' } // Add Custom option
+];
+
+const PRIORITY_OPTIONS = [
+  { id: 'High', label: 'High', color: '#EF4444' },
+  { id: 'Medium', label: 'Medium', color: '#F59E0B' },
+  { id: 'Low', label: 'Low', color: '#10B981' }
 ];
 
 // Helper function to generate time options in 15-minute intervals
@@ -99,6 +111,96 @@ const parseTimeString = (timeStr) => {
     console.error("Error parsing time string:", e);
     return null;
   }
+};
+
+// Add new tab component
+const TabSelector = ({ activeTab, onTabChange, ...props }) => {
+  const tabVariants = {
+    initial: {
+      opacity: 0,
+      y: -10,
+      scale: 0.95
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        duration: 0.3,
+        ease: "easeOut",
+        staggerChildren: 0.1
+      }
+    },
+    exit: {
+      opacity: 0,
+      y: -10,
+      scale: 0.95,
+      transition: {
+        duration: 0.2,
+        ease: "easeIn"
+      }
+    }
+  };
+
+  const buttonVariants = {
+    initial: {
+      opacity: 0
+    },
+    animate: {
+      opacity: 1,
+      transition: {
+        duration: 0.2,
+        ease: "easeOut"
+      }
+    }
+  };
+
+  return (
+    <motion.div 
+      variants={tabVariants}
+      className="flex items-center justify-center gap-1"
+    >
+      <TooltipProvider delayDuration={500}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <motion.button
+              variants={buttonVariants}
+              onClick={() => onTabChange('task')}
+              className={`flex items-center gap-1 px-2 py-2 text-sm font-medium rounded-[5px] transition-all ${
+                activeTab === 'task'
+                  ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text'
+                  : 'text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text '
+              }`}
+            >
+              <Completed className="w-4 h-4" />
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="center">
+            Task
+          </TooltipContent>
+        </Tooltip>
+        
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <motion.button
+              variants={buttonVariants}
+              onClick={() => onTabChange('event')}
+              className={`flex items-center gap-1 px-2 py-2 text-sm font-medium rounded-[6px] transition-all ${
+                activeTab === 'event'
+                  ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text'
+                  : 'text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text'
+              }`}
+            >
+              <CalendarIcon className="w-4 h-4" />
+            </motion.button>
+          </TooltipTrigger>
+          <TooltipContent side="top" align="center">
+            Event
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    </motion.div>
+  );
 };
 
 const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose, onDateSelect }, ref) => {
@@ -173,6 +275,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
+  
+  // Derive active tab from component state instead of managing separate state
+  const activeTab = useMemo(() => {
+    if (isAddingEvent) return 'event';
+    if (isAddingTask) return 'task';
+    return 'task'; // Default to task when in default state
+  }, [isAddingEvent, isAddingTask]);
   const [isOpen, setIsOpen] = useState(true);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduledDate, setScheduledDate] = useState(null);
@@ -187,6 +296,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [editingTaskId, setEditingTaskId] = useState(null);
   // State for custom task recurrence rule
   const [taskRruleOptions, setTaskRruleOptions] = useState(null);
+  // Priority state
+  const [taskPriority, setTaskPriority] = useState('Medium');
+  const [isPriorityDropdownOpen, setIsPriorityDropdownOpen] = useState(false);
   // Separate state for editing
   const [draftTag, setDraftTag] = useState(null);
   const [tags, setTags] = useState(() => {
@@ -259,8 +371,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [selectedColor, setSelectedColor] = useState('#808080');
   const [editMode, setEditMode] = useState(null);
   const [showRepeatEditModal, setShowRepeatEditModal] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const animationTimeoutRef = useRef(null);
+  // Removed manual animation state management - let Framer Motion handle it naturally
   // State for recurrence modal
   const [isRecurrenceModalOpen, setIsRecurrenceModalOpen] = useState(false);
   // State for time pickers
@@ -274,6 +385,51 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const colorPickerRef = useRef(null);
   const titleInputRef = useRef(null);
   const datePickerRef = useRef(null);
+
+  const animationInProgressRef = useRef(false);
+  const previousContentKeyRef = useRef(null);
+
+  // Direction helper function for smooth transitions
+  const getDirection = (current, previous) => {
+    if (!previous || !current) return 0;
+    const contentOrder = ['default', 'task', 'event'];
+    const currentIndex = contentOrder.indexOf(current);
+    const previousIndex = contentOrder.indexOf(previous);
+    return currentIndex > previousIndex ? 1 : -1;
+  };
+
+  // Content animation variants with direction awareness
+  const contentVariants = {
+    initial: ({ direction, isInitial }) => ({
+      opacity: 0
+    }),
+    animate: () => ({
+      opacity: 1
+    }),
+    exit: ({ direction, isInitial, isCollapsing }) => ({
+      opacity: isCollapsing ? 0 : 1,
+      transition: {
+        opacity: {
+          type: "spring",
+          bounce: 0,
+          duration: isCollapsing ? 0 : 0.6
+        }
+      }
+    })
+  };
+
+  // Compute active content key based on state
+  const activeContentKey = useMemo(() => {
+    if (isAddingEvent) return 'event';
+    if (isAddingTask) return 'task';
+    if (isGoToDateMode) return 'go-to-date';
+    return 'default';
+  }, [isAddingEvent, isAddingTask, isGoToDateMode]);
+
+  // Update previous content key ref
+  useEffect(() => {
+    previousContentKeyRef.current = activeContentKey;
+  }, [activeContentKey]);
 
   // Use ref for draft schedule to avoid unnecessary re-renders
   const draftScheduleRef = useRef(null);
@@ -303,7 +459,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   
   // New state variables for jakub.kr approach
   const [contentRef, contentBounds] = useMeasure();
-  const [activeContentKey, setActiveContentKey] = useState('default');
   const [direction, setDirection] = useState(0);
   const [previousContentKey, setPreviousContentKey] = useState(null);
   
@@ -321,12 +476,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       
       setPreviousContentKey(activeContentKey);
       setDirection(newIndex > currentIndex ? 1 : -1);
-      setActiveContentKey(newContentKey);
-      
-      setIsAnimating(true);
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsAnimating(false);
-      }, 300); // Match animation duration
     }
   }, [isAddingEvent, isAddingTask, isGoToDateMode, activeContentKey]);
 
@@ -342,11 +491,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   useEffect(() => {
     // Reset animation flags when component unmounts
     return () => {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
       exitingRef.current = false;
-      setIsAnimating(false);
     };
   }, []);
 
@@ -634,6 +779,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskNotes(task.notes || '');
     setSelectedTag(task.tag || null);
     setDraftTag(task.tag || null);
+    setTaskPriority(task.priority || 'Medium');
     setAddToCalendar(task.addToCalendar || false);
     setTagSearchText(''); // Don't set the tag search text when editing
     setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
@@ -806,19 +952,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   const handleGoToDate = useCallback((date) => {
     if (date) {
-      // Set animating state before changing modes to prevent layout bugs
-      setIsAnimating(true);
-      
       // Call the onDateSelect handler directly to set the exact date
       onDateSelect(date);
       
-      // Ensure state changes happen after animation completes
-      animationTimeoutRef.current = setTimeout(() => {
-        setIsGoToDateMode(false);
-        setQuery('');
-        setSuggestions([]);
-        setIsAnimating(false);
-      }, 25); // Short delay to allow animation to start
+      // Reset state immediately - let Framer Motion handle the animation timing
+      setIsGoToDateMode(false);
+      setQuery('');
+      setSuggestions([]);
     }
   }, [onDateSelect]);
 
@@ -864,11 +1004,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   useEffect(() => {
     // Reset animation flags when component unmounts
     return () => {
-      if (animationTimeoutRef.current) {
-        clearTimeout(animationTimeoutRef.current);
-      }
       exitingRef.current = false;
-      setIsAnimating(false);
     };
   }, []);
 
@@ -953,6 +1089,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             title: taskTitle.trim(),
             notes: taskNotes.trim(),
             tag: finalTag,
+            priority: taskPriority,
             scheduledDate: scheduledDate?.toISOString(),
             completed: false,
             createdAt: new Date().toISOString(),
@@ -1110,6 +1247,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             title: taskTitle.trim(),
             notes: taskNotes.trim(),
             tag: finalTag,
+            priority: taskPriority,
             scheduledDate: scheduledDate?.toISOString(),
             updatedAt: new Date().toISOString(),
             repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
@@ -1197,6 +1335,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             setTaskRepeatOption('none');
             setTaskRepeatSeriesId(null);
             setTaskRruleOptions(null);
+            setTaskPriority('Medium');
             setAddToCalendar(false);
             setIsAddingTask(false);
             setEditingTaskId(null);
@@ -1214,6 +1353,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           title: taskTitle.trim(),
           notes: taskNotes.trim(),
           tag: finalTag,
+          priority: taskPriority,
           // For recurring tasks, don't set scheduledDate on the base task - it will be set on instances
           scheduledDate: (taskRepeatOption && taskRepeatOption !== 'none') ? undefined : scheduledDate?.toISOString(),
           completed: false,
@@ -1254,6 +1394,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatOption('none');
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null); // Reset task custom rule state
+      setTaskPriority('Medium'); // Reset priority to default
       setAddToCalendar(false);
       setIsAddingTask(false);
       setEditingTaskId(null);
@@ -1263,7 +1404,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       console.error('Error saving task:', error);
       // You might want to show an error message to the user here
     }
-  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated, addToCalendar]);
+  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated, addToCalendar]);
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
@@ -1444,39 +1585,45 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           >
             <div 
               ref={contentRef}
-              className="relative"
+              className="relative flex flex-col"
               style={{
                 width: 'max-content',
                 minHeight: BASE_HEIGHT
               }}
             >
-            <AnimatePresence mode="wait" initial={false}>
+              <div className="flex-1">
+              {/* Tabs moved to fixed buttons container */}
+              
+            <AnimatePresence 
+              mode="wait" 
+              initial={false}
+              custom={{
+                direction: getDirection(activeContentKey, previousContentKeyRef.current),
+                isInitial: previousContentKeyRef.current === null,
+                isCollapsing: activeContentKey === 'default'
+              }}
+            >
               <motion.div
                 key={activeContentKey}
-                initial={{
-                  opacity: 0
-                }}
-                animate={{
-                  opacity: 1
-                }}
-                exit={{
-                  opacity: 0
+                variants={contentVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                custom={{
+                  direction: getDirection(activeContentKey, previousContentKeyRef.current),
+                  isInitial: previousContentKeyRef.current === null,
+                  isCollapsing: activeContentKey === 'default'
                 }}
                 transition={{
-                  opacity: {
-
-                    duration: 0.1,
-                    ease: "easeInOut"
-                  },
-                  exit: {
-                    opacity: {
-                      delay: 0,
-                      duration: 0.1,
-                      ease: "easeInOut"
-                    }
-                  }
+                  type: "spring",
+                  bounce: 0,
+                  duration: 0.2
                 }}
-                className="flex items-center w-full"
+                className={`flex items-center w-full ${(activeContentKey === 'task' || activeContentKey === 'event') ? 'pb-20' : ''}`}
+                style={{
+                  transform: 'translateZ(0)',
+                  backfaceVisibility: 'hidden'
+                }}
               >
                 {activeContentKey === 'default' && (
                   <div className="flex items-center gap-2">
@@ -1502,6 +1649,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           onClick={() => {
                             setIsAddingTask(true);
                             setIsOpen(true);
+                            setActiveTab('task');
                           }}
                           className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                         >
@@ -1512,6 +1660,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           onClick={() => {
                             handleAddEventClick();
                             setIsOpen(true);
+                            setActiveTab('event');
                           }}
                           className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                         >
@@ -1574,15 +1723,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 
                 {activeContentKey === 'task' && (
                     <motion.div
-                      layout
                       key="commandBar-adding-task"
+                      variants={contentVariants}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      custom={{
+                        direction: getDirection('task', previousContentKeyRef.current),
+                        isInitial: previousContentKeyRef.current === null,
+                        isCollapsing: false
+                      }}
+                      onAnimationStart={() => {
+                        animationInProgressRef.current = true;
+                      }}
+                      onAnimationComplete={() => {
+                        animationInProgressRef.current = false;
+                      }}
                       transition={{
-                        opacity: { duration: 0.2 },
-                        filter: { duration: 0.2 },
-                        y: { duration: 0.2, ease: 'easeInOut' },
-                        layout: { duration: 0.2, ease: 'easeInOut' }
+                        type: "spring",
+                        bounce: 0,
+                        duration: 0.5
                       }}
                       className="flex flex-col gap-4 min-w-[450px]"
+                      style={{
+                        transform: 'translateZ(0)',
+                        backfaceVisibility: 'hidden'
+                      }}
                     >
                       <div className="flex items-start justify-between -mx-4">
                         <div className="flex-1">
@@ -1784,10 +1950,41 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 </div>
                               </div>
                             </div>
-                              <button className="flex items-center gap-2 px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors">
-                                <Pin className="w-4 h-4" />
-                                <span>Add a location</span>
-                              </button>
+                              <div className="flex items-center px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
+                                <Popover open={isPriorityDropdownOpen} onOpenChange={setIsPriorityDropdownOpen}>
+                                  <PopoverTrigger className="flex group items-center justify-between w-full">
+                                    <div className="flex items-center gap-2">
+                                      <Flag className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" style={{ color: PRIORITY_OPTIONS.find(p => p.id === taskPriority)?.color }} />
+                                      <span className="group-hover:text-light-text dark:group-hover:text-dark-text">
+                                        {taskPriority} priority
+                                      </span>
+                                    </div>
+                                  </PopoverTrigger>
+                                  <PopoverContent 
+                                    className="w-[180px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                                    align="start"
+                                    side="top"
+                                  >
+                                    <div role="listbox" className="flex flex-col">
+                                      {PRIORITY_OPTIONS.map((option) => (
+                                        <button
+                                          key={option.id}
+                                          type="button"
+                                          className={`px-2 py-2 text-sm flex items-center gap-2 font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskPriority === option.id ? 'text-dark-text dark:text-dark-text' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setTaskPriority(option.id);
+                                            setIsPriorityDropdownOpen(false);
+                                          }}
+                                        >
+                                          <Flag className="w-4 h-4" style={{ color: option.color }} />
+                                          <span className="text-xs group-hover:text-light-text dark:group-hover:text-dark-text">{option.label}</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              </div>
                               <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
                                 <Popover open={isTaskRepeatDropdownOpen} onOpenChange={setIsTaskRepeatDropdownOpen}>
                                   <PopoverTrigger className="flex group items-center justify-between w-full">
@@ -1879,33 +2076,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   <span className="text-xs text-light-text/50 dark:text-dark-text/50">Add to calendar</span>
                                 </div>
                               </div>
-                              <div className="flex items-center justify-end gap-2 px-4 py-4">
-                          <button
-                            onClick={handleClose}
-                            className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                          >
-                            <span className="flex items-center pl-1 pr-3">Discard</span>
-                            <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
-                              <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
-                            </div>
-                          </button>
-                          <button
-                            onClick={handleSaveTask}
-                            disabled={!taskTitle.trim()}
-                            className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
-                              ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
-                              : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
-                          >
-                            <span className="text-xs pl-1 pr-3 ">
-                          
-                            {editingTaskId ? 'Edit task' : 'Add task'}
-                        
-                            </span>
-                            <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
-                              <Return className="w-3 h-3" />
-                            </div>
-                          </button>
-                        </div>
+                
                       </div>
                         </div>
                       </div>
@@ -1915,9 +2086,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               )}
 
                 {activeContentKey === 'event' && (
-                <motion.div
-                  layout
+                  <motion.div
                   key="commandBar-adding-event"
+                  variants={contentVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  custom={{
+                    direction: getDirection('event', previousContentKeyRef.current),
+                    isInitial: previousContentKeyRef.current === null,
+                    isCollapsing: false
+                  }}
                   onAnimationStart={() => {
                     animationInProgressRef.current = true;
                   }}
@@ -1926,20 +2105,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   }}
                   transition={{
                     type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                    duration: 0.3
+                    bounce: 0,
+                    duration: 0.5
                   }}
                   className="flex flex-col gap-4 min-w-[450px]"
+                  style={{
+                    transform: 'translateZ(0)',
+                    backfaceVisibility: 'hidden'
+                  }}
                 >
-                  <motion.div layout 
-                    transition={{
-                      type: "spring",
-                      stiffness: 300,
-                      damping: 30,
-                      duration: 0.3
-                    }}
-                    className="flex flex-col -mx-4">
+                  <div className="flex flex-col -mx-4">
                     {/* Title Section with Color */}
                     <div 
                     className="flex px-4 py-4 flex-row border-b border-light-border dark:border-dark-border">
@@ -2338,36 +2513,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     
 
                     
-                    {/* Add Edit/Discard row at the bottom with task-like styling */}
-                    <div className="flex items-center justify-end gap-3 px-4 py-4">
-                      <button
-                        onClick={() => handleClose()}
-                        className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                      >
-                        <span className="flex items-center pl-1 pr-3">Discard</span>
-                        <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
-                          <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
-                        </div>
-                      </button>
-                      
-                      <button
-                        onClick={handleSaveChanges}
-                        disabled={!eventState.title.trim() || !hasChanges}
-                        className={`px-2 flex items-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
-                          ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
-                          : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
-                      >
-                        <span className="text-xs pl-1 pr-3 ">
-                          
-                        {originalEventState?.id ? 'Edit event' : 'Add event'}
-                        
-                        </span>
-                        <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && hasChanges ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
-                              <Return className="w-3 h-3" />
-                            </div>
-                      </button>
-                    </div>
-                  </motion.div>
+
+                  </div>
                 </motion.div>
               )}
 
@@ -2388,16 +2535,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             <div 
                               className="cursor-pointer flex items-center mr-2"
                               onClick={() => {
-                                // Set animating state to prevent layout bugs during transition
-                                setIsAnimating(true);
-                                
-                                // Use timeout to ensure animation completes before state changes
-                                animationTimeoutRef.current = setTimeout(() => {
-                                  setIsGoToDateMode(false);
-                                  setQuery('');
-                                  setSuggestions([]);
-                                  setIsAnimating(false);
-                                }, 25); // Short delay to allow animation to start
+                                // Reset state immediately - let Framer Motion handle the animation timing
+                                setIsGoToDateMode(false);
+                                setQuery('');
+                                setSuggestions([]);
                               }}
                             >
                               <button type="button" className=" flex group items-center justify-center cursor-pointer hover:bg-light-bg-lighter dark:hover:bg-white/5 rounded-[5px] h-[32px] w-[32px]">  
@@ -2446,10 +2587,80 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               )}
             </motion.div>
           </AnimatePresence>
-        </div>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Form buttons section with tabs - positioned absolutely to be completely static */}
+      {(activeContentKey === 'task' || activeContentKey === 'event') && (
+        <div 
+          className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 pb-4"
+          style={{height: '68px'}}
+        >
+          {/* Tab selector on the left */}
+          <TabSelector 
+            activeTab={activeTab} 
+            onTabChange={(tab) => {
+              if (tab === 'task') {
+                setIsAddingTask(true);
+                setIsAddingEvent(false);
+              } else {
+                setIsAddingEvent(true);
+                setIsAddingTask(false);
+              }
+            }} 
+          />
+          
+          {/* Buttons on the right */}
+          <div className="flex items-center gap-2">
+          <button
+            onClick={handleClose}
+            className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+          >
+            <span className="flex items-center pl-1 pr-3">Discard</span>
+            <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
+              <span className="text-[10px] tracking-wide text-light-text/50 dark:text-dark-text/50">ESC</span>
+            </div>
+          </button>
+          
+          {activeContentKey === 'task' && (
+            <button
+              onClick={handleSaveTask}
+              disabled={!taskTitle.trim()}
+              className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
+                ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
+                : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+            >
+              <span className="text-xs pl-1 pr-3">
+                {editingTaskId ? 'Edit task' : 'Add task'}
+              </span>
+              <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
+                <Return className="w-3 h-3" />
+              </div>
+            </button>
+          )}
+          
+          {activeContentKey === 'event' && (
+            <button
+              onClick={handleSaveChanges}
+              disabled={!eventState.title.trim() || !hasChanges}
+              className={`px-2 flex items-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
+                ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
+                : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+            >
+              <span className="text-xs pl-1 pr-3">
+                {originalEventState?.id ? 'Edit event' : 'Add event'}
+              </span>
+              <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && hasChanges ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
+                <Return className="w-3 h-3" />
+              </div>
+            </button>
+          )}
+          </div>
+        </div>
+      )}
 
     {/* Recurrence Modal */}
     <RecurrenceModal
