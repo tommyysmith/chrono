@@ -561,7 +561,7 @@ export const useEventRendering = (
 
   // Shared styling function for both week and day views
   const getEventClasses = (event, isPastEvent) => {
-    return `relative flex items-center text-xs mx-1 mt-1 mb-1 cursor-pointer select-none overflow-hidden z-10 ${
+    return `relative flex items-center gap-1 h-[24px] text-xs mx-1 mt-1 mb-1 cursor-pointer select-none overflow-hidden z-10 ${
       event.isTask 
         ? `border border-dashed rounded-[5px] py-1 border-light-border dark:border-dark-border backdrop-blur-sm hover:bg-gray-100/90 dark:hover:bg-dark-bg-lighter `
         : `backdrop-blur-md rounded-[5px] hover:bg-black/10 dark:hover:bg-white/10`
@@ -571,6 +571,20 @@ export const useEventRendering = (
   };
 
   // In the renderAllDayEvents function, modify the section that processes events
+  // Helper function to determine if an event is past
+  const isEventPast = (event, now = new Date()) => {
+    const isAllDayEvent = event.allDay || event.isAllDay;
+    if (isAllDayEvent) {
+      // For all-day events, only consider them past after the end of the day
+      const eventEndDate = new Date(event.end);
+      const endOfEventDay = endOfDay(eventEndDate);
+      return now > endOfEventDay;
+    } else {
+      // For regular events, use the original logic
+      return new Date(event.end) < now;
+    }
+  };
+
   const renderAllDayEvents = useMemo(() => () => {
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
@@ -623,7 +637,9 @@ export const useEventRendering = (
           if (eventEnd >= weekStart && eventStart < weekEnd) {
             // Calculate the day index where this event starts and ends in our week view
             const startDayIndex = Math.max(0, Math.floor((eventStart - weekStart) / (24 * 60 * 60 * 1000)));
-            const endDayIndex = Math.min(6, Math.floor((eventEnd - weekStart) / (24 * 60 * 60 * 1000)));
+            // For end day calculation, subtract 1 millisecond to handle events ending at 23:59:xx correctly
+            const adjustedEventEnd = new Date(eventEnd.getTime() - 1);
+            const endDayIndex = Math.min(6, Math.floor((adjustedEventEnd - weekStart) / (24 * 60 * 60 * 1000)));
   
             multiDayEvents.push({
               ...event,
@@ -708,7 +724,7 @@ export const useEventRendering = (
                 >
                   {dayEvents.map((event) => {
                     const now = new Date();
-                    const isPastEvent = new Date(event.end) < now;
+                    const isPastEvent = isEventPast(event, now);
                     const isTask = event.isTask;
   
                     return (
@@ -799,12 +815,12 @@ export const useEventRendering = (
             {eventRows.map((row, rowIndex) => {
               return row.map((event) => {
                 const now = new Date();
-                const isPastEvent = new Date(event.end) < now;
+                const isPastEvent = isEventPast(event, now);
                 
                 // Grid positioning and dynamic colors that can't be done with Tailwind
                 const eventStyle = {
                   gridColumnStart: event.startDayIndex + 1,
-                  gridColumnEnd: event.endDayIndex + 2, // Span includes the end day
+                  gridColumnEnd: event.endDayIndex + 2, // CSS Grid end is exclusive, so +1 for index and +1 for end day
                   gridRowStart: rowIndex + 1,
                   backgroundColor: event.isTask 
                     ? undefined
@@ -939,8 +955,6 @@ export const useEventRendering = (
       const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
       const now = new Date();
 
-      const isPastEvent = new Date(event.end) < now;
-
       const allTasks = tasks.all || [];
       const selectedDateObj = new Date(selectedDate);
       const calendarTasks = allTasks.filter(task => 
@@ -991,7 +1005,7 @@ export const useEventRendering = (
               )
               .map((event) => {
                 const now = new Date();
-                const isPastEvent = new Date(event.end) < now;
+                const isPastEvent = isEventPast(event, now);
   
                 return (
                   <TooltipProvider key={event.id} delayDuration={2000}>

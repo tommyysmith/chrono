@@ -988,10 +988,11 @@ export function generateNextDisplayableTaskInstance(baseTaskDefinition, lastInst
 /**
  * Get the next recurrence date for a task given its current date and repeat pattern
  * @param {string} currentDate - The current scheduled date (ISO string)
- * @param {string} repeatPattern - The repeat pattern (e.g., 'daily', 'weekly', 'monthly')
+ * @param {string} repeatPattern - The repeat pattern (e.g., 'daily', 'weekly', 'monthly', 'custom')
+ * @param {Object} rruleOptions - Optional rrule options for custom patterns
  * @returns {string|null} The next occurrence date as ISO string, or null if no next date
  */
-export function getNextRecurrenceDate(currentDate, repeatPattern) {
+export function getNextRecurrenceDate(currentDate, repeatPattern, rruleOptions = null) {
   if (!currentDate || !repeatPattern || repeatPattern === 'none') {
     return null;
   }
@@ -1003,19 +1004,55 @@ export function getNextRecurrenceDate(currentDate, repeatPattern) {
       return null;
     }
 
-    // Create a simple RRule to get the next occurrence
-    const options = {
-      dtstart: current,
-      count: 2 // We only need the current and next occurrence
-    };
+    let rule;
+    
+    // Handle custom recurrence patterns
+    if (repeatPattern === 'custom' && rruleOptions) {
+      console.log('[getNextRecurrenceDate] Creating RRule from custom rruleOptions');
+      
+      // Create a copy of rruleOptions and ensure dtstart is set
+      const ruleOptions = JSON.parse(JSON.stringify(rruleOptions));
+      
+      // Ensure dtstart and until are Date objects if they exist
+      if (ruleOptions.dtstart) ruleOptions.dtstart = new Date(ruleOptions.dtstart);
+      if (ruleOptions.until) ruleOptions.until = new Date(ruleOptions.until);
+      
+      // If no dtstart in rruleOptions, use the current date
+      if (!ruleOptions.dtstart) {
+        ruleOptions.dtstart = current;
+      }
+      
+      // Remove count limitation for getting next occurrence
+      delete ruleOptions.count;
+      
+      try {
+        rule = new RRule(ruleOptions);
+      } catch (error) {
+        console.error('[getNextRecurrenceDate] Error creating RRule from custom options:', error, ruleOptions);
+        return null;
+      }
+    } else {
+      // Handle standard repeat patterns
+      const options = {
+        dtstart: current,
+        count: 2 // We only need the current and next occurrence
+      };
 
-    const rule = createRRuleFromRepeatPattern(repeatPattern, options, current);
+      rule = createRRuleFromRepeatPattern(repeatPattern, options, current);
+    }
+    
     if (!rule) {
       console.error('[getNextRecurrenceDate] Failed to create RRule for pattern:', repeatPattern);
       return null;
     }
 
-    // Get all occurrences (should be 2: current and next)
+    // For custom patterns, use 'after' method to get next occurrence
+    if (repeatPattern === 'custom') {
+      const nextOccurrence = rule.after(current, false);
+      return nextOccurrence ? nextOccurrence.toISOString() : null;
+    }
+    
+    // For standard patterns, get all occurrences and return the second one
     const occurrences = rule.all();
     
     // Return the second occurrence (next after current)

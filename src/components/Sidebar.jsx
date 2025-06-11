@@ -55,6 +55,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { More } from "../assets/icons/More";
 import { createPortal } from 'react-dom';
+import TodaysTasksProgress from './TodaysTasksProgress';
 
 export default function Sidebar({
   commandBarRef,
@@ -62,6 +63,7 @@ export default function Sidebar({
   selectedDate,
   onDateSelect,
   setIsVisible,
+  showTodaysTasks = true,
 }) {
   // Get task management functions
   const { 
@@ -1214,6 +1216,33 @@ export default function Sidebar({
   
   const displayableTasks = activeTasks;
 
+  // Helper function to get priority order for sorting
+  const getPriorityOrder = (priority) => {
+    switch (priority) {
+      case 'High': return 0;
+      case 'Medium': return 1;
+      case 'Low': return 2;
+      case 'None': return 3;
+      default: return 4;
+    }
+  };
+
+  // Helper function to sort tasks by priority then by date
+  const sortTasksByPriorityAndDate = (tasks) => {
+    return tasks.sort((a, b) => {
+      // First sort by priority
+      const priorityA = getPriorityOrder(a.priority || 'None');
+      const priorityB = getPriorityOrder(b.priority || 'None');
+      
+      if (priorityA !== priorityB) {
+        return priorityA - priorityB;
+      }
+      
+      // If priorities are the same, sort by date
+      return new Date(a.scheduledDate) - new Date(b.scheduledDate);
+    });
+  };
+
   const sections =
     selectedView === "all"
       ? [
@@ -1224,9 +1253,7 @@ export default function Sidebar({
             icon: ClockIcon,
             color: "#EF4444",
             count: overdueTasks.length,
-            tasks: overdueTasks.sort(
-              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
-            ),
+            tasks: sortTasksByPriorityAndDate(overdueTasks),
           },
           // Due today section
           {
@@ -1235,9 +1262,7 @@ export default function Sidebar({
             icon: Calendar,
             color: "#F59E0B",
             count: dueTodayTasks.length,
-            tasks: dueTodayTasks.sort(
-              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
-            ),
+            tasks: sortTasksByPriorityAndDate(dueTodayTasks),
           },
           // Due tomorrow section
           {
@@ -1246,9 +1271,7 @@ export default function Sidebar({
             icon: Tomorrow,
             color: "#3B82F6",
             count: dueTomorrowTasks.length,
-            tasks: dueTomorrowTasks.sort(
-              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
-            ),
+            tasks: sortTasksByPriorityAndDate(dueTomorrowTasks),
           },
           // Due soon section
           {
@@ -1257,9 +1280,7 @@ export default function Sidebar({
             icon: Soon,
             color: "#8B5CF6",
             count: dueSoonTasks.length,
-            tasks: dueSoonTasks.sort(
-              (a, b) => new Date(a.scheduledDate) - new Date(b.scheduledDate)
-            ),
+            tasks: sortTasksByPriorityAndDate(dueSoonTasks),
           },
           // Inbox section - all tasks without tags, regardless of schedule date
           {
@@ -1268,7 +1289,7 @@ export default function Sidebar({
             icon: InboxAlt,
             color: "#6B7280",
             count: displayableTasks.filter((task) => !task.tag || !task.tag.id).length,
-            tasks: displayableTasks.filter((task) => !task.tag || !task.tag.id),
+            tasks: sortTasksByPriorityAndDate(displayableTasks.filter((task) => !task.tag || !task.tag.id)),
           },
           // Add all tags as sections
           ...tags.map((tag) => ({
@@ -1279,9 +1300,9 @@ export default function Sidebar({
             count: displayableTasks.filter(
               (task) => task.tag && task.tag.id === tag.id
             ).length,
-            tasks: displayableTasks.filter(
+            tasks: sortTasksByPriorityAndDate(displayableTasks.filter(
               (task) => task.tag && task.tag.id === tag.id
-            ),
+            )),
           })),
         ]
       : [];
@@ -1476,6 +1497,24 @@ export default function Sidebar({
                     )}
                   </button>
                 </div>
+                
+                {/* Today's Tasks Progress Widget */}
+                {showTodaysTasks && (
+                  <TodaysTasksProgress 
+                    tasks={tasks} 
+                    onAddTask={(schedule) => {
+                      if (commandBarRef?.current && schedule === 'today') {
+                        commandBarRef.current.openForNewTask(new Date());
+                        // Set scheduled date to today
+                        setTimeout(() => {
+                          const today = new Date();
+                          commandBarRef.current.setScheduledDate?.(today);
+                        }, 50);
+                      }
+                    }}
+                  />
+                )}
+                
                 <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg">
                   <div className="space-y-1 flex flex-col">
                     {selectedView === "all" ? (

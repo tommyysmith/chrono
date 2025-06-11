@@ -10,6 +10,7 @@ import RepeatTaskEditModal from "./RepeatTaskEditModal";
 import DeleteTaskModal from "./DeleteTaskModal";
 import CommandBar from "./CommandBar";
 import GoToDateCommand from "./GoToDateCommand";
+import Settings from "./Settings";
 import Day from "./views/Day";
 import Week from "./views/Week";
 import Month from "./views/Month";
@@ -45,6 +46,7 @@ import { Copy } from "@/assets/icons/Copy";
 import { SidebarIcon } from "@/assets/icons/Sidebar";
 import { Check } from "@/assets/icons/Check";
 import { Pencil } from "lucide-react";
+import { Chevron } from "@/assets/icons/Chevron";
 
 const ViewType = {
   DAY: "day",
@@ -56,6 +58,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [viewType, setViewType] = useState(ViewType.WEEK);
   const [currentDate, setCurrentDate] = useState(selectedDate);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showTodaysTasks, setShowTodaysTasks] = useState(true);
   const colors = TAG_COLORS;
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
@@ -241,7 +245,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         
         <div className="flex items-center gap-2">
           <div className="flex items-center">
-            <h1 className={`text-xl font-semibold ${isSidebarVisible ? 'ml-0' : 'ml-2'}`}>
+            <h1 className={`text-xl font-semibold`}>
               {selectedDate.toLocaleString("en-US", { month: "long" })}
             </h1>
             <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
@@ -456,15 +460,41 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, [isViewDropdownOpen]);
 
+  const mainContentVariants = {
+    normal: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        type: "easeInOut",
+        duration: 0.3,
+        ease: [0.25, 0.1, 0.25, 1]
+      }
+    },
+    settingsOpen: {
+      scale: 1,
+      opacity: 1,
+      transition: {
+        type: "easeInOut",
+        duration: 0.3,
+        ease: [0.25, 0.1, 0.25, 1]
+      }
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full relative isolate">
+    <motion.div 
+      className="flex flex-col h-full relative isolate"
+      variants={mainContentVariants}
+      animate={isSettingsOpen ? "settingsOpen" : "normal"}
+    >
       {/* Full-width header */}
       <div className='w-full h-14 bg-light-bg-light dark:bg-dark-bg flex items-center justify-between px-3'>
       
         <div className="flex items-center">
+        <div className="flex flex-row gap-2 justify-start">
           <TooltipProvider delayDuration={500}>
             <Tooltip>
-              <div className="flex items-center min-w-[86px]">
+              <div className={`flex items-center ${isSidebarVisible ? 'min-w-[240px]' : 'min-w-auto mr-4'}`}>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setIsSidebarVisible(!isSidebarVisible)}
@@ -481,44 +511,34 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </TooltipProvider>
         </div>
         <div className="flex items-center">
-            <h1 className={`text-xl font-semibold`}>
+            <h1 className={`text-sm font-semibold`}>
               {selectedDate.toLocaleString("en-US", { month: "long" })}
             </h1>
-            <span className="text-xl font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
+            <span className="text-sm font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
               {selectedDate.getFullYear()}
             </span>
           </div>
+          </div>
         
-        {/* View selector */}
-        <div className="flex items-center justify-center">
+        {/* View selector and Avatar */}
+        <div className="flex items-center justify-center space-x-3">
           <Popover>
             <PopoverTrigger asChild>
-              <div
-                className="flex items-center justify-between cursor-pointer min-w-[86px] flex-row px-2.5 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+              <motion.div
+                whileTap={{scale: 0.98}}
+                className="flex items-center gap-2 cursor-pointer flex-row px-2.5 h-[36px] font-medium text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
               >
-                <span className="text-xs px-0.5 font-medium text-light-text dark:text-dark-text">
+                <span className="font-medium">
                   {viewType === ViewType.DAY
                     ? "Day"
                     : viewType === ViewType.WEEK
                     ? "Week"
                     : "Month"}
                 </span>
-                <svg
-                  className="w-4 h-4 ml-2 text-light-text/50 dark:text-dark-text/50 transition-transform"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <path
-                    d="M19 9l-7 7-7-7"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
+                <Chevron className="w-4 h-4 rotate-90" />
+              </motion.div>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+            <PopoverContent align="end" className="w-auto p-1 text-xs min-w-36 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
               <div className="flex flex-col gap-1">
                 {Object.values(ViewType).map((type) => (
                   <button
@@ -526,23 +546,39 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     onClick={() => {
                       setViewType(type);
                     }}
-                    className={`w-full rounded text-left px-2 py-1 text-xs font-medium flex items-center justify-between ${
+                    className={`w-full rounded text-left px-1 py-1 text-xs font-medium flex items-center justify-between ${
                       viewType === type
-                        ? "text-dark-text text-xs dark:text-dark-text bg-black/5 dark:bg-white/5"
+                        ? "text-dark-text text-xs dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/5"
                         : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
                     }`}
                   >
                     <span>
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </span>
-                    <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
-                      {type.charAt(0).toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {viewType === type && (
+                        <Check className="w-3 h-3 text-dark-text dark:text-dark-text" />
+                      )}
+                      <span className="text-dark-text/30 dark:text-dark-text/30 text-[8px] border h-[20px] w-[20px] rounded-[5px] flex items-center justify-center border-light-border-2 dark:border-dark-border">
+                        {type.charAt(0).toUpperCase()}
+                      </span>
+                    </div>
                   </button>
                 ))}
               </div>
             </PopoverContent>
           </Popover>
+          
+          {/* Avatar Button */}
+          
+                <motion.button
+                whileTap={{scale:0.98}}
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
+                >
+                  <span className="text-white text-sm font-semibold">TS</span>
+                </motion.button>
+  
         </div>
       </div>
       
@@ -577,6 +613,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   }
                 }}
                 setIsVisible={setIsSidebarVisible}
+                showTodaysTasks={showTodaysTasks}
               />
             </div>
           </motion.div>
@@ -829,7 +866,19 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
       />
       {TaskContextMenuPopover && <TaskContextMenuPopover />}
+      
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <Settings 
+            isOpen={isSettingsOpen} 
+            onClose={() => setIsSettingsOpen(false)}
+            showTodaysTasks={showTodaysTasks}
+            setShowTodaysTasks={setShowTodaysTasks}
+          />
+        )}
+      </AnimatePresence>
       </div>
-    </div>
+    </motion.div>
   );
 }

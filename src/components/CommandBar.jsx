@@ -11,10 +11,18 @@ import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
 import { Return } from '../assets/icons/Return';
 import { User } from '../assets/icons/User';
 import { Flag } from '../assets/icons/Flag';
+import { None } from '../assets/icons/None';
+import { Low } from '../assets/icons/Low';
+import { Medium } from '../assets/icons/Medium';
+import { High } from '../assets/icons/High';
 import { Repeat } from '../assets/icons/Repeat';
 import { Add } from '../assets/icons/Add';
 import { Chevron } from '../assets/icons/Chevron';
 import { Microphone } from '../assets/icons/Microphone';
+import { Tomorrow } from '../assets/icons/Tomorrow';
+import { Soon } from '../assets/icons/Soon';
+import { Anytime } from '../assets/icons/Anytime';
+import { Check } from '../assets/icons/Check';
 import { Calendar } from '@/components/ui/calendar';
 import { Task } from '../assets/icons/Task';
 import { Tag } from '../assets/icons/Tag';
@@ -39,9 +47,10 @@ import { RRule, Weekday } from 'rrule'; // Import RRule and Weekday
 import RecurrenceModal from './RecurrenceModal'; // Import RecurrenceModal
 
 const SCHEDULE_OPTIONS = [
-  { id: 'today', label: 'Today' },
-  { id: 'tomorrow', label: 'Tomorrow' },
-  { id: 'nextWeek', label: 'Next Week' },
+  { id: 'anytime', label: 'Anytime', icon: Anytime, color: '#6B7280' },
+  { id: 'today', label: 'Today', icon: CalendarIcon, color: '#EF4444' },
+  { id: 'tomorrow', label: 'Tomorrow', icon: Tomorrow, color: '#3B82F6' },
+  { id: 'nextWeek', label: 'Next week', icon: Soon, color: '#A855F7' },
   { id: 'custom', label: 'Pick a date...' }
 ];
 
@@ -61,8 +70,24 @@ const REPEAT_OPTIONS = [
 const PRIORITY_OPTIONS = [
   { id: 'High', label: 'High', color: '#EF4444' },
   { id: 'Medium', label: 'Medium', color: '#F59E0B' },
-  { id: 'Low', label: 'Low', color: '#10B981' }
+  { id: 'Low', label: 'Low', color: '#10B981' },
+  { id: 'None', label: 'None', color: '#6B7280' }
 ];
+
+// Helper function to get the appropriate priority icon
+const getPriorityIcon = (priorityId) => {
+  switch (priorityId) {
+    case 'High':
+      return High;
+    case 'Medium':
+      return Medium;
+    case 'Low':
+      return Low;
+    case 'None':
+    default:
+      return None;
+  }
+};
 
 // Helper function to generate time options in 15-minute intervals
 const generateTimeOptions = () => {
@@ -133,7 +158,7 @@ const TabSelector = ({ activeTab, onTabChange, ...props }) => {
     },
     exit: {
       opacity: 0,
-      y: -10,
+      x: -10,
       scale: 0.95,
       transition: {
         duration: 0.2,
@@ -207,7 +232,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-  const [scheduleOption, setScheduleOption] = useState('today');
+  const [scheduleOption, setScheduleOption] = useState('anytime');
   const [isGoToDateMode, setIsGoToDateMode] = useState(false);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -297,7 +322,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   // State for custom task recurrence rule
   const [taskRruleOptions, setTaskRruleOptions] = useState(null);
   // Priority state
-  const [taskPriority, setTaskPriority] = useState('Medium');
+  const [taskPriority, setTaskPriority] = useState('None');
   const [isPriorityDropdownOpen, setIsPriorityDropdownOpen] = useState(false);
   // Separate state for editing
   const [draftTag, setDraftTag] = useState(null);
@@ -355,7 +380,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     color: '#808080',
     repeat: 'none',
     seriesId: null,
-    rruleOptions: null // Add rruleOptions to event state
+    rruleOptions: null, // Add rruleOptions to event state
+    _preservedStartTime: '09:00', // Store original start time when all-day is enabled
+    _preservedEndTime: '10:00' // Store original end time when all-day is enabled
   });
   const [hasChanges, setHasChanges] = useState(false);
   const [eventTitle, setEventTitle] = useState('New Event');
@@ -513,7 +540,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       color: '#808080',
       repeat: 'none',
       seriesId: null,
-      rruleOptions: null // Reset rruleOptions
+      rruleOptions: null, // Reset rruleOptions
+      _preservedStartTime: '09:00', // Reset preserved start time
+      _preservedEndTime: '10:00' // Reset preserved end time
     });
     setHasChanges(false);
     setIsAddingEvent(false);
@@ -530,10 +559,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setIsTaskRepeatDropdownOpen(false); // Reset task repeat dropdown state
     setTaskRepeatSeriesId(null); // Reset task repeat series ID
     setTaskRruleOptions(null); // Reset task custom rule
+    setTaskPriority('None'); // Reset priority to default
+    setIsPriorityDropdownOpen(false); // Reset priority dropdown state
     setIsRecurrenceModalOpen(false); // Close recurrence modal if open
     // Reset schedule-related fields
     setIsScheduleOpen(false); // Reset schedule dropdown state
-    setScheduleOption('today'); // Reset schedule option to default
+    setScheduleOption('anytime'); // Reset schedule option to default
     setIsScheduling(false); // Reset scheduling state
     setScheduledDate(null); // Reset scheduled date
     
@@ -579,7 +610,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       // Preserve repeat properties for series updates
       _preserveRepeat: eventCopy._preserveRepeat || false,
       // Force series update if this is a series edit
-      _forceSeriesUpdate: eventCopy._seriesUpdate || false
+      _forceSeriesUpdate: eventCopy._seriesUpdate || false,
+      // Store the current times as preserved times for all-day toggle
+      _preservedStartTime: format(eventCopy.start, 'HH:mm'),
+      _preservedEndTime: format(eventCopy.end, 'HH:mm')
     };
 
     // Set both the original state and event state
@@ -619,7 +653,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           const newEndDate = new Date(newStartDate.getTime() + effectiveDurationMs);
           const newEndTimeStr = format(newEndDate, 'HH:mm');
           
-          newState = { ...newState, startTime: newStartTimeStr, endTime: newEndTimeStr };
+          newState = { ...newState, startTime: newStartTimeStr, endTime: newEndTimeStr, _preservedStartTime: newStartTimeStr, _preservedEndTime: newEndTimeStr };
         } else {
           // Handle parsing error - maybe just update start time?
           newState = { ...newState, startTime: newStartTimeStr };
@@ -627,7 +661,26 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       } else if (field === 'endTime') {
         // When endTime is explicitly changed, update it and ensure minimum gap
         const newEndTime = ensureMinimumGap(prev.startTime, value);
-        newState = { ...newState, endTime: newEndTime };
+        newState = { ...newState, endTime: newEndTime, _preservedEndTime: newEndTime };
+      } else if (field === 'isAllDay') {
+        // Handle all-day toggle with time preservation
+        if (value === true) {
+          // Turning ON all-day: preserve current times
+          newState = { 
+            ...newState, 
+            isAllDay: true,
+            _preservedStartTime: prev.startTime,
+            _preservedEndTime: prev.endTime
+          };
+        } else {
+          // Turning OFF all-day: restore preserved times
+          newState = { 
+            ...newState, 
+            isAllDay: false,
+            startTime: prev._preservedStartTime || prev.startTime,
+            endTime: prev._preservedEndTime || prev.endTime
+          };
+        }
       } else {
         // For all other fields, just update the value
         newState = { ...newState, [field]: value };
@@ -841,7 +894,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
-        rruleOptions: null // Init rruleOptions for new event
+        rruleOptions: null, // Init rruleOptions for new event
+        _preservedStartTime: format(startTime, 'HH:mm'), // Initialize preserved start time
+        _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
       setOriginalEventState(eventId ? { ...newEventData, id: eventId } : createdEvent);
@@ -877,7 +932,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
-        rruleOptions: null // Init rruleOptions for new event
+        rruleOptions: null, // Init rruleOptions for new event
+        _preservedStartTime: roundedTimeStr, // Initialize preserved start time
+        _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
       setOriginalEventState(createdEvent);
@@ -907,7 +964,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         color: '#3B82F6',
         repeat: 'none',
         seriesId: null,
-        rruleOptions: null
+        rruleOptions: null,
+        _preservedStartTime: format(startTime, 'HH:mm'), // Initialize preserved start time
+        _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
       // Set original event state to null since this is a new event
@@ -926,12 +985,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatOption('none');
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null);
+      setTaskPriority('None'); // Reset priority to default
       setAddToCalendar(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
       
       // Set the scheduled date to the provided date
       setScheduledDate(date ? new Date(date) : null);
+      
+      // Set schedule option based on whether a date is provided
+      // If no date is provided (null), default to 'anytime'
+      // If a date is provided, determine the appropriate option
+      if (!date) {
+        setScheduleOption('anytime');
+      } else {
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        if (date.toDateString() === today.toDateString()) {
+          setScheduleOption('today');
+        } else if (date.toDateString() === tomorrow.toDateString()) {
+          setScheduleOption('tomorrow');
+        } else {
+          setScheduleOption('custom');
+        }
+      }
       
       // Open the CommandBar in task creation mode
       setIsOpen(true);
@@ -1639,7 +1718,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </motion.button>
                       </PopoverTrigger>
                       <PopoverContent 
-                        className="w-[364.09px] !z-1 flex flex-row p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                        className="w-44 flex flex-col p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter outline outline-1 outline-offset-0 outline-light-border dark:outline-dark-border rounded-[9px] shadow-lg"
                         align="start"
                         sideOffset={2}
                         
@@ -1649,23 +1728,33 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           onClick={() => {
                             setIsAddingTask(true);
                             setIsOpen(true);
-                            setActiveTab('task');
+
                           }}
-                          className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                          className="group w-full flex items-center justify-between gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                         >
-                          <Completed className={`w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text  ${taskTitle.trim() ? 'text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50'}`}   />
+                          <div className="flex flex-row gap-2 items-center">
+                          <Completed className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                           <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Task</span>
+                          </div>
+                          <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
+                           <span className="text-[10px] font-semibold flex flex-row items-center gap-1 tracking-wide text-light-text/50 dark:text-dark-text/50"> <Shift className="w-2.5 h-2.5" />+<span className="pl-[1px] pr-[1px]">T</span></span>
+                          </div>
                           </button>
                         <button
                           onClick={() => {
                             handleAddEventClick();
                             setIsOpen(true);
-                            setActiveTab('event');
+
                           }}
-                          className="group w-full flex items-center justify-center gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
+                          className="group w-full flex items-center justify-between gap-2 px-2 py-2 text-sm text-light-text/50 dark:text-dark-text/50 hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px] transition-colors"
                         >
+                          <div className="flex flex-row gap-2 items-center">
                           <CalendarIcon className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                           <span className='group-hover:text-light-text dark:group-hover:text-dark-text group-hover:font-medium dark:group-hover:font-medium'>Event</span>
+                          </div>
+                          <div className="flex flex-row h-[20px] items-center bg-black/5 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 px-1.5 rounded-[5px]">
+                           <span className="text-[10px] font-semibold flex flex-row items-center gap-1 tracking-wide text-light-text/50 dark:text-dark-text/50"> <Shift className="w-2.5 h-2.5" />+<span className="pl-[1px] pr-[1px]">E</span></span>
+                          </div>
                         </button>
                       </PopoverContent>
                     </Popover>
@@ -1780,16 +1869,56 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   />
                                 </div>
                               </div>
-                              <div className="flex items-center text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border cursor-pointer">
+                              <div className="flex items-center text-light-text/50 dark:text-dark-text/50 gap-2 px-4 py-4 border-b h-[72px] border-light-border dark:border-dark-border">
                               <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                                  <div className="flex flex-col gap-1.5">
+                                    <span className="text-[11px] font-medium">Schedule</span>
                                 <PopoverTrigger asChild>
-                                <div className="flex items-center w-full gap-2">
-                                  <CalendarIcon className="w-4 h-4" />
-                                  <span className="text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Schedule'}</span>
+                                <div className="flex cursor-pointer items-center hover:text-light-text dark:hover:text-dark-text w-full gap-2">
+                                  {(() => {
+                                    if (!scheduledDate) {
+                                      // Show Anytime icon when no date is selected
+                                      const anytimeOption = SCHEDULE_OPTIONS.find(opt => opt.id === 'anytime');
+                                      const IconComponent = anytimeOption?.icon || CalendarIcon;
+                                      return <IconComponent className="w-4 h-4" style={{ color: anytimeOption?.color }} />;
+                                    }
+                                    
+                                    const today = new Date();
+                                    const tomorrow = new Date(today);
+                                    tomorrow.setDate(tomorrow.getDate() + 1);
+                                    const nextWeek = new Date(today);
+                                    nextWeek.setDate(nextWeek.getDate() + 7);
+                                    
+                                    // Check if scheduled date matches today
+                                    if (scheduledDate.toDateString() === today.toDateString()) {
+                                      const todayOption = SCHEDULE_OPTIONS.find(opt => opt.id === 'today');
+                                      const IconComponent = todayOption?.icon || CalendarIcon;
+                                      return <IconComponent className="w-4 h-4" style={{ color: todayOption?.color }} />;
+                                    }
+                                    
+                                    // Check if scheduled date matches tomorrow
+                                    if (scheduledDate.toDateString() === tomorrow.toDateString()) {
+                                      const tomorrowOption = SCHEDULE_OPTIONS.find(opt => opt.id === 'tomorrow');
+                                      const IconComponent = tomorrowOption?.icon || CalendarIcon;
+                                      return <IconComponent className="w-4 h-4" style={{ color: tomorrowOption?.color }} />;
+                                    }
+                                    
+                                    // Check if scheduled date matches next week (7 days from today)
+                                    if (scheduledDate.toDateString() === nextWeek.toDateString()) {
+                                      const nextWeekOption = SCHEDULE_OPTIONS.find(opt => opt.id === 'nextWeek');
+                                      const IconComponent = nextWeekOption?.icon || CalendarIcon;
+                                      return <IconComponent className="w-4 h-4" style={{ color: nextWeekOption?.color }} />;
+                                    }
+                                    
+                                    // For any other custom date, use Calendar icon
+                                    return <CalendarIcon className="w-4 h-4" />;
+                                  })()}
+                                  <motion.span whileTap={{scale: 0.98}} className="text-sm">{scheduledDate ? format(scheduledDate, 'MMM d') : 'Anytime'}</motion.span>
                                 </div>
                                 </PopoverTrigger>
+                                </div>
                                 <PopoverContent 
-                                  className="w-[240px] text-dark-text dark:text-dark-text p-1 ml-8 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
+                                  className="w-[200px] font-medium text-dark-text/50 dark:text-dark-text/50 p-1 mb-8 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg shadow-lg border border-light-border dark:border-dark-border" 
                                   align="start"
                                 >
                                   <div 
@@ -1800,13 +1929,33 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     {SCHEDULE_OPTIONS.map(option => (
                                       <button
                                         key={`schedule-option-${option.id}`}
-                                        className="flex items-center gap-2 px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
+                                        className={`flex items-center justify-between px-2 py-2 text-xs rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5 ${
+                                          (() => {
+                                            if (option.id === 'anytime' && !scheduledDate) return 'text-dark-text dark:text-dark-text font-semibold';
+                                            if (option.id === 'today' && scheduledDate && isToday(scheduledDate)) return 'text-dark-text dark:text-dark-text font-semibold';
+                                            if (option.id === 'tomorrow' && scheduledDate && isTomorrow(scheduledDate)) return 'text-dark-text dark:text-dark-text font-semibold';
+                                            if (option.id === 'nextWeek' && scheduledDate) {
+                                              const nextWeek = new Date();
+                                              nextWeek.setDate(nextWeek.getDate() + 7);
+                                              if (isSameDay(scheduledDate, nextWeek)) return 'text-dark-text dark:text-dark-text';
+                                            }
+                                            if (option.id === 'custom' && scheduledDate && !isToday(scheduledDate) && !isTomorrow(scheduledDate)) {
+                                              const nextWeek = new Date();
+                                              nextWeek.setDate(nextWeek.getDate() + 7);
+                                              if (!isSameDay(scheduledDate, nextWeek)) return 'text-dark-text dark:text-dark-text';
+                                            }
+                                            return '';
+                                          })()
+                                        }`}
                                         onMouseDown={(e) => e.stopPropagation()}
                                         onClick={(e) => {
                                           e.preventDefault();
                                           e.stopPropagation();
                                           if (option.id === 'custom') {
                                             setIsDatePickerOpen(true);
+                                            setIsScheduleOpen(false);
+                                          } else if (option.id === 'anytime') {
+                                            setScheduledDate(null);
                                             setIsScheduleOpen(false);
                                           } else {
                                             const date = new Date();
@@ -1820,7 +1969,26 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           }
                                         }}
                                       >
-                                        {option.label}
+                                        <div className="flex items-center gap-2">
+                                          {option.icon && <option.icon className="w-4 h-4" style={{ color: option.color }} />}
+                                          {option.label}
+                                        </div>
+                                        {(() => {
+                                          if (option.id === 'anytime' && !scheduledDate) return <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />;
+                                          if (option.id === 'today' && scheduledDate && isToday(scheduledDate)) return <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />;
+                                          if (option.id === 'tomorrow' && scheduledDate && isTomorrow(scheduledDate)) return <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />;
+                                          if (option.id === 'nextWeek' && scheduledDate) {
+                                            const nextWeek = new Date();
+                                            nextWeek.setDate(nextWeek.getDate() + 7);
+                                            if (isSameDay(scheduledDate, nextWeek)) return <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />;
+                                          }
+                                          if (option.id === 'custom' && scheduledDate && !isToday(scheduledDate) && !isTomorrow(scheduledDate)) {
+                                            const nextWeek = new Date();
+                                            nextWeek.setDate(nextWeek.getDate() + 7);
+                                            if (!isSameDay(scheduledDate, nextWeek)) return <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />;
+                                          }
+                                          return null;
+                                        })()}
                                       </button>
                                     ))}
                                   </div>
@@ -1852,18 +2020,27 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 </PopoverContent>
                               </Popover>
                               </div>
-                              <div className="flex items-center gap-2 px-4 py-4 border-b h-[56px] border-light-border dark:border-dark-border">
-                                <Tag className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                              
+
+                                  
+                              
+                              <div className="flex items-center gap-2 px-4 py-4 border-b h-[72px] border-light-border dark:border-dark-border">
+                              <div className="flex flex-col gap-1.5">
+                                <span className="text-[11px] font-medium text-light-text/50 dark:text-dark-text/50">Tag group</span>
+                                <div className="flex flex-row h-[20px] items-center gap-2">
+                
+                                <Tag className={`w-4 h-4 ${draftTag ? '' : 'text-light-text/50 dark:text-dark-text/50'}`} style={draftTag ? { color: draftTag.color } : {}} />
                                 <div className="relative flex-1">
                                   <div className="flex items-center gap-1 py-1">
                                     {draftTag ? (
                                       <span 
-                                        className="inline-flex items-center gap-1 px-3 py-1 rounded-[5px] text-sm"
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded-[5px] text-xs"
                                         style={{ backgroundColor: `${draftTag.color}26` }}
                                       >
                                         {draftTag.label}
                                       </span>
                                     ) : null}
+                                    
                                     <input
                                       type="text"
                                       placeholder={draftTag ? '' : 'Add a tag'}
@@ -1903,14 +2080,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                         }
                                       }}
                                     />
+                                    </div>
+                                    
                                   {isTagDropdownOpen && tagSearchText.length > 0 && (
-                                    <div className="absolute left-0 z-50 right-0 max-w-[240px] backdrop-blur-lg p-1 top-full mt-1 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] border border-light-border dark:border-dark-border shadow-lg overflow-hidden">
+                                    <div className="absolute  left-0 z-50 right-0 !w-[240px] max-w-[240px] p-1 top-full mt-1 bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] outline outline-1 outline-light-border dark:outline-dark-border shadow-lg overflow-hidden">
                                       {tags
                                         .filter(tag => tag.label.toLowerCase().includes(tagSearchText.toLowerCase()))
                                         .map(tag => (
                                           <button
                                             key={`tag-option-${tag.id}`}
-                                            className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-white/15 dark:hover:bg-white/5 rounded-[5px]"
+                                            className="w-full flex items-center gap-2 px-2 py-2 text-xs hover:bg-white/15 dark:hover:bg-white/5 rounded-[5px]"
                                             onClick={() => {
                                               setSelectedTag(tag);
                                               setDraftTag(tag);
@@ -1926,7 +2105,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                       {tagSearchText && !tags.find(t => t.label.toLowerCase() === tagSearchText.toLowerCase()) && (
                                         <button
                                           key={`new-tag-${tagSearchText}`}
-                                          className="w-full flex items-center gap-2 px-2 py-2 text-sm hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
+                                          className="w-full flex items-center gap-2 px-2 py-2 text-xs hover:bg-black/5 dark:hover:bg-white/5 rounded-[5px]"
                                           onClick={() => {
                                             const randomColor = TAG_COLORS[Math.floor(Math.random() * TAG_COLORS.length)];
                                             const newTag = {
@@ -1942,59 +2121,93 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           }}
                                         >
                                           <Add className="w-4 h-4 text-dark-text/50 dark:text-dark-text/50" />
-                                          <span className="font-regular text-dark-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-dark-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
+                                          <span className="font-regular text-xs text-left text-dark-text/50 dark:text-dark-text/50">Create <span className="font-semibold text-dark-text dark:text-dark-text">"{tagSearchText}"</span> tag</span>
                                         </button>
                                       )}
+                                      
                                     </div>
+
                                   )}
+
+                                </div>
                                 </div>
                               </div>
                             </div>
-                              <div className="flex items-center px-4 h-[56px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
+                              <div className="flex items-center px-4 h-[72px] border-b border-light-border dark:border-dark-border text-light-text/50 dark:text-dark-text/50 text-sm transition-colors">
+
                                 <Popover open={isPriorityDropdownOpen} onOpenChange={setIsPriorityDropdownOpen}>
-                                  <PopoverTrigger className="flex group items-center justify-between w-full">
-                                    <div className="flex items-center gap-2">
-                                      <Flag className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" style={{ color: PRIORITY_OPTIONS.find(p => p.id === taskPriority)?.color }} />
-                                      <span className="group-hover:text-light-text dark:group-hover:text-dark-text">
-                                        {taskPriority} priority
-                                      </span>
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-start gap-1.5 flex-col">
+                                      <span className="text-[11px] font-medium">Priority</span>
+                                    <PopoverTrigger>
+                                    <div className="flex group cursor-pointer items-center gap-2">
+                                      {(() => {
+                                        const IconComponent = getPriorityIcon(taskPriority);
+                                        return (
+                                          <IconComponent 
+                                            className={`w-4 h-4 ${taskPriority === 'None' ? 'text-light-text/50 dark:text-dark-text/50' : ''}`} 
+                                            style={taskPriority === 'None' ? {} : { color: PRIORITY_OPTIONS.find(p => p.id === taskPriority)?.color }} 
+                                          />
+                                        );
+                                      })()}
+                                      <motion.span whileTap={{scale: 0.98}} className="group-hover:text-light-text dark:group-hover:text-dark-text">
+                                        {taskPriority}
+                                      </motion.span>
                                     </div>
-                                  </PopoverTrigger>
+                                    </PopoverTrigger>
+                                    </div>
+                                  </div>
                                   <PopoverContent 
-                                    className="w-[180px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                                    className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
                                     align="start"
-                                    side="top"
+                                    side="bottom"
                                   >
                                     <div role="listbox" className="flex flex-col">
                                       {PRIORITY_OPTIONS.map((option) => (
                                         <button
                                           key={option.id}
                                           type="button"
-                                          className={`px-2 py-2 text-sm flex items-center gap-2 font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskPriority === option.id ? 'text-dark-text dark:text-dark-text' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                          className={`px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskPriority === option.id ? 'font-semibold text-dark-text dark:text-dark-text' : 'font-medium text-dark-text/50 dark:text-dark-text/50'}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setTaskPriority(option.id);
                                             setIsPriorityDropdownOpen(false);
                                           }}
                                         >
-                                          <Flag className="w-4 h-4" style={{ color: option.color }} />
-                                          <span className="text-xs group-hover:text-light-text dark:group-hover:text-dark-text">{option.label}</span>
+                                          <div className="flex items-center gap-2">
+                                            {(() => {
+                                              const IconComponent = getPriorityIcon(option.id);
+                                              return (
+                                                <IconComponent 
+                                                  className={`w-4 h-4 ${option.id === 'None' ? 'text-dark-text/50 dark:text-dark-text/50' : ''}`} 
+                                                  style={option.id === 'None' ? {} : { color: option.color }} 
+                                                />
+                                              );
+                                            })()} 
+                                            <span className="text-xs group-hover:text-light-text dark:group-hover:text-dark-text">{option.label}</span>
+                                          </div>
+                                          {taskPriority === option.id && <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />}
                                         </button>
                                       ))}
                                     </div>
                                   </PopoverContent>
                                 </Popover>
                               </div>
-                              <div className="flex items-center px-4 h-[56px] text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text text-sm transition-colors cursor-pointer">
+                              <div className="flex items-center px-4 h-[72px] text-light-text/50 dark:text-dark-text/50 text-sm transition-colors">
                                 <Popover open={isTaskRepeatDropdownOpen} onOpenChange={setIsTaskRepeatDropdownOpen}>
-                                  <PopoverTrigger className="flex group items-center justify-between w-full">
-                                    <div className="flex items-center gap-2">
-                                      <Repeat className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
-                                      <span className={`${taskRepeatOption === 'none' ? '' : 'group-hover:text-light-text dark:group-hover:text-dark-text'}`}>
+                                  <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-start flex-col gap-1.5">
+                                      <span className="text-[11px] font-medium">Repeat</span>
+                                    <PopoverTrigger>
+                                    <div className="flex group items-center gap-2 cursor-pointer">
+                                      <Repeat className="w-4 h-4" />
+                                      <motion.span whileTap={{scale: 0.98}} className={`${taskRepeatOption === 'none' ? 'group-hover:text-light-text dark:group-hover:text-dark-text' : 'group-hover:text-light-text dark:group-hover:text-dark-text'}`}>
                                         {getRepeatDisplayText(taskRepeatOption, taskRruleOptions)}
-                                      </span>
+                                      </motion.span>
                                     </div>
-                                  </PopoverTrigger>
+                                    </PopoverTrigger>
+                                    </div>
+                                  </div>
                                   <PopoverContent 
                                     className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
                                       scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
@@ -2034,7 +2247,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           <button
                                             key={option.id}
                                             type="button"
-                                            className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskRepeatOption === option.id ? 'font-semibold' : ''}`}
+                                            className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskRepeatOption === option.id ? 'font-semibold' : ''}`}
                                             onClick={(e) => {
                                               e.stopPropagation();
                                               if (option.id === 'custom') {
@@ -2051,9 +2264,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           >
                                             <div className="flex w-full justify-between items-center">
                                               <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${taskRepeatOption === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
-                                              {sublabel && (
-                                                <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
-                                              )}
+                                              <div className="flex items-center gap-2">
+                                                {sublabel && (
+                                                  <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
+                                                )}
+                                                {taskRepeatOption === option.id && <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />}
+                                              </div>
                                             </div>
                                           </button>
                                         );
@@ -2169,28 +2385,33 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     {/* Time and Date Group - No Divider Between */}
                     <div className="flex flex-col">
                       {/* Time Section */}
-                      <div className={`flex items-top gap-2 px-4 py-4 ${eventState.isMultiDay ? 'opacity-50' : ''}`}>
-                        <div className="w-5 h-5 flex items-center justify-center">
-                          <Clock className={`w-4 h-4 ${eventState.isMultiDay ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`} />
-                        </div>
+                      <div className={`flex items-top gap-2 px-4 py-4 ${(eventState.isMultiDay || eventState.isAllDay) ? 'opacity-50' : ''}`}>
+                        <div className="flex flex-col gap-2">
+                      <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Time</span>
+
+                            <div className="flex items-start gap-2">
+                              
+                          <Clock className={`w-4 h-4 ${(eventState.isMultiDay || eventState.isAllDay) ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`} />
+
                         <div className="flex flex-col gap-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 h-[16px]">
                             {/* Start Time Popover Input */}
-                            <Popover open={!eventState.isMultiDay && isStartTimePickerOpen} onOpenChange={eventState.isMultiDay ? () => {} : setIsStartTimePickerOpen}>
+                            <Popover open={!(eventState.isMultiDay || eventState.isAllDay) && isStartTimePickerOpen} onOpenChange={(eventState.isMultiDay || eventState.isAllDay) ? () => {} : setIsStartTimePickerOpen}>
                               <PopoverTrigger asChild>
-                                <input
+                                <motion.input
+                                  whileTap={{scale: 0.98}}
                                   type="text"
                                   placeholder="Start"
                                   value={startTimeSearch || format(parse(eventState.startTime, 'HH:mm', new Date()), 'h:mm a')}
-                                  disabled={eventState.isMultiDay}
+                                  disabled={eventState.isMultiDay || eventState.isAllDay}
                                   onFocus={(e) => {
-                                    if (!eventState.isMultiDay) {
+                                    if (!(eventState.isMultiDay || eventState.isAllDay)) {
                                       setTimeout(() => e.target.select(), 0);
                                       setStartTimeSearch(''); // Clear search on focus to show all
                                     }
                                   }}
                                   onChange={(e) => {
-                                    if (!eventState.isMultiDay) {
+                                    if (!(eventState.isMultiDay || eventState.isAllDay)) {
                                       const inputText = e.target.value;
                                       setStartTimeSearch(inputText); // Update search term for filtering
                                       const parsedTime = parseTimeString(inputText);
@@ -2201,7 +2422,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     }
                                   }}
                                   className={`text-sm bg-transparent border-none w-[64px] p-0 focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden ${
-                                    eventState.isMultiDay 
+                                    (eventState.isMultiDay || eventState.isAllDay) 
                                       ? 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed' 
                                       : 'text-light-text dark:text-dark-text cursor-pointer'
                                   }`}
@@ -2215,45 +2436,57 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus stealing
                               >
                                 <div role="listbox" className="flex flex-col">
-                                  {filteredStartTimeOptions.map((option) => (
-                                    <button
-                                      key={`start-${option.value}`}
-                                      type="button"
-                                      className={`text-left px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${eventState.startTime === option.value ? 'bg-white/15 dark:bg-white/10 font-semibold text-dark-text dark:text-dark-text' : 'text-dark-text/50 dark:text-dark-text/50'}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEventChange('startTime', option.value);
-                                        setIsStartTimePickerOpen(false);
-                                        setStartTimeSearch(''); // Reset search
-                                      }}
-                                      role="option"
-                                      aria-selected={eventState.startTime === option.value}
-                                    >
-                                      {option.label}
-                                    </button>
-                                  ))}
+                                  {filteredStartTimeOptions.map((option) => {
+                                    const isSelected = eventState.startTime === option.value;
+                                    return (
+                                      <button
+                                        key={`start-${option.value}`}
+                                        ref={isSelected ? (el) => {
+                                          if (el && isStartTimePickerOpen) {
+                                            setTimeout(() => {
+                                              el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                                            }, 0);
+                                          }
+                                        } : null}
+                                        type="button"
+                                        className={`flex items-center justify-between px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${isSelected ? 'font-semibold text-dark-text dark:text-dark-text' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleEventChange('startTime', option.value);
+                                          setIsStartTimePickerOpen(false);
+                                          setStartTimeSearch(''); // Reset search
+                                        }}
+                                        role="option"
+                                        aria-selected={isSelected}
+                                      >
+                                        <span>{option.label}</span>
+                                        {isSelected && <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </PopoverContent>
                             </Popover>
 
-                            <span className={`${eventState.isMultiDay ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`}>→</span>
+                            <span className={`${(eventState.isMultiDay || eventState.isAllDay) ? 'text-light-text/30 dark:text-dark-text/30' : 'text-light-text/50 dark:text-dark-text/50'}`}>→</span>
 
                             {/* End Time Popover Input */}
-                            <Popover open={!eventState.isMultiDay && isEndTimePickerOpen} onOpenChange={eventState.isMultiDay ? () => {} : setIsEndTimePickerOpen}>
+                            <Popover open={!(eventState.isMultiDay || eventState.isAllDay) && isEndTimePickerOpen} onOpenChange={(eventState.isMultiDay || eventState.isAllDay) ? () => {} : setIsEndTimePickerOpen}>
                               <PopoverTrigger asChild>
-                                 <input
+                                 <motion.input
+                                  whileTap={{scale: 0.98}}
                                   type="text"
                                   placeholder="End"
                                   value={endTimeSearch || format(parse(eventState.endTime, 'HH:mm', new Date()), 'h:mm a')}
-                                  disabled={eventState.isMultiDay}
+                                  disabled={eventState.isMultiDay || eventState.isAllDay}
                                   onFocus={(e) => {
-                                    if (!eventState.isMultiDay) {
+                                    if (!(eventState.isMultiDay || eventState.isAllDay)) {
                                       setTimeout(() => e.target.select(), 0);
                                       setEndTimeSearch(''); // Clear search on focus
                                     }
                                   }}
                                   onChange={(e) => {
-                                    if (!eventState.isMultiDay) {
+                                    if (!(eventState.isMultiDay || eventState.isAllDay)) {
                                       const inputText = e.target.value;
                                       setEndTimeSearch(inputText);
                                       const parsedTime = parseTimeString(inputText);
@@ -2264,7 +2497,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     }
                                   }}
                                   className={`text-sm bg-transparent border-none w-[64px] p-0 focus:ring-0 focus:outline-none inline-block shrink-0 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-inner-spin-button]:hidden [&::-webkit-clear-button]:hidden ${
-                                    eventState.isMultiDay 
+                                    (eventState.isMultiDay || eventState.isAllDay) 
                                       ? 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed' 
                                       : 'text-light-text dark:text-dark-text cursor-pointer'
                                   }`}
@@ -2300,11 +2533,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                       }
                                     }
 
+                                    const isSelected = eventState.endTime === option.value;
                                     return (
                                       <button
                                         key={`end-${option.value}`}
+                                        ref={isSelected ? (el) => {
+                                           if (el && isEndTimePickerOpen) {
+                                             setTimeout(() => {
+                                               el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                                             }, 0);
+                                           }
+                                         } : null}
                                         type="button"
-                                        className={`flex justify-between items-center text-left px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${eventState.endTime === option.value ? 'bg-white/15 dark:bg-white/10 font-semibold text-dark-text dark:text-dark-text ' : 'text-dark-text/50 dark:text-dark-text/50'}`}
+                                        className={`flex justify-between items-center text-left px-2 py-1.5 text-xs font-medium rounded-[5px] cursor-pointer hover:bg-white/15 dark:hover:bg-white/5 ${isSelected ? 'bg-white/15 dark:bg-white/10 font-semibold text-dark-text dark:text-dark-text ' : 'text-dark-text/50 dark:text-dark-text/50'}`}
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           handleEventChange('endTime', ensureMinimumGap(eventState.startTime, option.value));
@@ -2312,14 +2553,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                           setEndTimeSearch(''); // Reset search
                                         }}
                                         role="option"
-                                        aria-selected={eventState.endTime === option.value}
+                                        aria-selected={isSelected}
                                       >
                                         <span>{option.label}</span>
-                                        {durationStr && (
-                                          <span className="text-xs text-dark-text/30 dark:text-dark-text/40 ml-2">
-                                            ({durationStr})
-                                          </span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {durationStr && (
+                                            <span className="text-xs text-dark-text/30 dark:text-dark-text/40">
+                                              ({durationStr})
+                                            </span>
+                                          )}
+                                          {isSelected && <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />}
+                                        </div>
                                       </button>
                                     );
                                   })}
@@ -2340,23 +2584,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             <span className="text-xs text-light-text/50 dark:text-dark-text/50">All day</span>
                           </div>
                         </div>
+                        </div>
+
+                        </div>
+
                       </div>
 
                       {/* Date Section */}
                       <div className="flex items-top gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
-                        <div className="w-5 h-5 flex items-center justify-center">
+                        <div className="flex flex-col gap-2">
+                        <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Date</span>
+                        <div className="flex flex-row gap-2">
+                          <div className="w-4 h-4">      
                           <CalendarIcon className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-                        </div>
+                          </div>  
+
                         <div className="flex flex-col gap-1 w-full">
                           {/* Date inputs row */}
-                          <div className="flex items-center h-[24px] gap-2 w-fit"> {/* <-- Add w-fit */}
+                          <div className="flex items-center h-[16px] gap-2 w-fit"> {/* <-- Add w-fit */}
                             <Popover>
                               <PopoverTrigger asChild>
-                                <span
+                                <motion.span
+                                  whileTap={{scale: 0.98}}
                                   className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 cursor-pointer focus:ring-0 focus:outline-none whitespace-nowrap"
                                 >
                                   {format(parse(eventState.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}
-                                </span>
+                                </motion.span>
                               </PopoverTrigger>
                               <PopoverContent ref={datePickerRef} className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
                                 <Calendar
@@ -2374,11 +2627,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 <span className="text-light-text/50 dark:text-dark-text/50">→</span>
                                 <Popover>
                                   <PopoverTrigger asChild>
-                                    <span
+                                    <motion.span
+                                      whileTap={{scale: 0.98}}
                                       className="text-sm text-light-text dark:text-dark-text bg-transparent border-none p-0 cursor-pointer focus:ring-0 focus:outline-none whitespace-nowrap"
                                     >
                                       {format(parse(eventState.endDate || eventState.date, 'yyyy-MM-dd', new Date()), 'MMM d, yyyy')}
-                                    </span>
+                                    </motion.span>
                                   </PopoverTrigger>
                                   <PopoverContent className="w-auto p-0 bg-dark-bg-lighter dark:bg-dark border border-light-border dark:border-dark-border rounded-lg shadow-lg">
                                     <Calendar
@@ -2426,19 +2680,25 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             <span className="text-xs text-light-text/50 dark:text-dark-text/50">Multi-day</span>
                           </div>
                         </div>
+                        </div>
+                        </div>
                       </div>
                       {/* Repeat Section */}
                       <div className="flex items-top group gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
-                        <div className="w-5 h-5 flex items-center justify-center">
-                          <Repeat className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50" />
-                        </div>
+                        <div className="flex flex-col gap-2">
+                          <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Repeat</span>
+                          
+                        <div className="flex flex-row gap-2 hover:text-light-text dark:hover:text-dark-text">
+
+                          <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+
 
                         <div className="flex flex-col gap-1">
                           <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
-                            <PopoverTrigger className="flex items-center gap-2 cursor-pointer hover:text-light-text dark:hover:text-dark-text rounded-md focus:outline-none" ref={repeatDropdownRef}>
-                              <span className={`text-sm font-medium ${eventState.repeat === 'none' ? 'group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
+                            <PopoverTrigger className="flex items-center gap-2 cursor-pointer rounded-md focus:outline-none" ref={repeatDropdownRef}>
+                              <motion.span whileTap={{scale: 0.98}} className={`text-sm/[16px] font-medium ${eventState.repeat === 'none' ? 'group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
                                 {getRepeatDisplayText(eventState.repeat, eventState.rruleOptions)}
-                              </span>
+                              </motion.span>
                             </PopoverTrigger>
                             <PopoverContent 
                               className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
@@ -2479,7 +2739,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     <button
                                       key={option.id}
                                       type="button"
-                                      className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
+                                      className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         if (option.id === 'custom') {
@@ -2496,9 +2756,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     >
                                       <div className="flex w-full justify-between items-center">
                                         <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${eventState.repeat === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
-                                        {sublabel && (
-                                          <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
-                                        )}
+                                        <div className="flex items-center gap-2">
+                                          {sublabel && (
+                                            <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
+                                          )}
+                                          {eventState.repeat === option.id && (
+                                            <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />
+                                          )}
+                                        </div>
                                       </div>
                                     </button>
                                   );
@@ -2507,6 +2772,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             </PopoverContent>
                           </Popover>
                         </div>
+                        
+                      </div>
+                      </div>
                       </div>
                     </div>
 
@@ -2595,9 +2863,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
       {/* Form buttons section with tabs - positioned absolutely to be completely static */}
       {(activeContentKey === 'task' || activeContentKey === 'event') && (
-        <div 
+        <motion.div 
           className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 pb-4"
           style={{height: '68px'}}
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.08, duration: 0.15 }}
         >
           {/* Tab selector on the left */}
           <TabSelector 
@@ -2614,7 +2885,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           />
           
           {/* Buttons on the right */}
-          <div className="flex items-center gap-2">
+          <motion.div 
+            className="flex items-center gap-2"
+            layout
+            style={{ transformOrigin: "right center" }}
+            transition={{
+              type: "spring",
+              stiffness: 500,
+              damping: 30,
+              duration: 0.2
+            }}
+          >
           <button
             onClick={handleClose}
             className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
@@ -2626,40 +2907,60 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           </button>
           
           {activeContentKey === 'task' && (
-            <button
+            <motion.button
+              layoutId="save-button"
               onClick={handleSaveTask}
               disabled={!taskTitle.trim()}
-              className={`px-2 py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
+              className={`px-2 w-[120px] justify-center py-2 text-xs flex items-center flex-row font-semibold rounded-[5px] ${taskTitle.trim() 
                 ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                 : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+              style={{ minWidth: '100px', transformOrigin: 'right center' }}
+              transition={{
+                layout: {
+                  type: "spring",
+                  stiffness: 500,
+                  damping: 30,
+                  duration: 0.2
+                }
+              }}
             >
-              <span className="text-xs pl-1 pr-3">
+              <span className="text-xs pl-1 pr-3" style={{ minWidth: '60px', display: 'inline-block' }}>
                 {editingTaskId ? 'Edit task' : 'Add task'}
               </span>
               <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${taskTitle.trim() ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                 <Return className="w-3 h-3" />
               </div>
-            </button>
+            </motion.button>
           )}
           
           {activeContentKey === 'event' && (
-            <button
+            <motion.button
+              layoutId="save-button"
               onClick={handleSaveChanges}
               disabled={!eventState.title.trim() || !hasChanges}
-              className={`px-2 flex items-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
+              className={`w-[120px] flex items-center justify-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
                 ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                 : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
+              style={{ minWidth: '100px', transformOrigin: 'right center' }}
+              transition={{
+                layout: {
+                  type: "spring",
+                  stiffness: 500,
+                  damping: 30,
+                  duration: 0.2
+                }
+              }}
             >
-              <span className="text-xs pl-1 pr-3">
+              <span className="text-xs pl-1 pr-3" style={{ minWidth: '65px', display: 'inline-block' }}>
                 {originalEventState?.id ? 'Edit event' : 'Add event'}
               </span>
               <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && hasChanges ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                 <Return className="w-3 h-3" />
               </div>
-            </button>
+            </motion.button>
           )}
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
 
     {/* Recurrence Modal */}

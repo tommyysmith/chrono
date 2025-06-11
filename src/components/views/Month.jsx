@@ -1,4 +1,4 @@
-import { format, isSameDay, isSameMonth } from "date-fns";
+import { format, isSameDay, addDays, startOfDay, endOfDay, isWithinInterval, parseISO, isSameMonth } from "date-fns";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -97,7 +97,20 @@ export default function Month({
               <div className="space-y-1">
                 {dayEvents.map((event, index) => {
                   const now = new Date();
-                  const isPastEvent = new Date(event.end) < now;
+                  // Helper function to determine if an event is past
+                  const isEventPast = (event, now) => {
+                    const isAllDayEvent = event.allDay || event.isAllDay;
+                    if (isAllDayEvent) {
+                      // For all-day events, only consider them past after the end of the day
+                      const eventEndDate = new Date(event.end);
+                      const endOfEventDay = endOfDay(eventEndDate);
+                      return now > endOfEventDay;
+                    } else {
+                      // For regular events, use the original logic
+                      return new Date(event.end) < now;
+                    }
+                  };
+                  const isPastEvent = isEventPast(event, now);
 
                   return (
                     <div

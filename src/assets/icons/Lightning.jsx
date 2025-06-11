@@ -1,4 +1,4 @@
-export const Shift = ({ className, ...props }) => {
+export const Lightning = ({className, ...props}) => {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -11,7 +11,7 @@ export const Shift = ({ className, ...props }) => {
     >
       <path
         fill="currentColor"
-        d="M12 3a1 1 0 0 1 .743.331l9 10A1 1 0 0 1 21 15h-3v5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-5H3a1 1 0 0 1-.743-1.669l9-10A1 1 0 0 1 12 3M5.245 13H7a1 1 0 0 1 1 1v5h8v-5a1 1 0 0 1 1-1h1.755L12 5.495z"
+        d="M12.947 2.031a1 1 0 0 1 .755.969v6.579h2.796a1.003 1.003 0 0 1 .88 1.479l-5.698 10.42A1.003 1.003 0 0 1 9.798 21v-6.579H7.002a.998.998 0 0 1-.88-1.479l5.698-10.42a1 1 0 0 1 1.127-.491"
         clipRule="evenodd"
         fillRule="evenodd"
       />
