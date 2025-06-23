@@ -695,7 +695,10 @@ export function useTaskManagement() {
             scheduledDate: undefined, // Base tasks should never have a scheduledDate
             repeat: baseTask.repeat,
             seriesId: baseTask.seriesId,
-            startDateOfSeries: baseTask.startDateOfSeries || baseTask.createdAt, // Ensure startDateOfSeries is preserved
+            // CRITICAL FIX: Update startDateOfSeries when editing from a non-first instance
+            startDateOfSeries: mergedTask.originalBaseId && mergedTask.scheduledDate ? 
+              mergedTask.scheduledDate : // Use the current instance's date as the new series start
+              (baseTask.startDateOfSeries || baseTask.createdAt), // Fallback to original if editing the base task itself
             isRepeat: baseTask.isRepeat || false
           };
           
@@ -739,11 +742,10 @@ export function useTaskManagement() {
             baseTaskId: baseTask.id
           });
           if (originalTagId && tasks[originalTagId]) {
-            const beforeFilter = tasks[originalTagId].length;
             tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== baseTask.id);
             console.log('🔄 [BASE TASK UPDATE] Removed base task from original tag collection:', {
               tagId: originalTagId,
-              beforeCount: beforeFilter,
+              beforeCount: tasks[originalTagId].length,
               afterCount: tasks[originalTagId].length
             });
           }
@@ -761,264 +763,83 @@ export function useTaskManagement() {
           }
           // Note: If newTagId is null/undefined (No Tag), the task remains only in 'all' collection
           
-          // Use the getTasksInSeries function to get ALL tasks in the series
-          const allTasksInSeries = getTasksInSeries([...tasks.all, ...(tasks.completed || [])], mergedTask.seriesId);
+          // Find all tasks in this series (including completed ones)
+          const allTasksInSeries = [];
+          for (const groupKey in tasks) {
+            if (Array.isArray(tasks[groupKey])) {
+              const groupTasks = tasks[groupKey].filter(t => 
+                t.seriesId === baseTask.seriesId && 
+                t.isRepeat === true
+              );
+              allTasksInSeries.push(...groupTasks);
+            }
+          }
           
-          // Filter out the current task being edited to avoid duplicate updates
-          // This is the key fix - we exclude the current task from the instances loop
-          const instances = allTasksInSeries.filter(t => t.id !== mergedTask.id);
+          console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Starting series regeneration');
+          console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Base task startDateOfSeries:', updatedBaseTask.startDateOfSeries);
+          console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Found instances to remove:', allTasksInSeries.length);
           
-          console.log('🚨 [DEBUG_SERIES] All tasks in series:', allTasksInSeries.length);
-          console.log('🚨 [DEBUG_SERIES] Instances to update (excluding current):', instances.length);
+          // Remove ALL existing instances from ALL collections
+          for (const groupKey in tasks) {
+            if (Array.isArray(tasks[groupKey])) {
+              const beforeCount = tasks[groupKey].length;
+              tasks[groupKey] = tasks[groupKey].filter(t => 
+                !(t.seriesId === baseTask.seriesId && t.isRepeat === true)
+              );
+              const afterCount = tasks[groupKey].length;
+              if (beforeCount !== afterCount) {
+                console.log(`🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Removed ${beforeCount - afterCount} instances from ${groupKey}`);
+              }
+            }
+          }
           
-          // Update all other instances with new properties
-          instances.forEach(instance => {
-            // Update the instance with new properties while preserving instance-specific data
-            const updatedInstance = {
-              ...instance,
-              // Copy all editable properties from the cleaned task
-              title: cleanedTask.title,
-              notes: cleanedTask.notes,
-              tag: cleanedTask.tag,
-              priority: cleanedTask.priority,
-              // Copy any other properties that might have been edited
-              ...Object.keys(cleanedTask).reduce((acc, key) => {
-                // Only copy properties that are not instance specific
-                if (!['id', 'scheduledDate', 'isRepeat', 'seriesId', 'originalBaseId', 'repeat', 'startDateOfSeries'].includes(key)) {
-                  acc[key] = cleanedTask[key];
-                }
-                return acc;
-              }, {}),
-              updatedAt: new Date().toISOString(),
-              // Preserve instance-specific properties
-              id: instance.id,
-              scheduledDate: instance.scheduledDate,
-              isRepeat: instance.isRepeat,
-              seriesId: instance.seriesId,
-              originalBaseId: instance.originalBaseId
-            };
-           
-           // Check if this instance is completed
-           const isCompletedInstance = instance.completed || instance.completedAt;
-           
-           if (isCompletedInstance) {
-               // Update in completed collection
-               if (tasks.completed) {
-                 const completedIndex = tasks.completed.findIndex(t => t.id === instance.id);
-                 if (completedIndex !== -1) {
-                   tasks.completed[completedIndex] = updatedInstance;
-                 }
-               }
-           } else {
-               // Update in all collection for active instances
-               const allIndex = tasks.all.findIndex(t => t.id === instance.id);
-               if (allIndex !== -1) {
-                 tasks.all[allIndex] = updatedInstance;
-               }
-             
-             // Remove from old tag collection if it exists
-             if (originalTagId && tasks[originalTagId]) {
-               tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== instance.id);
-             }
-             
-             // Add to new tag collection for active instances
-             if (newTagId) {
-               if (!tasks[newTagId]) tasks[newTagId] = [];
-               if (!tasks[newTagId].find(t => t.id === instance.id)) {
-                 tasks[newTagId].push(updatedInstance);
-                 console.log(`Added task ${instance.id} to new tag collection ${newTagId}`);
-               }
-             }
-           }
-         });
-         
-         // Update the current instance being edited with preserved recurring properties
-         // Handle both base task and instance cases
-         console.log('🔄 [CURRENT INSTANCE CHECK] Current task vs base task:', {
-           currentTaskId: mergedTask.id,
-           baseTaskId: baseTask.id,
-           isCurrentTaskBaseTask: mergedTask.id === baseTask.id
-         });
-         console.log('🚨 [DEBUG_SERIES] Current instance handling - is base task?', mergedTask.id === baseTask.id);
-         
-         let updatedCurrentInstance;
-         if (mergedTask.id === baseTask.id) {
-           // Current task IS the base task - use the already updated base task
-           updatedCurrentInstance = updatedBaseTask;
-           console.log('🔄 [CURRENT INSTANCE UPDATE] Using updated base task as current instance');
-           console.log('🚨 [DEBUG_SERIES] Using updatedBaseTask as current instance:', JSON.stringify(updatedCurrentInstance, null, 2));
-         } else {
-           // Current task is an instance - create updated instance
-           updatedCurrentInstance = {
-             ...mergedTask,
-             // Copy all editable properties from the cleaned task
-             title: cleanedTask.title,
-             notes: cleanedTask.notes,
-             tag: cleanedTask.tag,
-             priority: cleanedTask.priority,
-             // Copy any other properties that might have been edited
-             ...Object.keys(cleanedTask).reduce((acc, key) => {
-               // Only copy properties that are not instance specific
-               if (!['id', 'scheduledDate', 'isRepeat', 'seriesId', 'originalBaseId', 'repeat', 'startDateOfSeries'].includes(key)) {
-                 acc[key] = cleanedTask[key];
-               }
-               return acc;
-             }, {}),
-             updatedAt: new Date().toISOString(),
-             // Preserve instance-specific properties
-             id: mergedTask.id,
-             scheduledDate: mergedTask.scheduledDate,
-             isRepeat: mergedTask.isRepeat,
-             seriesId: mergedTask.seriesId,
-             originalBaseId: mergedTask.originalBaseId
-           };
-           
-           // Update current instance in all collection (only if it's not the base task)
-           const currentInstanceIndex = tasks.all.findIndex(t => t.id === mergedTask.id);
-           if (currentInstanceIndex !== -1) {
-             tasks.all[currentInstanceIndex] = updatedCurrentInstance;
-             console.log('🔄 [CURRENT INSTANCE UPDATE] Successfully updated current instance in all collection:', {
-               id: updatedCurrentInstance.id,
-               title: updatedCurrentInstance.title,
-               index: currentInstanceIndex
-             });
-           } else {
-             console.log('🔄 [CURRENT INSTANCE UPDATE] ERROR: Current instance not found in all collection for update!');
-           }
-         }
-         
-         // Check if current instance is completed
-         const isCurrentInstanceCompleted = mergedTask.completed || mergedTask.completedAt;
-         
-         if (isCurrentInstanceCompleted) {
-           // Update in completed collection
-           if (tasks.completed) {
-             const completedIndex = tasks.completed.findIndex(t => t.id === mergedTask.id);
-             if (completedIndex !== -1) {
-               tasks.completed[completedIndex] = updatedCurrentInstance;
-               console.log(`Updated current completed task ${mergedTask.id} in completed collection`);
-             }
-           }
-         } else {
-           // Handle tag collection updates for the current task
-           console.log('🚨 [DEBUG_SERIES] Tag collection updates - originalTagId:', originalTagId, 'newTagId:', newTagId);
-           console.log('🚨 [DEBUG_SERIES] Current instance for tag collections:', JSON.stringify(updatedCurrentInstance, null, 2));
-           
-           // Remove from old tag collection
-           if (originalTagId && tasks[originalTagId]) {
-             const oldTagBefore = [...tasks[originalTagId]];
-             tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== mergedTask.id);
-             console.log('🚨 [DEBUG_SERIES] Removed from old tag collection:', {
-               tagId: originalTagId,
-               taskId: mergedTask.id,
-               beforeCount: oldTagBefore.length,
-               afterCount: tasks[originalTagId].length
-             });
-           }
-           
-           // Update current instance in its new tag collection
-           if (newTagId) {
-             if (!tasks[newTagId]) tasks[newTagId] = [];
-             const tagBefore = [...tasks[newTagId]];
-             if (!tasks[newTagId].find(t => t.id === mergedTask.id)) {
-               tasks[newTagId].push(updatedCurrentInstance);
-               console.log(`Added current task ${mergedTask.id} to new tag collection ${newTagId}`);
-               console.log('🚨 [DEBUG_SERIES] Added to new tag collection:', {
-                 tagId: newTagId,
-                 taskId: mergedTask.id,
-                 beforeCount: tagBefore.length,
-                 afterCount: tasks[newTagId].length,
-                 addedTask: JSON.stringify(updatedCurrentInstance, null, 2)
-               });
-             } else {
-               console.log('🚨 [DEBUG_SERIES] Task already exists in new tag collection:', newTagId);
-             }
-           }
-         }
-         
-         // Skip the normal task update logic since we've handled the series update
-         console.log('Series-wide update completed, skipping normal update logic');
-         console.log('🚨 [DEBUG_SERIES] Final tasks.all after series update:', tasks.all.filter(t => t.seriesId === mergedTask.seriesId || t.id === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId, originalBaseId: t.originalBaseId })));
-         console.log('🚨 [DEBUG_SERIES] Final tag collections after series update:');
-         if (originalTagId && tasks[originalTagId]) {
-           console.log(`🚨 [DEBUG_SERIES] Original tag ${originalTagId}:`, tasks[originalTagId].filter(t => t.seriesId === mergedTask.seriesId || t.id === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title })));
-         }
-         if (newTagId && tasks[newTagId]) {
-           console.log(`🚨 [DEBUG_SERIES] New tag ${newTagId}:`, tasks[newTagId].filter(t => t.seriesId === mergedTask.seriesId || t.id === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title })));
-         }
-         
-         // Save the updated tasks to localStorage first
-         localStorage.setItem("tasks", JSON.stringify(tasks));
-         
-         // Update existing instances with the new base task properties
-         console.log('🚨 [DEBUG_SERIES] Updating existing instances with new base task properties');
-         
-         // Re-read the updated tasks from localStorage to ensure we have the latest data
-         const updatedTasksFromStorage = JSON.parse(localStorage.getItem("tasks") || "{}");
-         const baseTaskFromStorage = updatedTasksFromStorage.all?.find(t => t.id === baseTask.id);
-         
-         if (baseTaskFromStorage) {
-           console.log('🚨 [DEBUG_SERIES] Updated base task from storage:', JSON.stringify(baseTaskFromStorage, null, 2));
-           
-           // Find all existing instances for this series
-           const existingInstances = updatedTasksFromStorage.all.filter(t => 
-             t.seriesId === mergedTask.seriesId && t.isRepeat === true
-           );
-           
-           console.log('🚨 [DEBUG_SERIES] Updating existing instances:', existingInstances.map(t => ({ id: t.id, title: t.title, completed: t.completed })));
-           
-           // Update each instance with the new base task properties (preserving instance-specific data)
-           existingInstances.forEach(instance => {
-             const updatedInstance = {
-               ...baseTaskFromStorage,
-               // Preserve instance-specific properties
-               id: instance.id,
-               scheduledDate: instance.scheduledDate,
-               isRepeat: true,
-               originalBaseId: baseTaskFromStorage.id,
-               seriesId: instance.seriesId,
-               completed: instance.completed,
-               completedAt: instance.completedAt,
-               createdAt: instance.createdAt,
-               updatedAt: new Date().toISOString()
-             };
-             
-             // Update in tasks.all
-             const allIndex = updatedTasksFromStorage.all.findIndex(t => t.id === instance.id);
-             if (allIndex !== -1) {
-               updatedTasksFromStorage.all[allIndex] = updatedInstance;
-             }
-             
-             // Update in tag collections
-             Object.keys(updatedTasksFromStorage).forEach(tagId => {
-               if (tagId !== 'all' && Array.isArray(updatedTasksFromStorage[tagId])) {
-                 const tagIndex = updatedTasksFromStorage[tagId].findIndex(t => t.id === instance.id);
-                 if (tagIndex !== -1) {
-                   updatedTasksFromStorage[tagId][tagIndex] = updatedInstance;
-                 }
-               }
-             });
-           });
-           
-           // Save the updated tasks
-           localStorage.setItem("tasks", JSON.stringify(updatedTasksFromStorage));
-           
-           console.log('🚨 [DEBUG_SERIES] All instances updated with new base task properties');
-         }
-         
-         window.dispatchEvent(new StorageEvent('storage', {
-           key: 'tasks',
-           newValue: JSON.stringify(updatedTasksFromStorage || tasks),
-           url: window.location.href
-         }));
-         window.dispatchEvent(new CustomEvent('tasksUpdated', {
-           detail: { tasks: updatedTasksFromStorage || tasks }
-         }));
-         console.log('🔥 CHRONO_DEBUG_SERIES === SERIES UPDATE DEBUG END ===');
-         console.log('🔥 CHRONO_DEBUG_SERIES Series update completed successfully');
-         console.log('🔥 CHRONO_DEBUG_SERIES Final tasks.all count:', tasks.all.length);
-         seriesUpdateResult = { seriesUpdateCompleted: true };
-         return seriesUpdateResult;
+          // Generate the first instance of the new series
+          const firstInstance = generateNextDisplayableTaskInstance(updatedBaseTask, null);
+          
+          if (firstInstance) {
+            console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Generated first instance:', {
+              id: firstInstance.id,
+              scheduledDate: firstInstance.scheduledDate,
+              title: firstInstance.title
+            });
+            
+            // Add the first instance to collections
+            tasks.all.push(firstInstance);
+            
+            // Add to tag collection if it has a tag
+            const instanceTagId = firstInstance.tag ? firstInstance.tag.id : null;
+            if (instanceTagId) {
+              if (!tasks[instanceTagId]) tasks[instanceTagId] = [];
+              tasks[instanceTagId].push(firstInstance);
+              console.log(`🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Added first instance to tag collection: ${instanceTagId}`);
+            }
+            
+            // Add to today collection if scheduled for today
+            if (firstInstance.scheduledDate && isToday(parseISO(firstInstance.scheduledDate))) {
+              if (!tasks.today) tasks.today = [];
+              tasks.today.push(firstInstance);
+              console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Added first instance to today collection');
+            }
+          } else {
+            console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] ERROR: Failed to generate first instance');
+          }
+          
+          // Series regeneration complete - skip normal task update logic
+          console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Series regeneration completed');
+          console.log('🔥 CHRONO_DEBUG_SERIES [SERIES REGENERATION] Final tasks.all count:', tasks.all.length);
+          
+          // Save and dispatch events
+          localStorage.setItem("tasks", JSON.stringify(tasks));
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'tasks',
+            newValue: JSON.stringify(tasks),
+            url: window.location.href
+          }));
+          window.dispatchEvent(new CustomEvent('tasksUpdated', {
+            detail: { tasks: tasks }
+          }));
+          
+          return true; // Exit early since we've handled the series update
         }
         
         // If we reach here, the series update was initiated but base task wasn't found
@@ -1056,58 +877,6 @@ export function useTaskManagement() {
            console.log('🔥 CHRONO_DEBUG_SERIES [SAFETY CHECK] This would create a duplicate series - blocking operation');
            return { error: 'Cannot convert existing series task to new series. Use series update instead.' };
          }
-      }
-      
-      // Handle tag changes - we need to move the task between collections
-      if (originalTagId !== newTagId) {
-        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Tag has changed, moving task between collections');
-        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Original tag:', originalTagId);
-        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag:', newTagId);
-        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task ID:', updatedTaskData.id);
-        
-        // Remove the task from all collections except 'all'
-        for (const groupKey in tasks) {
-          if (groupKey !== 'all' && Array.isArray(tasks[groupKey])) {
-            tasks[groupKey] = tasks[groupKey].filter(t => t.id !== updatedTaskData.id);
-          }
-        }
-        
-        // Add to new tag collection if it has a new tag
-        if (newTagId) {
-          if (!tasks[newTagId]) tasks[newTagId] = [];
-          // Check if task already exists in the new tag collection to prevent duplicates
-          const existsInNewTag = tasks[newTagId].some(t => t.id === updatedTaskData.id);
-          if (!existsInNewTag) {
-            tasks[newTagId].push(cleanedTask);
-            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Added task to new tag collection:', newTagId);
-            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag collection size:', tasks[newTagId].length);
-          } else {
-            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task already exists in new tag collection:', newTagId);
-          }
-        }
-      } else {
-        // Tag hasn't changed, but we still need to update the task in its existing tag collection
-        if (originalTagId && tasks[originalTagId]) {
-          const tagTaskIndex = tasks[originalTagId].findIndex(t => t.id === updatedTaskData.id);
-          if (tagTaskIndex !== -1) {
-            tasks[originalTagId][tagTaskIndex] = cleanedTask;
-            console.log(`Updated task in existing tag collection: ${originalTagId}`);
-          }
-        }
-      }
-      
-      // Update the task in the 'all' collection
-      const allTaskIndex = tasks.all ? tasks.all.findIndex(t => t.id === updatedTaskData.id) : -1;
-      if (allTaskIndex !== -1) {
-        tasks.all[allTaskIndex] = cleanedTask;
-        console.log('Updated task in all collection');
-      } else {
-        // Only add to 'all' collection if it's truly a new task that doesn't exist
-        // This should not happen in normal update flow, but handle edge cases
-        console.warn('Task not found in all collection during update, this might indicate an issue');
-        if (!tasks.all) tasks.all = [];
-        tasks.all.push(cleanedTask);
-        console.log('Added missing task to all collection');
       }
       
       // Check if this is a conversion from non-recurring to recurring
@@ -1379,11 +1148,8 @@ export function useTaskManagement() {
               console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Instance will be added to tag group:', nextInstance.tag ? nextInstance.tag.id : "all");
               const instanceTagGroup = nextInstance.tag ? nextInstance.tag.id : "all";
               if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
-              if (!tasks.all.find(t => t.id === nextInstance.id)) {
-                tasks.all.push(nextInstance);
-                console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Added new instance to tasks.all');
-              } else {
-                console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Instance already exists in tasks.all, skipping');
+              if (!tasks[instanceTagGroup].some(t => t.id === nextInstance.id)) {
+                tasks[instanceTagGroup].push(nextInstance);
               }
             }
           }
@@ -1458,6 +1224,60 @@ export function useTaskManagement() {
             }
           }
         }
+      }
+      
+      // Handle tag changes for non-recurring tasks - we need to move the task between collections
+      if (!mergedTask.repeat || mergedTask.repeat === 'none') {
+        if (originalTagId !== newTagId) {
+          console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Tag has changed, moving task between collections');
+          console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Original tag:', originalTagId);
+          console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag:', newTagId);
+          console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task ID:', updatedTaskData.id);
+          
+          // Remove the task from all collections except 'all'
+          for (const groupKey in tasks) {
+            if (groupKey !== 'all' && Array.isArray(tasks[groupKey])) {
+              tasks[groupKey] = tasks[groupKey].filter(t => t.id !== updatedTaskData.id);
+            }
+          }
+          
+          // Add to new tag collection if it has a new tag
+          if (newTagId) {
+            if (!tasks[newTagId]) tasks[newTagId] = [];
+            // Check if task already exists in the new tag collection to prevent duplicates
+            const existsInNewTag = tasks[newTagId].some(t => t.id === updatedTaskData.id);
+            if (!existsInNewTag) {
+              tasks[newTagId].push(cleanedTask);
+              console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Added task to new tag collection:', newTagId);
+              console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag collection size:', tasks[newTagId].length);
+            } else {
+              console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task already exists in new tag collection:', newTagId);
+            }
+          }
+        } else {
+          // Tag hasn't changed, but we still need to update the task in its existing tag collection
+          if (originalTagId && tasks[originalTagId]) {
+            const tagTaskIndex = tasks[originalTagId].findIndex(t => t.id === updatedTaskData.id);
+            if (tagTaskIndex !== -1) {
+              tasks[originalTagId][tagTaskIndex] = cleanedTask;
+              console.log(`Updated task in existing tag collection: ${originalTagId}`);
+            }
+          }
+        }
+      }
+      
+      // Update the task in the 'all' collection
+      const allTaskIndex = tasks.all ? tasks.all.findIndex(t => t.id === updatedTaskData.id) : -1;
+      if (allTaskIndex !== -1) {
+        tasks.all[allTaskIndex] = cleanedTask;
+        console.log('Updated task in all collection');
+      } else {
+        // Only add to 'all' collection if it's truly a new task that doesn't exist
+        // This should not happen in normal update flow, but handle edge cases
+        console.warn('Task not found in all collection during update, this might indicate an issue');
+        if (!tasks.all) tasks.all = [];
+        tasks.all.push(cleanedTask);
+        console.log('Added missing task to all collection');
       }
       
       // Check if this was a series-wide update that already saved to localStorage
