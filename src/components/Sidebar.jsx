@@ -7,24 +7,6 @@ import { Completed } from "../assets/icons/Completed";
 import { Check } from "../assets/icons/Check"; 
 import { Edit } from "../assets/icons/Edit";
 // import ThemeToggle from '../components/ThemeToggle';
-import {
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Inbox,
-  Circle,
-  List,
-  Plus,
-  ListTodo,
-  Briefcase,
-  Heart,
-  User,
-  Plane,
-  CalendarDays,
-  CalendarClock,
-  LayoutGrid,
-  X,
-} from "lucide-react";
 import { motion, AnimatePresence, LayoutGroup } from "framer-motion";
 import TagDropdown from "./TagDropdown";
 import TaskItem from "./TaskItem";
@@ -200,6 +182,58 @@ export default function Sidebar({
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [originalTask, setOriginalTask] = useState(null);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [commandBarSelectedTasks, setCommandBarSelectedTasks] = useState(new Set());
+  
+  // Sync CommandBar selected tasks with local state using callbacks
+  useEffect(() => {
+    console.log('[Sidebar] Selection callback useEffect triggered');
+    if (commandBarRef?.current?.onSelectionChange) {
+      console.log('[Sidebar] Registering selection callback');
+      const unsubscribe = commandBarRef.current.onSelectionChange((selectedTaskIds) => {
+        console.log('[Sidebar] Selection callback executed with:', selectedTaskIds.length, 'tasks');
+        setTimeout(() => {
+          setCommandBarSelectedTasks(new Set(selectedTaskIds));
+        }, 0);
+      });
+      
+      // Initial sync
+      if (commandBarRef?.current?.getSelectedTasks) {
+        const selectedTasks = commandBarRef.current.getSelectedTasks();
+        console.log('[Sidebar] Initial sync with:', selectedTasks.length, 'tasks');
+        setTimeout(() => {
+          setCommandBarSelectedTasks(new Set(selectedTasks));
+        }, 0);
+      }
+      
+      return () => {
+        console.log('[Sidebar] Unregistering selection callback');
+        unsubscribe();
+      };
+    }
+  }, []);
+
+  // Clear selectedTaskId when clicking outside task items
+  useEffect(() => {
+    const handleGlobalClick = (event) => {
+      const isTaskItem = event.target.closest('[data-task-item]');
+      const isMultiSelectToolbar = event.target.closest('[data-multiselect-toolbar]');
+      const isCommandBar = event.target.closest('[data-command-bar]');
+      
+      // If click is outside task items, toolbar, and command bar, clear selection
+      if (!isTaskItem && !isMultiSelectToolbar && !isCommandBar) {
+        setSelectedTaskId(null);
+        // Also clear CommandBar selection
+        if (commandBarRef?.current?.clearSelection) {
+          commandBarRef.current.clearSelection();
+        }
+      }
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, []); // Empty dependency array is correct - refs are stable and don't need to be in dependencies
   
   // RepeatTaskEditModal state
   const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
@@ -208,17 +242,27 @@ export default function Sidebar({
   const [editingTagId, setEditingTagId] = useState(null);
   const [editingTagName, setEditingTagName] = useState("");
 
-  // Save tasks to localStorage whenever they change
+  // Save tasks to localStorage whenever they change (throttled)
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem("tasks", JSON.stringify(tasks));
+      console.log('[Sidebar] Tasks changed, saving to localStorage');
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem("tasks", JSON.stringify(tasks));
+      }, 100); // Throttle localStorage saves
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [tasks]);
 
-  // Save tags to localStorage whenever they change
+  // Save tags to localStorage whenever they change (throttled)
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem("tags", JSON.stringify(tags));
+      console.log('[Sidebar] Tags changed, saving to localStorage');
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem("tags", JSON.stringify(tags));
+      }, 100); // Throttle localStorage saves
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [tags]);
 
@@ -474,9 +518,10 @@ export default function Sidebar({
         if (taskSeriesId && (isRecurringInstance || isLikelyInstance)) {
           
           // Find the base task definition
-          const allTasks = Object.values(newTasks).flat();
-          const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
-          const baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
+          const allTasks = Object.values(newTasks)
+            .flat()
+            .filter(t => t.seriesId === taskSeriesId);
+          const baseTaskDefinition = allTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
           
           if (baseTaskDefinition) {
             // Remove the current task from all collections first
@@ -621,10 +666,11 @@ export default function Sidebar({
                   
                   if (nextInstance) {
                     
+                    // Update React state in a separate cycle
                     setTasks(currentTasks => {
                       const updatedTasks = { ...currentTasks };
                       
-                      // Check if this exact instance already exists
+                      // Check if this exact instance already exists in current state
                       const instanceExists = Object.values(updatedTasks)
                         .flat()
                         .some(t => 
@@ -1766,8 +1812,15 @@ export default function Sidebar({
                                           setSelectedTaskId(task.id)
                                         }
                                         isSelected={
-                                          selectedTaskId === task.id
+                                          selectedTaskId === task.id || commandBarSelectedTasks.has(task.id)
                                         }
+                                        onSelect={(taskId, e, isSelected) => {
+                                            // Clear local selection when using multi-select
+                                            setSelectedTaskId(null);
+                                            if (commandBarRef?.current?.selectTask) {
+                                              commandBarRef.current.selectTask(taskId, e, isSelected);
+                                            }
+                                          }}
                                         hideTag={["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id) ? false : true}
                                         isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
                                       />
@@ -1806,7 +1859,14 @@ export default function Sidebar({
                                   onEdit={handleEditTaskIconClick}
                                   onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
-                                  isSelected={selectedTaskId === task.id}
+                                  isSelected={selectedTaskId === task.id || commandBarSelectedTasks.has(task.id)}
+                                  onSelect={(taskId, e, isSelected) => {
+                                  // Clear local selection when using multi-select
+                                  setSelectedTaskId(null);
+                                  if (commandBarRef?.current?.selectTask) {
+                                    commandBarRef.current.selectTask(taskId, e, isSelected);
+                                  }
+                                }}
                                   hideTag={false}
                                   checked={true}
                                   isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')} // Force checked state for completed tasks
@@ -1840,7 +1900,14 @@ export default function Sidebar({
                                   onEdit={handleEditTaskIconClick}
                                   onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
-                                  isSelected={selectedTaskId === task.id}
+                                  isSelected={selectedTaskId === task.id || commandBarSelectedTasks.has(task.id)}
+                                  onSelect={(taskId, e, isSelected) => {
+                                    // Clear local selection when using multi-select
+                                    setSelectedTaskId(null);
+                                    if (commandBarRef?.current?.selectTask) {
+                                      commandBarRef.current.selectTask(taskId, e, isSelected);
+                                    }
+                                  }}
                                   hideTag={false}
                                 />
                               ))

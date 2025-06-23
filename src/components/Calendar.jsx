@@ -64,6 +64,28 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
 
+  // Global click handler to clear task selection when clicking outside
+  useEffect(() => {
+    const handleGlobalClick = (event) => {
+      // Check if the click is on a task item or multi-select toolbar
+      const isTaskItem = event.target.closest('[data-task-item]');
+      const isMultiSelectToolbar = event.target.closest('[data-multiselect-toolbar]');
+      const isCommandBar = event.target.closest('[data-command-bar]');
+      
+      // If click is outside task items, toolbar, and command bar, clear selection
+      if (!isTaskItem && !isMultiSelectToolbar && !isCommandBar) {
+        if (commandBarRef.current?.clearSelection) {
+          commandBarRef.current.clearSelection();
+        }
+      }
+    };
+
+    document.addEventListener('click', handleGlobalClick);
+    return () => {
+      document.removeEventListener('click', handleGlobalClick);
+    };
+  }, []);
+
   const {
     events,
     setEvents,
@@ -494,7 +516,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         <div className="flex flex-row gap-2 justify-start">
           <TooltipProvider delayDuration={500}>
             <Tooltip>
-              <div className={`flex items-center ${isSidebarVisible ? 'min-w-[240px]' : 'min-w-auto mr-4'}`}>
+              <div className={`flex items-center ${isSidebarVisible ? 'min-w-auto mr-4' : 'min-w-auto mr-4'}`}>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setIsSidebarVisible(!isSidebarVisible)}
@@ -861,6 +883,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
         onUpdateTask={useCallback(
           (updateTask) => handleUpdateTask(updateTask),
+          []
+        )}
+        onToggleTaskCompletion={useCallback(
+          (taskId) => handleToggleTaskCompletion(taskId),
           []
         )}
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}

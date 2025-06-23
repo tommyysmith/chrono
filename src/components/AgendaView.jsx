@@ -105,6 +105,35 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   const [currentDate, setCurrentDate] = useState(selectedDate);
   const [month, setMonth] = useState(selectedDate);
   const [viewMode, setViewMode] = useState('events'); // 'events' or 'tasks'
+  const [commandBarSelectedTasks, setCommandBarSelectedTasks] = useState(new Set());
+
+  // Sync CommandBar selected tasks with local state using callbacks
+  useEffect(() => {
+    console.log('[AgendaView] Selection callback useEffect triggered');
+    if (commandBarRef?.current?.onSelectionChange) {
+      console.log('[AgendaView] Registering selection callback');
+      const unsubscribe = commandBarRef.current.onSelectionChange((selectedTaskIds) => {
+        console.log('[AgendaView] Selection callback executed with:', selectedTaskIds.length, 'tasks');
+        setTimeout(() => {
+          setCommandBarSelectedTasks(new Set(selectedTaskIds));
+        }, 0);
+      });
+      
+      // Initial sync
+      if (commandBarRef?.current?.getSelectedTasks) {
+        const selectedTasks = commandBarRef.current.getSelectedTasks();
+        console.log('[AgendaView] Initial sync with:', selectedTasks.length, 'tasks');
+        setTimeout(() => {
+          setCommandBarSelectedTasks(new Set(selectedTasks));
+        }, 0);
+      }
+      
+      return () => {
+        console.log('[AgendaView] Unregistering selection callback');
+        unsubscribe();
+      };
+    }
+  }, []);
 
   // Sync with selectedDate prop
   useEffect(() => {
@@ -558,6 +587,12 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                           onTaskEdit(task);
                         }
                       }}
+                      isSelected={commandBarSelectedTasks.has(task.id)}
+                      onSelect={(taskId, e, isSelected) => {
+                         if (commandBarRef?.current?.selectTask) {
+                           commandBarRef.current.selectTask(taskId, e, isSelected);
+                         }
+                       }}
                       isRecurring={task.repeat && task.repeat !== 'none' || task.isRepeat}
                     />
                   );

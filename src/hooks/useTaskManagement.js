@@ -506,8 +506,12 @@ export function useTaskManagement() {
       }
       
       if (!originalTask) {
+        console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Original task not found, checking if this is a recurring instance');
+        console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Updated task data:', { id: updatedTaskData.id, seriesId: updatedTaskData.seriesId, isRepeat: updatedTaskData.isRepeat });
+        
         // If this is a recurring task instance, we might need to create it first
         if (updatedTaskData.seriesId && updatedTaskData.isRepeat) {
+          console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] This is a recurring instance, searching for base task');
           
           // Find the base task definition
           let baseTask = null;
@@ -525,6 +529,9 @@ export function useTaskManagement() {
           }
           
           if (baseTask) {
+            console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Base task found, creating new instance');
+            console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Base task:', { id: baseTask.id, seriesId: baseTask.seriesId, isRepeat: baseTask.isRepeat });
+            
             // Create a new instance based on the updated task data
             const newInstance = {
               ...updatedTaskData,
@@ -538,6 +545,7 @@ export function useTaskManagement() {
             
             tasks[instanceTagGroup].push(newInstance);
             tasks.all.push(newInstance);
+            console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Created and added new instance to collections');
             
             // Set originalTask to this new instance
             originalTask = newInstance;
@@ -545,17 +553,24 @@ export function useTaskManagement() {
               originalTagId = originalTask.tag.id;
             }
           } else {
+            console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Base task not found, cannot create instance');
             return false;
           }
         } else {
+          console.log('🔥 CHRONO_DEBUG_SERIES [TASK LOOKUP] Not a recurring instance, cannot proceed without original task');
           return false;
         }
       }
       
 
       
+      console.log('🔥 CHRONO_DEBUG_SERIES [TASK MERGE] Creating merged task from original and updates');
+      console.log('🔥 CHRONO_DEBUG_SERIES [TASK MERGE] Original task:', { id: originalTask.id, seriesId: originalTask.seriesId, isRepeat: originalTask.isRepeat, _editScope: originalTask._editScope, _updateSeries: originalTask._updateSeries });
+      console.log('🔥 CHRONO_DEBUG_SERIES [TASK MERGE] Update data:', { id: updatedTaskData.id, _editScope: updatedTaskData._editScope, _updateSeries: updatedTaskData._updateSeries });
+      
       // Create the updated task by merging original with updates
       const mergedTask = { ...originalTask, ...updatedTaskData };
+      console.log('🔥 CHRONO_DEBUG_SERIES [TASK MERGE] Merged task flags:', { _editScope: mergedTask._editScope, _updateSeries: mergedTask._updateSeries });
       
       // Clean up internal flags before saving
       const cleanedTask = { ...mergedTask };
@@ -565,19 +580,35 @@ export function useTaskManagement() {
       
       // Check for series updates first before normal task updates
       const isSeriesUpdate = mergedTask._updateSeries === true || mergedTask._editScope === 'all';
+      console.log('🔥 CHRONO_DEBUG_SERIES [SERIES CHECK] Is series update:', isSeriesUpdate);
+      console.log('🔥 CHRONO_DEBUG_SERIES [SERIES CHECK] Conditions: _updateSeries =', mergedTask._updateSeries, ', _editScope =', mergedTask._editScope);
       let seriesUpdateResult = null;
       
       if (isSeriesUpdate && mergedTask.seriesId && (mergedTask.isRepeat === true || mergedTask.isRepeat === false || typeof mergedTask.isRepeat === 'undefined')) {
-        console.log('🚨 [DEBUG_SERIES] === SERIES UPDATE DEBUG START ===');
-        console.log('🚨 [DEBUG_SERIES] Original task data:', JSON.stringify(mergedTask, null, 2));
-        console.log('🚨 [DEBUG_SERIES] Cleaned task data:', JSON.stringify(cleanedTask, null, 2));
-        console.log('🚨 [DEBUG_SERIES] Tasks.all before update:', tasks.all.filter(t => t.seriesId === mergedTask.seriesId || t.id === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId, originalBaseId: t.originalBaseId })));
+        console.log('🔥 CHRONO_DEBUG_SERIES === SERIES UPDATE DEBUG START ===');
+        console.log('🔥 CHRONO_DEBUG_SERIES Original task data:', JSON.stringify(mergedTask, null, 2));
+        console.log('🔥 CHRONO_DEBUG_SERIES Cleaned task data:', JSON.stringify(cleanedTask, null, 2));
+        console.log('🔥 CHRONO_DEBUG_SERIES Tasks.all before update:', tasks.all.filter(t => t.seriesId === mergedTask.seriesId || t.id === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId, originalBaseId: t.originalBaseId })));
+        console.log('🔥 CHRONO_DEBUG_SERIES All tasks count:', tasks.all.length);
+        console.log('🔥 CHRONO_DEBUG_SERIES Is series update:', isSeriesUpdate);
         
-        // Find the base task definition
+        // Find the base task definition with improved lookup logic
         let baseTask;
         if (mergedTask.originalBaseId) {
           // This is an instance, find the base task
           baseTask = tasks.all.find(t => t.id === mergedTask.originalBaseId);
+          
+          // If not found by originalBaseId, try finding by seriesId as fallback
+          if (!baseTask && mergedTask.seriesId) {
+            console.log('🔥 CHRONO_DEBUG_SERIES [BASE TASK LOOKUP] Base task not found by originalBaseId, trying seriesId fallback');
+            console.log('🔥 CHRONO_DEBUG_SERIES [BASE TASK LOOKUP] Searching for seriesId:', mergedTask.seriesId);
+            console.log('🔥 CHRONO_DEBUG_SERIES [BASE TASK LOOKUP] Available base tasks:', tasks.all.filter(t => !t.originalBaseId && (t.isRepeat === false || typeof t.isRepeat === 'undefined')).map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId })));
+            baseTask = tasks.all.find(t => 
+              t.seriesId === mergedTask.seriesId && 
+              (t.isRepeat === false || typeof t.isRepeat === 'undefined') &&
+              !t.originalBaseId
+            );
+          }
         } else {
           // This could be the base task itself, or we need to find it by seriesId
           const isCurrentTaskBaseTask = (mergedTask.isRepeat === false || typeof mergedTask.isRepeat === 'undefined') && 
@@ -597,16 +628,49 @@ export function useTaskManagement() {
           }
         }
         
+        // CRITICAL FIX: Prevent duplicate base task creation
+        // Check if we found multiple base tasks for the same series (this should never happen)
+        const allBaseTasksForSeries = tasks.all.filter(t => 
+          t.seriesId === mergedTask.seriesId && 
+          (t.isRepeat === false || typeof t.isRepeat === 'undefined') &&
+          !t.originalBaseId
+        );
+        
+        if (allBaseTasksForSeries.length > 1) {
+          console.log('🔥 CHRONO_DEBUG_SERIES [DUPLICATE DETECTION] Multiple base tasks found for series:', mergedTask.seriesId);
+          console.log('🔥 CHRONO_DEBUG_SERIES [DUPLICATE DETECTION] Duplicate base tasks:', allBaseTasksForSeries.map(t => ({ id: t.id, title: t.title, scheduledDate: t.scheduledDate })));
+          
+          // Remove duplicate base tasks, keeping only the first one
+          const primaryBaseTask = allBaseTasksForSeries[0];
+          const duplicateBaseTasks = allBaseTasksForSeries.slice(1);
+          
+          duplicateBaseTasks.forEach(duplicate => {
+            console.log('🔥 CHRONO_DEBUG_SERIES [DUPLICATE REMOVAL] Removing duplicate base task:', duplicate.id);
+            // Remove from tasks.all
+            tasks.all = tasks.all.filter(t => t.id !== duplicate.id);
+            // Remove from tag collections
+            Object.keys(tasks).forEach(tagId => {
+              if (tagId !== 'all' && Array.isArray(tasks[tagId])) {
+                tasks[tagId] = tasks[tagId].filter(t => t.id !== duplicate.id);
+              }
+            });
+          });
+          
+          baseTask = primaryBaseTask;
+          console.log('🔥 CHRONO_DEBUG_SERIES [DUPLICATE REMOVAL] Using primary base task:', baseTask.id);
+        }
+        
         if (baseTask) {
-          console.log('🔄 [BASE TASK UPDATE] Base task found:', {
+          console.log('🔥 CHRONO_DEBUG_SERIES [BASE TASK UPDATE] Base task found:', {
             id: baseTask.id,
             title: baseTask.title,
             isCurrentTaskBaseTask: mergedTask.id === baseTask.id,
             mergedTaskId: mergedTask.id,
             baseTaskBeforeUpdate: JSON.stringify(baseTask)
           });
-          console.log('🚨 [DEBUG_SERIES] Base task found:', JSON.stringify(baseTask, null, 2));
-          console.log('🚨 [DEBUG_SERIES] Is current task the base task?', mergedTask.id === baseTask.id);
+          console.log('🔥 CHRONO_DEBUG_SERIES Base task found:', JSON.stringify(baseTask, null, 2));
+          console.log('🔥 CHRONO_DEBUG_SERIES Is current task the base task?', mergedTask.id === baseTask.id);
+          console.log('🔥 CHRONO_DEBUG_SERIES Base task lookup method:', mergedTask.originalBaseId ? 'originalBaseId' : 'seriesId');
           
           // First, update the base task definition with the new properties
           const updatedBaseTask = {
@@ -626,23 +690,35 @@ export function useTaskManagement() {
               return acc;
             }, {}),
             updatedAt: new Date().toISOString(),
-            // Preserve base task properties
+            // Preserve base task properties - CRITICAL FIX: Ensure base task has no scheduledDate
             id: baseTask.id,
-            scheduledDate: baseTask.scheduledDate,
+            scheduledDate: undefined, // Base tasks should never have a scheduledDate
             repeat: baseTask.repeat,
             seriesId: baseTask.seriesId,
-            startDateOfSeries: baseTask.startDateOfSeries,
+            startDateOfSeries: baseTask.startDateOfSeries || baseTask.createdAt, // Ensure startDateOfSeries is preserved
             isRepeat: baseTask.isRepeat || false
           };
           
+          console.log('🔥 CHRONO_DEBUG_SERIES [CRITICAL FIX] Ensuring base task scheduledDate is undefined');
+          console.log('🔥 CHRONO_DEBUG_SERIES [CRITICAL FIX] Base task before fix - scheduledDate:', baseTask.scheduledDate);
+          console.log('🔥 CHRONO_DEBUG_SERIES [CRITICAL FIX] Base task after fix - scheduledDate:', updatedBaseTask.scheduledDate);
+          
           // Update base task in all collection
           const baseTaskIndex = tasks.all.findIndex(t => t.id === baseTask.id);
-          console.log('🚨 [DEBUG_SERIES] Base task index in tasks.all:', baseTaskIndex);
-          console.log('🚨 [DEBUG_SERIES] Updated base task data:', JSON.stringify(updatedBaseTask, null, 2));
+          console.log('🔥 CHRONO_DEBUG_SERIES Base task index in tasks.all:', baseTaskIndex);
+          console.log('🔥 CHRONO_DEBUG_SERIES Updated base task data:', JSON.stringify(updatedBaseTask, null, 2));
+          console.log('🔥 CHRONO_DEBUG_SERIES Base task properties preserved:', {
+            id: updatedBaseTask.id,
+            scheduledDate: updatedBaseTask.scheduledDate,
+            repeat: updatedBaseTask.repeat,
+            seriesId: updatedBaseTask.seriesId,
+            startDateOfSeries: updatedBaseTask.startDateOfSeries,
+            isRepeat: updatedBaseTask.isRepeat
+          });
           if (baseTaskIndex !== -1) {
             const oldBaseTask = { ...tasks.all[baseTaskIndex] };
             tasks.all[baseTaskIndex] = updatedBaseTask;
-            console.log('🔄 [BASE TASK UPDATE] Successfully updated base task in all collection:', {
+            console.log('🔥 CHRONO_DEBUG_SERIES [BASE TASK UPDATE] Successfully updated base task in all collection:', {
               id: updatedBaseTask.id,
               title: updatedBaseTask.title,
               index: baseTaskIndex,
@@ -689,7 +765,11 @@ export function useTaskManagement() {
           const allTasksInSeries = getTasksInSeries([...tasks.all, ...(tasks.completed || [])], mergedTask.seriesId);
           
           // Filter out the current task being edited to avoid duplicate updates
+          // This is the key fix - we exclude the current task from the instances loop
           const instances = allTasksInSeries.filter(t => t.id !== mergedTask.id);
+          
+          console.log('🚨 [DEBUG_SERIES] All tasks in series:', allTasksInSeries.length);
+          console.log('🚨 [DEBUG_SERIES] Instances to update (excluding current):', instances.length);
           
           // Update all other instances with new properties
           instances.forEach(instance => {
@@ -934,20 +1014,56 @@ export function useTaskManagement() {
          window.dispatchEvent(new CustomEvent('tasksUpdated', {
            detail: { tasks: updatedTasksFromStorage || tasks }
          }));
-         console.log('🚨 [DEBUG_SERIES] === SERIES UPDATE DEBUG END ===');
+         console.log('🔥 CHRONO_DEBUG_SERIES === SERIES UPDATE DEBUG END ===');
+         console.log('🔥 CHRONO_DEBUG_SERIES Series update completed successfully');
+         console.log('🔥 CHRONO_DEBUG_SERIES Final tasks.all count:', tasks.all.length);
          seriesUpdateResult = { seriesUpdateCompleted: true };
          return seriesUpdateResult;
         }
         
         // If we reach here, the series update was initiated but base task wasn't found
+        console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] Base task not found for series update!');
+         console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] Task details:', {
+           id: mergedTask.id,
+           seriesId: mergedTask.seriesId,
+           originalBaseId: mergedTask.originalBaseId,
+           isRepeat: mergedTask.isRepeat
+         });
+         console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] All available tasks:', tasks.all.map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId, originalBaseId: t.originalBaseId, isRepeat: t.isRepeat })));
+         console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] Tasks with matching seriesId:', tasks.all.filter(t => t.seriesId === mergedTask.seriesId).map(t => ({ id: t.id, title: t.title, seriesId: t.seriesId, originalBaseId: t.originalBaseId, isRepeat: t.isRepeat })));
+        
+        // CRITICAL: Do not proceed with normal update logic for existing series
+        // This prevents duplicate series creation and schedule resets
+        if (mergedTask.seriesId || mergedTask.originalBaseId) {
+           console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] Aborting update to prevent duplicate series creation');
+           console.log('🔥 CHRONO_DEBUG_SERIES [SERIES UPDATE ERROR] Preventing fallback to normal update logic');
+           return { error: 'Base task not found for series update. Cannot proceed to prevent data corruption.' };
+         }
+        
         console.log('Series update initiated but base task not found, proceeding with normal update');
       } else {
         console.log('Not a series update, proceeding with normal task update logic');
+        
+        // Additional safety check: prevent converting existing series tasks to new series
+         if ((mergedTask.seriesId || mergedTask.originalBaseId) && cleanedTask.repeat) {
+           console.log('🔥 CHRONO_DEBUG_SERIES [SAFETY CHECK] Preventing conversion of existing series task to new series');
+           console.log('🔥 CHRONO_DEBUG_SERIES [SAFETY CHECK] Task details:', {
+             id: mergedTask.id,
+             seriesId: mergedTask.seriesId,
+             originalBaseId: mergedTask.originalBaseId,
+             hasRepeat: !!cleanedTask.repeat
+           });
+           console.log('🔥 CHRONO_DEBUG_SERIES [SAFETY CHECK] This would create a duplicate series - blocking operation');
+           return { error: 'Cannot convert existing series task to new series. Use series update instead.' };
+         }
       }
       
       // Handle tag changes - we need to move the task between collections
       if (originalTagId !== newTagId) {
-        console.log('Tag has changed, moving task between collections');
+        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Tag has changed, moving task between collections');
+        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Original tag:', originalTagId);
+        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag:', newTagId);
+        console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task ID:', updatedTaskData.id);
         
         // Remove the task from all collections except 'all'
         for (const groupKey in tasks) {
@@ -959,8 +1075,24 @@ export function useTaskManagement() {
         // Add to new tag collection if it has a new tag
         if (newTagId) {
           if (!tasks[newTagId]) tasks[newTagId] = [];
-          tasks[newTagId].push(cleanedTask);
-          console.log(`Added task to new tag collection: ${newTagId}`);
+          // Check if task already exists in the new tag collection to prevent duplicates
+          const existsInNewTag = tasks[newTagId].some(t => t.id === updatedTaskData.id);
+          if (!existsInNewTag) {
+            tasks[newTagId].push(cleanedTask);
+            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Added task to new tag collection:', newTagId);
+            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] New tag collection size:', tasks[newTagId].length);
+          } else {
+            console.log('🔥 CHRONO_DEBUG_SERIES [TAG CHANGE] Task already exists in new tag collection:', newTagId);
+          }
+        }
+      } else {
+        // Tag hasn't changed, but we still need to update the task in its existing tag collection
+        if (originalTagId && tasks[originalTagId]) {
+          const tagTaskIndex = tasks[originalTagId].findIndex(t => t.id === updatedTaskData.id);
+          if (tagTaskIndex !== -1) {
+            tasks[originalTagId][tagTaskIndex] = cleanedTask;
+            console.log(`Updated task in existing tag collection: ${originalTagId}`);
+          }
         }
       }
       
@@ -969,12 +1101,13 @@ export function useTaskManagement() {
       if (allTaskIndex !== -1) {
         tasks.all[allTaskIndex] = cleanedTask;
         console.log('Updated task in all collection');
-      } else if (tasks.all) {
-        tasks.all.push(cleanedTask);
-        console.log('Added task to all collection');
       } else {
-        tasks.all = [cleanedTask];
-        console.log('Created all collection with task');
+        // Only add to 'all' collection if it's truly a new task that doesn't exist
+        // This should not happen in normal update flow, but handle edge cases
+        console.warn('Task not found in all collection during update, this might indicate an issue');
+        if (!tasks.all) tasks.all = [];
+        tasks.all.push(cleanedTask);
+        console.log('Added missing task to all collection');
       }
       
       // Check if this is a conversion from non-recurring to recurring
@@ -1227,24 +1360,44 @@ export function useTaskManagement() {
             );
           
           if (!hasActiveInstance) {
-            console.log('No active instance found, generating a new one');
-            const nextInstance = generateNextDisplayableTaskInstance(cleanedTask, null);
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] No active instance found, generating a new one');
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Series ID:', mergedTask.seriesId);
+            
+            // Find the latest scheduled instance to generate the next occurrence correctly
+            const allSeriesInstances = [...tasks.all, ...(tasks.completed || [])]
+              .filter(t => t.seriesId === mergedTask.seriesId && t.isRepeat === true)
+              .sort((a, b) => new Date(b.scheduledDate) - new Date(a.scheduledDate));
+            
+            const latestInstanceDate = allSeriesInstances.length > 0 ? allSeriesInstances[0].scheduledDate : null;
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Latest instance date for next generation:', latestInstanceDate);
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] All series instances found:', allSeriesInstances.map(t => ({ id: t.id, scheduledDate: t.scheduledDate, completed: t.completed })));
+            
+            const nextInstance = generateNextDisplayableTaskInstance(cleanedTask, latestInstanceDate);
             
             if (nextInstance) {
-              console.log('Generated new instance:', nextInstance);
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Generated new instance:', nextInstance);
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Instance will be added to tag group:', nextInstance.tag ? nextInstance.tag.id : "all");
               const instanceTagGroup = nextInstance.tag ? nextInstance.tag.id : "all";
               if (!tasks[instanceTagGroup]) tasks[instanceTagGroup] = [];
               if (!tasks.all.find(t => t.id === nextInstance.id)) {
                 tasks.all.push(nextInstance);
+                console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Added new instance to tasks.all');
+              } else {
+                console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE GENERATION] Instance already exists in tasks.all, skipping');
               }
             }
           }
         }
+        console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE HANDLING] Checking if instance needs series-wide updates');
+        console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE HANDLING] mergedTask.isRepeat:', mergedTask.isRepeat);
+        console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE HANDLING] mergedTask.originalBaseId:', mergedTask.originalBaseId);
+        console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE HANDLING] isSeriesUpdate:', isSeriesUpdate);
+        
         // If this is an instance being updated, handle series-wide updates if needed
         // Skip this if we already handled a series update above
-        else if (mergedTask.isRepeat === true && mergedTask.originalBaseId && !isSeriesUpdate) {
-          console.log('🔄 [DEBUG] This is a recurring instance, checking for series-wide updates');
-          console.log('🔄 [DEBUG] Instance details:', {
+        if (mergedTask.isRepeat === true && mergedTask.originalBaseId && !isSeriesUpdate) {
+          console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] This is a recurring instance, checking for series-wide updates');
+          console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Instance details:', {
             id: mergedTask.id,
             originalBaseId: mergedTask.originalBaseId,
             seriesId: mergedTask.seriesId,
@@ -1255,12 +1408,12 @@ export function useTaskManagement() {
           
           // Find the base task
           const baseTask = tasks.all.find(t => t.id === mergedTask.originalBaseId);
-          console.log('🔄 [DEBUG] Base task search result:', baseTask ? 'FOUND' : 'NOT FOUND');
+          console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Base task search result:', baseTask ? 'FOUND' : 'NOT FOUND');
           if (!baseTask) {
-            console.log('🔄 [DEBUG] Base task not found! Available tasks in all collection:', tasks.all.map(t => ({ id: t.id, title: t.title, isRepeat: t.isRepeat })));
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Base task not found! Available tasks in all collection:', tasks.all.map(t => ({ id: t.id, title: t.title, isRepeat: t.isRepeat })));
           }
           if (baseTask) {
-            console.log('🔄 [DEBUG] Base task details:', {
+            console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Base task details:', {
               id: baseTask.id,
               title: baseTask.title,
               seriesId: baseTask.seriesId,
@@ -1273,23 +1426,33 @@ export function useTaskManagement() {
 
             
             if (newTagId !== null && originalTagId !== newTagId) {
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Non-series update: only updating tag on base task');
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Original tag ID:', originalTagId);
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] New tag ID:', newTagId);
+              
               // Non-series update: only update tag on base task
-
               baseTask.tag = cleanedTask.tag;
+              console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Updated base task tag to:', baseTask.tag);
               
               // Update base task in its tag collection
               if (baseTask.tag && baseTask.tag.id) {
                 const baseTagId = baseTask.tag.id;
+                console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Moving base task to tag collection:', baseTagId);
                 if (!tasks[baseTagId]) tasks[baseTagId] = [];
                 
                 // Remove from old tag collection
                 if (originalTagId && tasks[originalTagId]) {
+                  const beforeCount = tasks[originalTagId].length;
                   tasks[originalTagId] = tasks[originalTagId].filter(t => t.id !== baseTask.id);
+                  console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Removed base task from old tag collection. Count:', beforeCount, '->', tasks[originalTagId].length);
                 }
                 
                 // Add to new tag collection if not already there
                 if (!tasks[baseTagId].find(t => t.id === baseTask.id)) {
                   tasks[baseTagId].push(baseTask);
+                  console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Added base task to new tag collection. Count:', tasks[baseTagId].length);
+                } else {
+                  console.log('🔥 CHRONO_DEBUG_SERIES [INSTANCE UPDATE] Base task already exists in new tag collection');
                 }
               }
             }
@@ -1298,18 +1461,22 @@ export function useTaskManagement() {
       }
       
       // Check if this was a series-wide update that already saved to localStorage
-      console.log('🚨 [DEBUG_FINAL] Final save check - seriesUpdateResult:', seriesUpdateResult);
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Final save check - seriesUpdateResult:', seriesUpdateResult);
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Final tasks.all count:', tasks.all.length);
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Final tasks object keys:', Object.keys(tasks));
+      
       if (typeof seriesUpdateResult === 'object' && seriesUpdateResult && seriesUpdateResult.seriesUpdateCompleted) {
-        console.log('Series-wide update already completed, skipping final save');
-        console.log('🚨 [DEBUG_FINAL] SKIPPING final save because series update completed');
+        console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Series-wide update already completed, skipping final save');
+        console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] SKIPPING final save because series update completed');
         return true;
       }
-      console.log('🚨 [DEBUG_FINAL] PROCEEDING with final save - no series update or series update did not complete');
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] PROCEEDING with final save - no series update or series update did not complete');
 
       localStorage.setItem("tasks", JSON.stringify(tasks));
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Saved tasks to localStorage');
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Final saved tasks.all count:', tasks.all.length);
       
       // Dispatch events to ensure UI updates
-
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'tasks',
         newValue: JSON.stringify(tasks),
@@ -1318,10 +1485,13 @@ export function useTaskManagement() {
       window.dispatchEvent(new CustomEvent('tasksUpdated', {
         detail: { tasks: tasks } // Send the fully updated tasks object
       }));
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Dispatched storage and tasksUpdated events');
       
+      console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Update task completed successfully');
       return true;
     } catch (error) {
-
+      console.error('🔥 CHRONO_DEBUG_SERIES [ERROR] Update task failed with error:', error);
+      console.error('🔥 CHRONO_DEBUG_SERIES [ERROR] Error stack:', error.stack);
       return false;
     }
   }, []);

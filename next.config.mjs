@@ -16,8 +16,7 @@ const nextConfig = {
   },
 
   devIndicators: {
-    buildActivity: false,
-    buildActivityPosition: 'bottom-right',
+    position: 'bottom-left'
   },
   // Disable server components for Tauri
   reactStrictMode: true,

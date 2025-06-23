@@ -27,8 +27,12 @@ import { Calendar } from '@/components/ui/calendar';
 import { Task } from '../assets/icons/Task';
 import { Tag } from '../assets/icons/Tag';
 import { ArrowAlt } from '../assets/icons/ArrowAlt';
+import { Lightning } from '../assets/icons/Lightning'
+import { Trash } from '../assets/icons/Trash'
 import RepeatEditModal from './RepeatEditModal';
+import RepeatTaskEditModal from './RepeatTaskEditModal';
 import GoToDateCommand from './GoToDateCommand';
+
 import { parseNaturalLanguage } from '../utils/dateUtils';
 import { Shift } from '../assets/icons/Shift';
 import { Completed } from '../assets/icons/Completed';
@@ -228,7 +232,7 @@ const TabSelector = ({ activeTab, onTabChange, ...props }) => {
   );
 };
 
-const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onClose, onDateSelect }, ref) => {
+const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onToggleTaskCompletion, onClose, onDateSelect }, ref) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -236,6 +240,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [isGoToDateMode, setIsGoToDateMode] = useState(false);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
+  // Multi-select state for tasks
+  const [selectedTasks, setSelectedTasks] = useState(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  
+  // Multi-select schedule state
+  const [isMultiSelectScheduleOpen, setIsMultiSelectScheduleOpen] = useState(false);
+  const [isMultiSelectPriorityOpen, setIsMultiSelectPriorityOpen] = useState(false);
+  const [isMultiSelectTagOpen, setIsMultiSelectTagOpen] = useState(false);
+  const [pendingScheduleDate, setPendingScheduleDate] = useState(null);
+  const [recurringTasksInSelection, setRecurringTasksInSelection] = useState([]);
+  const [currentRecurringTaskIndex, setCurrentRecurringTaskIndex] = useState(0);
+  const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
+  const [currentRecurringTask, setCurrentRecurringTask] = useState(null);
+  const [recurringTaskScopes, setRecurringTaskScopes] = useState(new Map());
   const roundToNearest15Min = (timeStr) => {
     const [hours, minutes] = timeStr.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes;
@@ -447,11 +465,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   // Compute active content key based on state
   const activeContentKey = useMemo(() => {
+    if (selectedTasks.size > 0 && !isAddingEvent && !isAddingTask && !isGoToDateMode) return 'multiselect';
     if (isAddingEvent) return 'event';
     if (isAddingTask) return 'task';
     if (isGoToDateMode) return 'go-to-date';
     return 'default';
-  }, [isAddingEvent, isAddingTask, isGoToDateMode]);
+  }, [isAddingEvent, isAddingTask, isGoToDateMode, selectedTasks.size]);
 
   // Update previous content key ref
   useEffect(() => {
@@ -522,7 +541,311 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     };
   }, []);
 
+  // Add keyboard shortcuts for date navigation
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Only handle arrow keys when no input is focused and no modals are open
+      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
+      // Check if any dropdowns or modals are open
+      if (isDatePickerOpen || isScheduleOpen || isTagDropdownOpen || isTaskRepeatDropdownOpen || 
+          isPriorityDropdownOpen || isRepeatDropdownOpen || showColorPicker || 
+          isRecurrenceModalOpen || showRepeatEditModal) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        onPrevious();
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        onNext();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onPrevious, onNext, isDatePickerOpen, isScheduleOpen, isTagDropdownOpen, 
+      isTaskRepeatDropdownOpen, isPriorityDropdownOpen, isRepeatDropdownOpen, 
+      showColorPicker, isRecurrenceModalOpen, showRepeatEditModal]);
+
   const [previewEvent, setPreviewEvent] = useState(null);
+
+  // Selection change callbacks
+  const [selectionChangeCallbacks, setSelectionChangeCallbacks] = useState(new Set());
+
+  // Multi-select handlers
+  const handleTaskSelect = useCallback((taskId, event, isCurrentlySelected) => {
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      // Toggle logic: if currently selected, remove it; if not selected, add it
+      if (isCurrentlySelected) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      
+      // Enable multi-select mode if tasks are selected
+      setIsMultiSelectMode(newSet.size > 0);
+      
+      // Notify all registered callbacks
+      console.log('[CommandBar] Notifying', selectionChangeCallbacks.size, 'callbacks of selection change');
+      selectionChangeCallbacks.forEach(callback => {
+        try {
+          callback(Array.from(newSet));
+        } catch (error) {
+          console.error('Error in selection change callback:', error);
+        }
+      });
+      
+      return newSet;
+    });
+  }, [selectionChangeCallbacks]);
+
+  const handleSelectAllTasks = useCallback((taskIds) => {
+    setSelectedTasks(new Set(taskIds));
+    setIsMultiSelectMode(taskIds.length > 0);
+    
+    // Notify all registered callbacks
+    selectionChangeCallbacks.forEach(callback => {
+      try {
+        callback(taskIds);
+      } catch (error) {
+        console.error('Error in selection change callback:', error);
+      }
+    });
+  }, [selectionChangeCallbacks]);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedTasks(new Set());
+    setIsMultiSelectMode(false);
+    
+    // Notify all registered callbacks
+    selectionChangeCallbacks.forEach(callback => {
+      try {
+        callback([]);
+      } catch (error) {
+        console.error('Error in selection change callback:', error);
+      }
+    });
+  }, [selectionChangeCallbacks]);
+
+  const handleBulkTaskUpdate = useCallback((updates) => {
+    // Get all tasks from localStorage to retrieve full task objects
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const allTasks = tasks.all || [];
+
+    // Apply updates to all selected tasks
+    selectedTasks.forEach(taskId => {
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) return; // Skip if task not found
+
+      const updatedTask = {
+        ...task,
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
+
+      onUpdateTask(updatedTask);
+    });
+    // Clear selection after bulk update
+    handleClearSelection();
+  }, [selectedTasks, onUpdateTask, handleClearSelection]);
+
+  const handleBulkTaskComplete = useCallback(() => {
+    selectedTasks.forEach(taskId => {
+      onToggleTaskCompletion(taskId);
+    });
+    handleClearSelection();
+  }, [selectedTasks, onToggleTaskCompletion, handleClearSelection]);
+
+  // Multi-select schedule handler
+  const handleMultiSelectSchedule = useCallback(() => {
+    if (selectedTasks.size === 0) return;
+
+    // Get all tasks from localStorage to check for recurring tasks
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const allTasks = tasks.all || [];
+
+    // Check which selected tasks are recurring
+    const recurringTasks = [];
+    const selectedTaskIds = Array.from(selectedTasks);
+
+    selectedTaskIds.forEach(taskId => {
+      const task = allTasks.find(t => t.id === taskId);
+      if (task && (task.isRepeat === true || task.seriesId)) {
+        recurringTasks.push(task);
+      }
+    });
+
+    if (recurringTasks.length > 0) {
+      // If there are recurring tasks, handle them one by one
+      setRecurringTasksInSelection(recurringTasks);
+      setCurrentRecurringTaskIndex(0);
+      setCurrentRecurringTask(recurringTasks[0]);
+      setIsRepeatTaskEditModalOpen(true);
+    } else {
+      // If no recurring tasks, open calendar directly
+      setIsMultiSelectScheduleOpen(true);
+    }
+  }, [selectedTasks]);
+
+  // Handle recurring task scope selection in multi-select
+  const handleRecurringTaskScopeSelection = useCallback((scope) => {
+    if (!currentRecurringTask) return;
+
+    // Store the scope for this task
+    setRecurringTaskScopes(prev => new Map(prev.set(currentRecurringTask.id, scope)));
+
+    // Move to next recurring task or open calendar
+    const nextIndex = currentRecurringTaskIndex + 1;
+    if (nextIndex < recurringTasksInSelection.length) {
+      setCurrentRecurringTaskIndex(nextIndex);
+      setCurrentRecurringTask(recurringTasksInSelection[nextIndex]);
+    } else {
+      // All recurring tasks processed, close modal and open calendar
+      setIsRepeatTaskEditModalOpen(false);
+      setIsMultiSelectScheduleOpen(true);
+    }
+  }, [currentRecurringTask, currentRecurringTaskIndex, recurringTasksInSelection]);
+
+  // Multi-select priority handler
+  const handleMultiSelectPriority = useCallback(() => {
+    if (selectedTasks.size === 0) return;
+    setIsMultiSelectPriorityOpen(true);
+  }, [selectedTasks]);
+
+  // Handle multi-select priority selection
+  const handleMultiSelectPrioritySelect = useCallback((priority) => {
+    if (selectedTasks.size === 0) return;
+
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const allTasks = tasks.all || [];
+    const selectedTaskIds = Array.from(selectedTasks);
+
+    selectedTaskIds.forEach(taskId => {
+      const task = allTasks.find(t => t.id === taskId);
+      if (task) {
+        const updatedTask = {
+          ...task,
+          priority: priority,
+          updatedAt: new Date().toISOString()
+        };
+        onUpdateTask(updatedTask);
+      }
+    });
+
+    setIsMultiSelectPriorityOpen(false);
+    handleClearSelection();
+  }, [selectedTasks, onUpdateTask, handleClearSelection]);
+
+  // Multi-select tag handler
+  const handleMultiSelectTag = useCallback(() => {
+    if (selectedTasks.size === 0) return;
+    setIsMultiSelectTagOpen(true);
+  }, [selectedTasks]);
+
+  // Handle multi-select tag selection
+  const handleMultiSelectTagSelect = useCallback((tag) => {
+    if (selectedTasks.size === 0) return;
+
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const allTasks = tasks.all || [];
+    const selectedTaskIds = Array.from(selectedTasks);
+
+    selectedTaskIds.forEach(taskId => {
+      const task = allTasks.find(t => t.id === taskId);
+      if (task) {
+        const updatedTask = {
+          ...task,
+          tag: tag, // Store the full tag object, not just the ID
+          updatedAt: new Date().toISOString()
+        };
+        onUpdateTask(updatedTask);
+      }
+    });
+
+    setIsMultiSelectTagOpen(false);
+    handleClearSelection();
+  }, [selectedTasks, onUpdateTask, handleClearSelection]);
+
+  // Handle multi-select delete
+  const handleMultiSelectDelete = useCallback(() => {
+    if (selectedTasks.size === 0) return;
+
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const selectedTaskIds = Array.from(selectedTasks);
+
+    // Remove selected tasks from all collections
+    Object.keys(tasks).forEach(collection => {
+      if (Array.isArray(tasks[collection])) {
+        tasks[collection] = tasks[collection].filter(task => 
+          !selectedTaskIds.includes(task.id)
+        );
+      }
+    });
+
+    // Save updated tasks to localStorage
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+    
+    // Dispatch tasks updated event
+    dispatchTasksUpdated(tasks);
+    
+    // Clear selection
+    handleClearSelection();
+  }, [selectedTasks, handleClearSelection, dispatchTasksUpdated]);
+
+  // Handle multi-select date selection
+  const handleMultiSelectDateSelect = useCallback((date) => {
+    if (selectedTasks.size === 0) return;
+
+    // Get all tasks from localStorage to retrieve full task objects
+    const savedTasks = localStorage.getItem("tasks") || "{}";
+    const tasks = JSON.parse(savedTasks);
+    const allTasks = tasks.all || [];
+
+    const selectedTaskIds = Array.from(selectedTasks);
+    const scheduledDate = date.toISOString();
+
+    // Apply the date to all selected tasks, respecting recurring task scopes
+    selectedTaskIds.forEach(taskId => {
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) return; // Skip if task not found
+
+      const scope = recurringTaskScopes.get(taskId);
+      const updatedTask = {
+        ...task,
+        scheduledDate,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (scope) {
+        // For recurring tasks, add the scope to the task object
+        updatedTask._updateScope = scope;
+      }
+
+      // Call onUpdateTask with the complete task object
+      onUpdateTask(updatedTask);
+    });
+
+    // Clean up and close
+    setIsMultiSelectScheduleOpen(false);
+    setRecurringTasksInSelection([]);
+    setCurrentRecurringTaskIndex(0);
+    setCurrentRecurringTask(null);
+    setRecurringTaskScopes(new Map());
+    handleClearSelection();
+  }, [selectedTasks, recurringTaskScopes, onUpdateTask, handleClearSelection]);
 
   const handleClose = useCallback((options = {}) => {
     const { skipDelete = false, forceClose = false } = options;
@@ -565,6 +888,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     // Reset schedule-related fields
     setIsScheduleOpen(false); // Reset schedule dropdown state
     setScheduleOption('anytime'); // Reset schedule option to default
+    // Reset multi-select state
+    handleClearSelection();
     setIsScheduling(false); // Reset scheduling state
     setScheduledDate(null); // Reset scheduled date
     
@@ -835,7 +1160,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setTaskPriority(task.priority || 'Medium');
     setAddToCalendar(task.addToCalendar || false);
     setTagSearchText(''); // Don't set the tag search text when editing
-    setScheduledDate(task.scheduledDate ? new Date(task.scheduledDate) : null);
+    
+    // CRITICAL FIX: For recurring tasks, don't set scheduledDate in UI
+    // This prevents users from editing schedule dates of recurring tasks
+    // which should be controlled by recurrence patterns only
+    const isRecurringTask = task.seriesId && (task.repeat || task.isRepeat);
+    setScheduledDate(isRecurringTask ? null : (task.scheduledDate ? new Date(task.scheduledDate) : null));
     
     // Handle repeat options for recurring task instances
     let repeatOption = task.repeat || 'none';
@@ -1026,8 +1356,34 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setDraftTag(tag);
     },
     openForEdit,
-    openForTaskEdit
-  }), [onCreateEvent, openForEdit, openForTaskEdit]);
+    openForTaskEdit,
+    // Multi-select functions
+    selectTask: handleTaskSelect,
+    selectAllTasks: handleSelectAllTasks,
+    clearSelection: handleClearSelection,
+    bulkUpdateTasks: handleBulkTaskUpdate,
+    bulkCompleteTasks: handleBulkTaskComplete,
+    getSelectedTasks: () => Array.from(selectedTasks),
+    isMultiSelectMode: () => isMultiSelectMode,
+    // Selection change callback management
+    onSelectionChange: (callback) => {
+      console.log('[CommandBar] Registering new selection callback');
+      setSelectionChangeCallbacks(prev => {
+        const newSet = new Set([...prev, callback]);
+        console.log('[CommandBar] Total callbacks after registration:', newSet.size);
+        return newSet;
+      });
+      return () => {
+        console.log('[CommandBar] Unregistering selection callback');
+        setSelectionChangeCallbacks(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(callback);
+          console.log('[CommandBar] Total callbacks after unregistration:', newSet.size);
+          return newSet;
+        });
+      };
+    }
+  }), [onCreateEvent, openForEdit, openForTaskEdit, handleTaskSelect, handleSelectAllTasks, handleClearSelection, handleBulkTaskUpdate, handleBulkTaskComplete, selectedTasks, isMultiSelectMode, setSelectionChangeCallbacks]);
 
   const handleGoToDate = useCallback((date) => {
     if (date) {
@@ -1327,7 +1683,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             notes: taskNotes.trim(),
             tag: finalTag,
             priority: taskPriority,
-            scheduledDate: scheduledDate?.toISOString(),
+            // CRITICAL FIX: For series updates, don't override scheduledDate
+            // The base task should keep scheduledDate: undefined, instances keep their dates
+            scheduledDate: taskToEdit._updateSeries ? taskToEdit.scheduledDate : scheduledDate?.toISOString(),
             updatedAt: new Date().toISOString(),
             repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
             rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : (taskToEdit && taskToEdit.rruleOptions && !repeatChanged ? taskToEdit.rruleOptions : null), // Include task rrule options
@@ -1612,7 +1970,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
-        {(isOpen) && (
+        {(isOpen || selectedTasks.size > 0) && (
           <motion.div 
             key="commandBar-container"
             ref={containerRef}
@@ -1660,7 +2018,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 duration: 0.02
               }
             }}
-            className={`bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border ${!isAddingEvent && !isAddingTask && !isGoToDateMode ? 'px-0' : 'px-4'}`}
+            data-command-bar
+            className={`bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border ${!isAddingEvent && !isAddingTask && !isGoToDateMode && selectedTasks.size === 0 ? 'px-0' : 'px-4'}`}
           >
             <div 
               ref={contentRef}
@@ -1704,6 +2063,178 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   backfaceVisibility: 'hidden'
                 }}
               >
+                {activeContentKey === 'multiselect' && (
+                  <div className="flex items-center justify-between w-full py-4" data-multiselect-toolbar>
+                    <div className="flex items-center gap-2 text-sm">
+                      <button
+                        onClick={handleClearSelection}
+                        className="text-light-text/50 dark:text-dark-text/50 p-2 hover:bg-light-bg-lighter dark:hover:bg-white/5 rounded-[5px] hover:text-light-text dark:hover:text-dark-text"
+                      >
+                        
+                        <ArrowAlt className="w-4 h-4 rotate-180" />
+                      </button>
+                      <div className="h-5 w-[1px] bg-light-border dark:bg-dark-border mr-2"></div>
+
+                      <span className="font-medium text-light-text/50 mr-4 dark:text-dark-text/50 text-xs">{selectedTasks.size} selected</span>
+                    </div>
+
+                    
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleBulkTaskComplete}
+                        className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                      >
+                        <Check className="h-3 w-3 text-green-500" />
+                        <span className="text-xs px-0.5">Done</span>
+                      </button>
+                      <Popover open={isMultiSelectScheduleOpen} onOpenChange={setIsMultiSelectScheduleOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            onClick={handleMultiSelectSchedule}
+                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                          >
+                            <CalendarIcon className="h-3 w-3 text-primary" />
+                            <span className="text-xs px-0.5">Schedule</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent 
+                          className="w-auto p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border shadow-lg"
+                          align="center"
+                          side="top"
+                          sideOffset={8}
+                        >
+                          <div
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Calendar
+                              mode="single"
+                              selected={pendingScheduleDate}
+                              onSelect={handleMultiSelectDateSelect}
+                              initialFocus
+                            />
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <Popover open={isMultiSelectPriorityOpen} onOpenChange={setIsMultiSelectPriorityOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            onClick={handleMultiSelectPriority}
+                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                          >
+                            <Lightning className="h-3 w-3 text-blue-500" />
+                            <span className="text-xs px-0.5">Priority</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent 
+                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                          align="center"
+                          side="top"
+                          sideOffset={8}
+                        >
+                          <div
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            role="listbox"
+                            className="flex flex-col"
+                          >
+                            {PRIORITY_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMultiSelectPrioritySelect(option.id);
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {(() => {
+                                    const IconComponent = getPriorityIcon(option.id);
+                                    return (
+                                      <IconComponent 
+                                        className={`w-4 h-4 ${option.id === 'None' ? 'text-dark-text/50 dark:text-dark-text/50' : ''}`} 
+                                        style={option.id === 'None' ? {} : { color: option.color }} 
+                                      />
+                                    );
+                                  })()} 
+                                  <span className="text-xs">{option.label}</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <Popover open={isMultiSelectTagOpen} onOpenChange={setIsMultiSelectTagOpen}>
+                        <PopoverTrigger asChild>
+                          <button
+                            onClick={handleMultiSelectTag}
+                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                          >
+                            <Tag className="h-3 w-3 text-purple-500" />
+                            <span className="text-xs px-0.5">Tag</span>
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent 
+                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                          align="center"
+                          side="top"
+                          sideOffset={8}
+                        >
+                          <div
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            role="listbox"
+                            className="flex flex-col"
+                          >
+                            {/* No tag option */}
+                            <button
+                              type="button"
+                              className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleMultiSelectTagSelect(null);
+                              }}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-3 h-3 rounded-full flex-shrink-0 border border-light-border dark:border-dark-border" />
+                                <span className="text-xs">No tag</span>
+                              </div>
+                            </button>
+                            {tags.map((tag) => (
+                              <button
+                                key={tag.id}
+                                type="button"
+                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMultiSelectTagSelect(tag);
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full flex-shrink-0" 
+                                    style={{ backgroundColor: tag.color }}
+                                  />
+                                  <span className="text-xs">{tag.label}</span>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <div className="h-5 w-[1px] bg-light-border dark:bg-dark-border ml-2"></div>
+                        
+                      <button 
+                        onClick={handleMultiSelectDelete}
+                        className="w-8 h-8 flex items-center justify-center rounded-[5px] hover:bg-light-bg-lighter dark:hover:bg-white/5 hover:bg-red-50 dark:hover:bg-red-900/20" 
+                      >
+                        <Trash className="h-4 w-4 text-red-500" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
                 {activeContentKey === 'default' && (
                   <div className="flex items-center gap-2">
                     <Popover>
@@ -1870,11 +2401,28 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                 </div>
                               </div>
                               <div className="flex items-center text-light-text/50 dark:text-dark-text/50 gap-2 px-4 py-4 border-b h-[72px] border-light-border dark:border-dark-border">
-                              <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
-                                  <div className="flex flex-col gap-1.5">
-                                    <span className="text-[11px] font-medium">Schedule</span>
-                                <PopoverTrigger asChild>
-                                <div className="flex cursor-pointer items-center hover:text-light-text dark:hover:text-dark-text w-full gap-2">
+                              {(() => {
+                                // Check if editing a recurring task - disable schedule editing
+                                const isEditingRecurringTask = taskToEdit && taskToEdit.seriesId && (taskToEdit.repeat || taskToEdit.isRepeat);
+                                
+                                if (isEditingRecurringTask) {
+                                  return (
+                                    <div className="flex flex-col gap-1.5 opacity-50">
+                                      <span className="text-[11px] font-medium">Schedule</span>
+                                      <div className="flex items-center w-full gap-2">
+                                        <CalendarIcon className="w-4 h-4" />
+                                        <span className="text-sm">Controlled by recurrence</span>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+                                
+                                return (
+                                  <Popover open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+                                    <div className="flex flex-col gap-1.5">
+                                      <span className="text-[11px] font-medium">Schedule</span>
+                                      <PopoverTrigger asChild>
+                                        <div className="flex cursor-pointer items-center hover:text-light-text dark:hover:text-dark-text w-full gap-2">
                                   {(() => {
                                     if (!scheduledDate) {
                                       // Show Anytime icon when no date is selected
@@ -1994,6 +2542,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                   </div>
                                 </PopoverContent>
                               </Popover>
+                                );
+                              })()}
                               <Popover open={isDatePickerOpen} onOpenChange={setIsDatePickerOpen}>
                                 <PopoverTrigger asChild>
                                   <div className="absolute w-0 h-0 overflow-hidden" />
@@ -2861,6 +3411,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         )}
       </AnimatePresence>
 
+
+
       {/* Form buttons section with tabs - positioned absolutely to be completely static */}
       {(activeContentKey === 'task' || activeContentKey === 'event') && (
         <motion.div 
@@ -2971,6 +3523,27 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onSave={handleSaveRecurrenceRule}
       startDate={isAddingEvent ? parse(eventState.date, 'yyyy-MM-dd', new Date()) : scheduledDate || new Date()}
     />
+
+    {/* RepeatTaskEditModal for Multi-select */}
+    {isRepeatTaskEditModalOpen && currentRecurringTask && (
+      <RepeatTaskEditModal
+        isOpen={isRepeatTaskEditModalOpen}
+        onClose={() => {
+          setIsRepeatTaskEditModalOpen(false);
+          setCurrentRecurringTask(null);
+          setRecurringTasksInSelection([]);
+          setCurrentRecurringTaskIndex(0);
+          setRecurringTaskScopes(new Map());
+        }}
+        task={currentRecurringTask}
+        onSave={(scope) => {
+          handleRecurringTaskScopeSelection(scope);
+        }}
+        mode="schedule"
+        title={`Schedule ${currentRecurringTask.title}`}
+        description={`Choose how to apply the new schedule to this recurring task (${currentRecurringTaskIndex + 1} of ${recurringTasksInSelection.length})`}
+      />
+    )}
   </div>
 );
 

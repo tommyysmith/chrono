@@ -6,7 +6,7 @@ export default {
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
 	"./src/hooks/**/*.{js,ts,jsx,tsx,mdx}",
   ],
-  darkMode: 'media',
+  darkMode: 'class',
   theme: {
   	extend: {
   		fontFamily: {

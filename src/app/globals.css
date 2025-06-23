@@ -17,11 +17,11 @@
   
   /* Global focus styles */
   *:focus {
-    @apply outline-none border-light-border dark:border-dark-border;
+
   }
   
   *:focus-visible {
-    @apply outline-none border-light-border dark:border-dark-border;
+
   }
 }
 

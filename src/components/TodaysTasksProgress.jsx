@@ -1,12 +1,22 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { isToday, parseISO } from "date-fns";
+import { useReward } from "react-rewards";
 import { Add } from "../assets/icons/Add";
 
 const TodaysTasksProgress = ({ tasks = {}, onAddTask }) => {
   const [animatedProgress, setAnimatedProgress] = useState(0);
+  const [hasReachedHundred, setHasReachedHundred] = useState(false);
+  const { reward, isAnimating } = useReward('confettiReward', 'confetti', {
+    elementCount: 80,
+    spread: 60,
+    startVelocity: 35,
+    lifetime: 300,
+    angle: 90,
+    colors: ['#A45BF1', '#25C6F6', '#72F753', '#F76C88', '#F5F770']
+  });
 
   // Calculate today's tasks and completion percentage
   const { todaysTasks, completedTasks, progressPercentage } = useMemo(() => {
@@ -53,6 +63,19 @@ const TodaysTasksProgress = ({ tasks = {}, onAddTask }) => {
     return () => clearTimeout(timer);
   }, [progressPercentage]);
 
+  // Trigger confetti when reaching 100% for the first time
+  useEffect(() => {
+    if (progressPercentage === 100 && !hasReachedHundred && todaysTasks.length > 0) {
+      setHasReachedHundred(true);
+      // Delay confetti slightly to let progress bar animation complete
+      setTimeout(() => {
+        reward();
+      }, 300);
+    } else if (progressPercentage < 100) {
+      setHasReachedHundred(false);
+    }
+  }, [progressPercentage, hasReachedHundred, reward, todaysTasks.length]);
+
 
 
   return (
@@ -70,7 +93,7 @@ const TodaysTasksProgress = ({ tasks = {}, onAddTask }) => {
         </div>
 
         {/* Progress Bar */}
-        <div className="">
+        <div className="relative">
           <div className="w-full bg-light-border dark:bg-dark-border rounded-full h-2 overflow-hidden">
             <motion.div
               className="h-full bg-primary rounded-full"
@@ -82,6 +105,12 @@ const TodaysTasksProgress = ({ tasks = {}, onAddTask }) => {
               }}
             />
           </div>
+          {/* Confetti origin point - positioned at the end of progress bar */}
+          <span 
+            id="confettiReward" 
+            className="absolute top-1 right-0 w-0 h-0"
+            style={{ pointerEvents: 'none' }}
+          />
         </div>
         </div>
 

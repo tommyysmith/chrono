@@ -48,7 +48,7 @@ const getPriorityColor = (priority) => {
   }
 };
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked, isSelected = false, onSelect }) {
   // If isRecurring is not explicitly passed, check the task properties
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
@@ -184,12 +184,35 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     }
   }, [task.title, task.completed, task.id]); // Dependencies: re-calculate if text, completion, or task itself changes.
 
+  const [isMultiSelected, setIsMultiSelected] = useState(false);
+
+  // Sync internal multi-select state with external selection state
+  useEffect(() => {
+    if (!isSelected) {
+      setIsMultiSelected(false);
+    }
+  }, [isSelected]);
+
   const handleClick = (e) => {
     // Don't trigger selection when clicking checkbox
     if (e.target.closest('.checkbox')) {
       return;
     }
 
+    // Handle selection if onSelect is provided and Shift key is held
+    if (onSelect && e.shiftKey) {
+      // Defer the selection call to avoid setState during render
+      setTimeout(() => {
+        // Toggle selection: if already selected, deselect it
+        onSelect(task.id, e, isSelected);
+        setIsMultiSelected(!isSelected);
+      }, 0);
+      // Don't call onClick when using multi-select to avoid conflicting selection states
+      return;
+    }
+
+    // Clear multi-select state when clicking without shift
+    setIsMultiSelected(false);
     onClick?.(e);
   };
 
@@ -222,21 +245,30 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   };
 
   // Determine if the item should be top-aligned
-  const shouldAlignTop = isMultiLine || 
-                         (!hideScheduledDate && task.scheduledDate) || 
-                         (!hideTag && task.tag);
+  // Check for any tags: recurring, scheduled date, tag, or priority
+  const hasAnyTags = taskIsRecurring || 
+                     (!hideScheduledDate && task.scheduledDate) || 
+                     (!hideTag && task.tag) || 
+                     (task.priority && task.priority !== 'None');
+  
+  const shouldAlignTop = isMultiLine || hasAnyTags;
   const alignmentClass = shouldAlignTop ? 'items-start' : 'items-center';
 
   return (
     <div className="relative">
       {/* Animated Background */}
       <motion.div
-        className="absolute inset-0 bg-light-bg-lighter dark:bg-dark-bg-lighter rounded-[11px]"
-        animate={getBackgroundAnimation()}
+        className={`absolute inset-0 rounded-[11px] ${
+          isMultiSelected 
+            ? 'bg-light-bg-lighter dark:bg-dark-bg-lighter opacity-100' 
+            : 'bg-light-bg-lighter dark:bg-dark-bg-lighter'
+        }`}
+        animate={isMultiSelected ? { opacity: 1, x: 0, y: 0, scale: 1 } : getBackgroundAnimation()}
       />
       
       <div 
         ref={taskItemRef}
+        data-task-item
         className={`select-none min-h-[40px] cursor-pointer flex ${alignmentClass} gap-2 p-2 rounded-[11px] relative overflow-hidden hover:bg-transparent`}
         onContextMenu={handleContextMenu}
         onClick={handleClick}
@@ -252,7 +284,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         }}
       >
       <div 
-        className={`checkbox flex-shrink-0 ${shouldAlignTop ? 'mt-[1px]' : 'mt-[2px]'}`}
+        className={`checkbox flex-shrink-0 ${shouldAlignTop ? 'mt-[1px]' : ''}`}
         onMouseEnter={(e) => e.stopPropagation()}
         onMouseLeave={(e) => e.stopPropagation()}
       >
@@ -261,10 +293,10 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <div className="flex flex-col flex-grow gap-1 min-w-0">
+      <div className="flex flex-col justify-center flex-grow gap-1 min-w-0">
         <span 
           ref={textSpanRef}
-          className={`text-sm/[16px]  ${task.completed ? 'line-through opacity-50' : ''} break-words`}
+          className={`text-sm ${hasAnyTags ? 'mt-0 leading-4' : 'mt-[2px]'} ${task.completed ? 'line-through opacity-50' : ''} break-words`}
         >
           {task.title}
         </span>
@@ -391,7 +423,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.1 }}
-                className="flex items-center justify-center group absolute top-2 right-2 h-[20px] w-[20px] rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border dark:hover:outline-dark-border"
+                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>
