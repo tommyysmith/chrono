@@ -48,6 +48,14 @@ import { Check } from "@/assets/icons/Check";
 import { Pencil } from "lucide-react";
 import { Chevron } from "@/assets/icons/Chevron";
 
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
+
 const ViewType = {
   DAY: "day",
   WEEK: "week",
@@ -60,9 +68,27 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showTodaysTasks, setShowTodaysTasks] = useState(true);
+  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('defaultEventColor') || '#F59E0B';
+    }
+    return '#F59E0B';
+  });
   const colors = TAG_COLORS;
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
+
+  // Listen for default event color updates
+  useEffect(() => {
+    const handleDefaultColorUpdate = () => {
+      if (typeof window !== 'undefined') {
+        setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
+      }
+    };
+
+    window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
+    return () => window.removeEventListener('default-event-color-updated', handleDefaultColorUpdate);
+  }, []);
 
   // Global click handler to clear task selection when clicking outside
   useEffect(() => {
@@ -169,7 +195,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   const eventStyleGetter = useCallback((event, start, end, isSelected) => {
     const style = {
-      backgroundColor: event.color || '#808080',
+      backgroundColor: event.color || currentDefaultColor,
       borderRadius: '4px',
       opacity: 1,
       color: '#fff',
@@ -187,7 +213,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     return {
       style
     };
-  }, []);
+  }, [currentDefaultColor]);
 
   const { handleCreateTask, handleUpdateTask, handleToggleTaskCompletion } = useTaskManagement();
 
@@ -332,7 +358,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         end: new Date(dropTime.getTime() + 60 * 60 * 1000), // 1 hour duration
         color:
           taskData.tag?.color ||
-          colors[Math.floor(Math.random() * colors.length)],
+          currentDefaultColor,
       };
 
       setEvents((prevEvents) => {
@@ -354,7 +380,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         }
 
         // Save to localStorage
-        localStorage.setItem("calendarEvents", JSON.stringify(allEvents));
+        localStorage.setItem("calendarEvents", JSON.stringify(allEvents.filter(event => !event.isDraft)));
         return allEvents;
       });
 
@@ -664,8 +690,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   selectedDate={selectedDate}
                   events={displayEvents}
                   dragState={dragState}
-                  setPendingEventCell={setPendingEventCell}
                   pendingEventCell={pendingEventCell}
+                  setPendingEventCell={setPendingEventCell}
                   handleEventClick={handleEventClick}
                   handleEventContextMenu={handleEventContextMenu}
                   handleCellDragStart={handleCellDragStart}
@@ -678,6 +704,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   renderAllDayEvents={renderAllDayEvents}
                   timeGridRef={timeGridRef}
                   commandBarRef={commandBarRef}
+                  setEvents={setEvents}
                 />
               )}
               {viewType === ViewType.DAY && (
@@ -699,6 +726,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   renderAllDayEvents={renderAllDayEvents}
                   timeGridRef={timeGridRef}
                   commandBarRef={commandBarRef}
+                  setEvents={setEvents}
                 />
               )}
               {viewType === ViewType.MONTH && (
@@ -707,6 +735,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   events={displayEvents}
                   handleEventClick={handleEventClick}
                   handleEventContextMenu={handleEventContextMenu}
+                  commandBarRef={commandBarRef}
+                  setEvents={setEvents}
                 />
               )}
             </div>

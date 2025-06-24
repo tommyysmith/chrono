@@ -33,13 +33,21 @@ const getPriorityIcon = (priority) => {
   }
 };
 
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
+
 // Helper function to get priority color
 const getPriorityColor = (priority) => {
   switch (priority) {
     case 'High':
       return '#EF4444';
     case 'Medium':
-      return '#F59E0B';
+      return getDefaultEventColor();
     case 'Low':
       return '#10B981';
     case 'None':

@@ -31,6 +31,9 @@ export const useCalendarData = () => {
       eventsData = storedEvents ? JSON.parse(storedEvents) : [];
       if (!Array.isArray(eventsData)) eventsData = []; // Ensure it's an array
 
+      // Filter out draft events on page refresh
+      eventsData = eventsData.filter(event => !event.isDraft);
+
       const defaultViewId = getDefaultViewId();
       eventsData = eventsData.map(event => {
         if (typeof event.viewId === 'undefined' || event.viewId === null) {
@@ -110,7 +113,7 @@ export const useCalendarData = () => {
             }
             return event;
         });
-        localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents));
+        localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents.filter(event => !event.isDraft)));
         return updatedEvents;
     });
   }, []);
@@ -128,7 +131,7 @@ export const useCalendarData = () => {
   // --- Event Management (Centralized) ---
   const updateEventsInStore = useCallback((updatedEvents) => {
     setAllEvents(updatedEvents);
-    localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents));
+    localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents.filter(event => !event.isDraft)));
   }, []);
   
   const addEvent = useCallback((newEventData) => {

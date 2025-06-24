@@ -11,11 +11,13 @@ export function useEventManagement(commandBarRef) {
     const savedEvents = localStorage.getItem("calendarEvents");
     if (savedEvents) {
       try {
-        const parsedEvents = JSON.parse(savedEvents).map((event) => ({
-          ...event,
-          start: new Date(event.start),
-          end: new Date(event.end),
-        }));
+        const parsedEvents = JSON.parse(savedEvents)
+          .filter(event => !event.isDraft) // Filter out draft events on page refresh
+          .map((event) => ({
+            ...event,
+            start: new Date(event.start),
+            end: new Date(event.end),
+          }));
         setEvents(parsedEvents);
       } catch (error) {
         console.error("Error parsing saved events:", error);
@@ -26,10 +28,13 @@ export function useEventManagement(commandBarRef) {
 
   // Save events to localStorage whenever they change
   useEffect(() => {
-    if (events.length > 0) {
-      localStorage.setItem("calendarEvents", JSON.stringify(events));
+    // Filter out draft events before saving to localStorage
+    const eventsToSave = events.filter(event => !event.isDraft);
+    
+    if (eventsToSave.length > 0) {
+      localStorage.setItem("calendarEvents", JSON.stringify(eventsToSave));
     } else {
-      // Clear localStorage when all events are deleted
+      // Clear localStorage when all non-draft events are deleted
       localStorage.removeItem("calendarEvents");
     }
   }, [events]);
@@ -122,6 +127,15 @@ export function useEventManagement(commandBarRef) {
     
     const isResizing = !!cleanEvent._isResizing;
     delete cleanEvent._isResizing;
+    
+    const shouldDelete = !!cleanEvent._shouldDelete;
+    delete cleanEvent._shouldDelete;
+    
+    // Handle event deletion
+    if (shouldDelete) {
+      setEvents(prevEvents => prevEvents.filter(e => e.id !== cleanEvent.id));
+      return;
+    }
     
     // Extract rruleOptions if present, but DON'T delete it
     // We need to keep rruleOptions attached to the event object for proper handling

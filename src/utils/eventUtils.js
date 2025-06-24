@@ -83,10 +83,17 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
     style.backgroundColor = event.color ? `${event.color}20` : "#80808020";
   }
 
-  // Add lower opacity for past events
-  const now = new Date();
-  if (event.end < now) {
-    style.opacity = 0.5;
+  // Handle draft events with special styling
+  if (event.isDraft) {
+    style.border = `1px dashed ${event.color || '#808080'}`;
+    style.opacity = 0.3;
+    style.backgroundColor = event.color ? `${event.color}10` : "#80808010";
+  } else {
+    // Add lower opacity for past events (only for non-draft events)
+    const now = new Date();
+    if (event.end < now) {
+      style.opacity = 0.5;
+    }
   }
 
   if (event.isAllDay) {

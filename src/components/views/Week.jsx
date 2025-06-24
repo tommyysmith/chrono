@@ -1,5 +1,5 @@
 import { format, addDays, isSameDay } from "date-fns";
-
+import { useEffect } from "react";
 import TimeIndicator from "./TimeIndicator";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -20,7 +20,29 @@ export default function Week({
   renderAllDayEvents,
   timeGridRef,
   commandBarRef,
+  setEvents,
 }) {
+  // Auto-scroll to current time position on mount and date change
+  useEffect(() => {
+    if (timeGridRef.current) {
+      const currentTime = new Date();
+      const minutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+      const hour = Math.floor(minutes / 60);
+      const minuteOffset = (minutes % 60) / 60;
+      const hourHeight = 80;
+      
+      // Calculate position (same logic as TimeIndicator)
+      const position = hour * hourHeight + minuteOffset * hourHeight - 10;
+      
+      // Scroll to position with some offset to show context above
+      const scrollPosition = Math.max(0, position - 100);
+      
+      timeGridRef.current.scrollTo({
+        top: scrollPosition,
+        behavior: 'smooth'
+      });
+    }
+  }, [selectedDate, timeGridRef]);
   const weekStart = new Date(selectedDate);
   weekStart.setDate(weekStart.getDate() - weekStart.getDay());
 
@@ -160,8 +182,11 @@ export default function Week({
                 startTime.setSeconds(0);
                 startTime.setMilliseconds(0);
 
-                // Create end time exactly one hour after start
-                const endTime = new Date(startTime.getTime() + 60 * 60000);
+                // Get default duration from localStorage (default to 60 minutes)
+                const defaultDuration = parseInt(localStorage.getItem('defaultEventDuration') || '60');
+
+                // Create end time using default duration
+                const endTime = new Date(startTime.getTime() + defaultDuration * 60000);
 
                 // Adjust for week view
                 const weekStart = new Date(selectedDate);
@@ -176,8 +201,23 @@ export default function Week({
                   column,
                 });
 
+                // Create a visual draft event
+                const draftEventId = crypto.randomUUID();
+                const draftEvent = {
+                  id: draftEventId,
+                  title: '',
+                  start: new Date(startTime.getTime()),
+                  end: new Date(endTime.getTime()),
+                  color: localStorage.getItem('defaultEventColor') || '#F59E0B',
+                  repeat: 'none',
+                  isDraft: true
+                };
+
+                // Add the draft event to the events state
+                setEvents(prev => [...prev, draftEvent]);
+
                 // Open command bar with the hour-aligned times
-                commandBarRef.current?.openWithDragData(startTime, endTime);
+                commandBarRef.current?.openWithDragData(startTime, endTime, draftEventId);
               }}
               onMouseDown={handleCellDragStart}
               onClick={(e) => handleCellClick(e, new Date(selectedDate))}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   getTimeFromMousePosition,
   getColumnFromMousePosition,
@@ -31,6 +31,26 @@ export function useDragAndDrop({
     initialWidth: null,
     edge: null,
   });
+
+  // Track current default event color
+  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem('defaultEventColor') || '#F59E0B';
+    }
+    return '#F59E0B';
+  });
+
+  // Listen for default color changes
+  useEffect(() => {
+    const handleDefaultColorChange = (event) => {
+      setCurrentDefaultColor(event.detail);
+    };
+
+    window.addEventListener('default-event-color-updated', handleDefaultColorChange);
+    return () => {
+      window.removeEventListener('default-event-color-updated', handleDefaultColorChange);
+    };
+  }, []);
 
   const resizedEventRef = useRef(null);
   const wasResizingRef = useRef(false);
@@ -315,24 +335,30 @@ export function useDragAndDrop({
       const startY = e.clientY;
       let currentEndTime = initialTime; // Start with same time, will be updated during drag
 
-      // Get the last selected color from localStorage or use a random color if none exists
-      const getLastSelectedColor = () => {
-        if (typeof window !== "undefined") {
-          const savedColor = localStorage.getItem("lastSelectedEventColor");
-          if (savedColor) return savedColor;
-        }
-        return colors[Math.floor(Math.random() * colors.length)];
+      // Get the default event color from current state
+      const getDefaultEventColor = () => {
+        return currentDefaultColor;
       };
 
-      // Create the event immediately with a unique ID
+      // Get the last selected color from localStorage or use default color if none exists
+      const getLastSelectedColor = () => {
+        // Always use the current default color for drag-to-create events
+        // This ensures consistency with the user's current settings
+        return currentDefaultColor;
+      };
+
+      // Create a draft event immediately with a unique ID
       const newEventId = crypto.randomUUID();
+      // Get default duration from localStorage (default to 60 minutes)
+      const defaultDuration = parseInt(localStorage.getItem('defaultEventDuration') || '60');
       const newEvent = {
         id: newEventId,
-        title: "New Event",
+        title: "",
         start: new Date(initialTime.getTime()),
-        end: new Date(initialTime.getTime() + 30 * 60 * 1000), // Start with 30 min duration
+        end: new Date(initialTime.getTime() + defaultDuration * 60 * 1000), // Use default duration
         color: getLastSelectedColor(),
         repeat: "none",
+        isDraft: true, // Mark as draft event
       };
 
       const handleMove = (moveEvent) => {
@@ -509,6 +535,7 @@ export function useDragAndDrop({
       setEvents,
       commandBarRef,
       setClickState,
+      currentDefaultColor,
     ]
   );
 

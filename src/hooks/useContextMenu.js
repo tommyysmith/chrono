@@ -46,7 +46,7 @@ export function useContextMenu(
             }
             return event;
           });
-          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents.filter(event => !event.isDraft)));
           return updatedEvents;
         });
       }
@@ -107,7 +107,7 @@ export function useContextMenu(
         // Add the new event to the events array
         setEvents((prev) => {
           const newEvents = [...prev, newEvent];
-          localStorage.setItem("calendarEvents", JSON.stringify(newEvents));
+          localStorage.setItem("calendarEvents", JSON.stringify(newEvents.filter(event => !event.isDraft)));
           return newEvents;
         });
       }

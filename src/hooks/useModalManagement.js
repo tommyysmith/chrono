@@ -40,7 +40,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
             updatedEvents = prevEvents.filter((e) => e.id !== event.id);
           }
 
-          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents));
+          localStorage.setItem("calendarEvents", JSON.stringify(updatedEvents.filter(event => !event.isDraft)));
           return updatedEvents;
         });
       }

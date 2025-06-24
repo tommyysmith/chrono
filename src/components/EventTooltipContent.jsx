@@ -4,6 +4,14 @@ import { Clock as ClockIcon } from '@/assets/icons/Clock';
 import { Repeat as RepeatIcon } from '@/assets/icons/Repeat';
 import { RRule } from 'rrule';
 
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
+
 // RRule weekday constants map: MO=0, TU=1, WE=2, TH=3, FR=4, SA=5, SU=6
 const weekdayMap = [
   RRule.MO,
@@ -79,10 +87,10 @@ export default function EventTooltipContent({ event }) {
       <div className="flex items-stretch gap-2 mb-3">
         <div
           className="w-1 rounded-full flex-shrink-0"
-          style={{ backgroundColor: event.color || '#808080' }}
+          style={{ backgroundColor: event.color || getDefaultEventColor() }}
         />
         <div>
-          <p className="font-semibold text-sm text-dark-text truncate">{event.title || 'No Title'}</p>
+          <p className="font-semibold text-sm text-dark-text truncate">{event.title || 'New Event'}</p>
           <p className="text-xs font-regular text-dark-text/70 truncate">{event.description || 'No event description...'}</p>
         </div>
       </div>

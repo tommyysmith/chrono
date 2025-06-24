@@ -39,6 +39,14 @@ import { More } from "../assets/icons/More";
 import { createPortal } from 'react-dom';
 import TodaysTasksProgress from './TodaysTasksProgress';
 
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
+
 export default function Sidebar({
   commandBarRef,
   events = [],
@@ -1306,7 +1314,7 @@ export default function Sidebar({
             id: "dueToday",
             label: "Due today",
             icon: Calendar,
-            color: "#F59E0B",
+            color: getDefaultEventColor(),
             count: dueTodayTasks.length,
             tasks: sortTasksByPriorityAndDate(dueTodayTasks),
           },

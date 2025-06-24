@@ -36,6 +36,14 @@ import GoToDateCommand from './GoToDateCommand';
 import { parseNaturalLanguage } from '../utils/dateUtils';
 import { Shift } from '../assets/icons/Shift';
 import { Completed } from '../assets/icons/Completed';
+
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
 import {
   Popover,
   PopoverContent,
@@ -73,7 +81,7 @@ const REPEAT_OPTIONS = [
 
 const PRIORITY_OPTIONS = [
   { id: 'High', label: 'High', color: '#EF4444' },
-  { id: 'Medium', label: 'Medium', color: '#F59E0B' },
+  { id: 'Medium', label: 'Medium', color: getDefaultEventColor() },
   { id: 'Low', label: 'Low', color: '#10B981' },
   { id: 'None', label: 'None', color: '#6B7280' }
 ];
@@ -395,7 +403,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     endTime: '10:00',
     isAllDay: false,
     isMultiDay: false, // Add multi-day flag
-    color: '#808080',
+    color: getDefaultEventColor(),
     repeat: 'none',
     seriesId: null,
     rruleOptions: null, // Add rruleOptions to event state
@@ -403,7 +411,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     _preservedEndTime: '10:00' // Store original end time when all-day is enabled
   });
   const [hasChanges, setHasChanges] = useState(false);
-  const [eventTitle, setEventTitle] = useState('New Event');
+  const [eventTitle, setEventTitle] = useState('');
   const [eventDescription, setEventDescription] = useState('');
   const [eventDate, setEventDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [eventStartTime, setEventStartTime] = useState('09:00');
@@ -413,7 +421,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [repeatSeriesId, setRepeatSeriesId] = useState(null); // Track series ID
   const [isRepeatDropdownOpen, setIsRepeatDropdownOpen] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
-  const [selectedColor, setSelectedColor] = useState('#808080');
+  const [selectedColor, setSelectedColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('defaultEventColor') || '#F59E0B';
+    }
+    return '#F59E0B';
+  });
   const [editMode, setEditMode] = useState(null);
   const [showRepeatEditModal, setShowRepeatEditModal] = useState(false);
   // Removed manual animation state management - let Framer Motion handle it naturally
@@ -424,6 +437,26 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [isEndTimePickerOpen, setIsEndTimePickerOpen] = useState(false);
   const [startTimeSearch, setStartTimeSearch] = useState('');
   const [endTimeSearch, setEndTimeSearch] = useState('');
+
+  // Default event color state
+  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('defaultEventColor') || '#F59E0B';
+    }
+    return '#F59E0B';
+  });
+
+  // Listen for default event color updates
+  useEffect(() => {
+    const handleDefaultColorUpdate = () => {
+      if (typeof window !== 'undefined') {
+        setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
+      }
+    };
+
+    window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
+    return () => window.removeEventListener('default-event-color-updated', handleDefaultColorUpdate);
+  }, []);
 
   const containerRef = useRef(null);
   const repeatDropdownRef = useRef(null);
@@ -540,6 +573,43 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       exitingRef.current = false;
     };
   }, []);
+
+  // Listen for default event color changes
+  useEffect(() => {
+    const handleDefaultColorChange = (event) => {
+      const newColor = event.detail;
+      // Update selectedColor if it's currently the old default
+      if (selectedColor === currentDefaultColor) {
+        setSelectedColor(newColor);
+      }
+      // Update eventState color if it's currently the old default
+      if (eventState.color === currentDefaultColor) {
+        setEventState(prev => ({ ...prev, color: newColor }));
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('default-event-color-updated', handleDefaultColorChange);
+      return () => {
+        window.removeEventListener('default-event-color-updated', handleDefaultColorChange);
+      };
+    }
+  }, [selectedColor, eventState.color, currentDefaultColor]);
+
+  // Update selectedColor when currentDefaultColor changes
+  useEffect(() => {
+    setSelectedColor(currentDefaultColor);
+  }, [currentDefaultColor]);
+
+  // Focus title input when entering event creation mode
+  useEffect(() => {
+    if (isAddingEvent && titleInputRef.current) {
+      // Use setTimeout to ensure the input is rendered before focusing
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+      }, 100);
+    }
+  }, [isAddingEvent]);
 
   // Add keyboard shortcuts for date navigation
   useEffect(() => {
@@ -860,7 +930,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       endTime: '10:00',
       isAllDay: false,
       isMultiDay: false, // Reset multi-day flag
-      color: '#808080',
+      color: getDefaultEventColor(),
       repeat: 'none',
       seriesId: null,
       rruleOptions: null, // Reset rruleOptions
@@ -916,7 +986,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       endTime: format(eventCopy.end, 'HH:mm'),
       isAllDay: isAllDayEvent,
       isMultiDay: !isSameDay(eventCopy.start, eventCopy.end), // Determine if it's a multi-day event
-      color: eventCopy.color || '#808080',
+      color: eventCopy.color || getDefaultEventColor(),
       repeat: eventCopy.repeat || 'none',
       seriesId: eventCopy.seriesId || null,
       rruleOptions: eventCopy.rruleOptions || null, // Load rruleOptions
@@ -944,7 +1014,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     // Set both the original state and event state
     setOriginalEventState(eventCopy);
     setEventState(eventData);
-    setSelectedColor(eventCopy.color || '#808080');
+    setSelectedColor(eventCopy.color || getDefaultEventColor());
     setIsAddingEvent(true);
     setHasChanges(false);
     setPreviewEvent({
@@ -1102,8 +1172,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
   const handleSaveChanges = useCallback(() => {
-    if (!hasChanges) return;
-
     const eventData = {
       id: originalEventState?.id,
       title: eventState.title.trim(),
@@ -1137,17 +1205,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       // Preserve repeat properties for series updates
       _preserveRepeat: originalEventState?._preserveRepeat || false,
       // Force series update if this is a series edit
-      _forceSeriesUpdate: originalEventState?._seriesUpdate || false
+      _forceSeriesUpdate: originalEventState?._seriesUpdate || false,
+      // Remove draft flag when saving
+      isDraft: false
     };
 
-    if (originalEventState?.id) {
+    if (originalEventState?.isDraft) {
+      // For draft events, create a new event and remove the draft
+      onCreateEvent(eventData);
+      // Remove the draft event
+      onUpdateEvent({ ...originalEventState, _shouldDelete: true });
+    } else if (originalEventState?.id) {
       onUpdateEvent(eventData);
     } else {
       onCreateEvent(eventData);
     }
 
     handleClose({ skipDelete: true });
-  }, [originalEventState, eventState, hasChanges, onUpdateEvent, onCreateEvent, handleClose]);
+  }, [originalEventState, eventState, onUpdateEvent, onCreateEvent, handleClose]);
+
+  const handleDiscardDraft = useCallback(() => {
+    if (originalEventState?.isDraft) {
+      // Remove the draft event
+      onUpdateEvent({ ...originalEventState, _shouldDelete: true });
+    }
+    handleClose({ skipDelete: true });
+  }, [originalEventState, onUpdateEvent, handleClose]);
 
   const openForTaskEdit = useCallback((task) => {
     setIsOpen(true);
@@ -1200,20 +1283,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   useImperativeHandle(ref, () => ({
     openWithDragData: (startTime, endTime, eventId) => {
-      const newEventData = {
-        title: 'New Event',
+      // For draft events, we don't create the event yet - just set up the form
+      const draftEventData = {
+        id: eventId,
+        title: '',
         description: '',
         start: startTime,
         end: endTime,
         allDay: false,
-        color: '#3B82F6',
-        repeat: 'none'
+        color: currentDefaultColor,
+        repeat: 'none',
+        isDraft: true
       };
-
-      const createdEvent = eventId ? null : onCreateEvent(newEventData);
       
       const eventState = {
-        title: 'New Event',
+        title: '',
         description: '',
         date: format(startTime, 'yyyy-MM-dd'),
         endDate: format(startTime, 'yyyy-MM-dd'), // Initialize end date
@@ -1221,7 +1305,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
         isMultiDay: false, // Initialize multi-day flag
-        color: '#3B82F6',
+        color: currentDefaultColor,
         repeat: 'none',
         seriesId: null,
         rruleOptions: null, // Init rruleOptions for new event
@@ -1229,7 +1313,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
-      setOriginalEventState(eventId ? { ...newEventData, id: eventId } : createdEvent);
+      setOriginalEventState(draftEventData);
       setEventState(eventState);
       setIsAddingEvent(true);
       setHasChanges(false);
@@ -1239,19 +1323,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const roundedTime = parse(roundedTimeStr, 'HH:mm', date);
       const endTime = new Date(roundedTime.getTime() + 60 * 60 * 1000);
       const newEventData = {
-        title: 'New Event',
+        title: '',
         description: '',
         start: roundedTime,
         end: endTime,
         allDay: false,
-        color: '#3B82F6',
+        color: getDefaultEventColor(),
         repeat: 'none'
       };
 
       const createdEvent = onCreateEvent(newEventData);
       
       const eventState = {
-        title: 'New Event',
+        title: '',
         description: '',
         date: format(roundedTime, 'yyyy-MM-dd'),
         endDate: format(roundedTime, 'yyyy-MM-dd'), // Initialize end date
@@ -1259,7 +1343,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
         isMultiDay: false, // Initialize multi-day flag
-        color: '#3B82F6',
+        color: getDefaultEventColor(),
         repeat: 'none',
         seriesId: null,
         rruleOptions: null, // Init rruleOptions for new event
@@ -1291,7 +1375,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         endTime: format(endTime, 'HH:mm'),
         isAllDay: false,
         isMultiDay: false,
-        color: '#3B82F6',
+        color: getDefaultEventColor(),
         repeat: 'none',
         seriesId: null,
         rruleOptions: null,
@@ -1460,7 +1544,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     const endTime = new Date(roundedTime.getTime() + 60 * 60 * 1000);
     
     const eventState = {
-      title: 'New Event',
+      title: '',
       description: '',
       date: format(now, 'yyyy-MM-dd'),
       endDate: format(now, 'yyyy-MM-dd'), // Initialize end date to same as start date
@@ -1846,7 +1930,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
       // Handle escape key - use the same flow as clicking discard
-      handleClose();
+      if (originalEventState?.isDraft) {
+        handleDiscardDraft();
+      } else {
+        handleClose();
+      }
     } else if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       // Handle enter key - use the same flow as clicking save
@@ -2921,6 +3009,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           value={eventState.title}
                           onChange={(e) => handleEventChange('title', e.target.value)}
                           className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none"
+                          autoFocus={isAddingEvent}
                         />
                         <input
                           type="text"
@@ -3449,7 +3538,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             }}
           >
           <button
-            onClick={handleClose}
+            onClick={originalEventState?.isDraft ? handleDiscardDraft : handleClose}
             className="flex items-center flex-row px-2 h-[36px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
           >
             <span className="flex items-center pl-1 pr-3">Discard</span>
@@ -3489,8 +3578,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             <motion.button
               layoutId="save-button"
               onClick={handleSaveChanges}
-              disabled={!eventState.title.trim() || !hasChanges}
-              className={`w-[120px] flex items-center justify-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && hasChanges
+              disabled={!eventState.title.trim() || (!hasChanges && !originalEventState?.isDraft)}
+              className={`w-[120px] flex items-center justify-center flex-row py-2 text-xs font-semibold rounded-[5px] ${eventState.title.trim() && (hasChanges || originalEventState?.isDraft)
                 ? 'bg-gradient-to-b from-[#ff7a00] to-[#ea7100] hover:bg-gradient-to-b hover:from-[#ea7100] hover:to-[#d66600] rounded-[5px] text-dark-text dark:text-dark-text [text-shadow:_0px_2px_6px_rgb(0_0_0_/_0.20)] shadow-sm' 
                 : 'text-light-text/30 dark:text-dark-text/30 cursor-not-allowed'}`}
               style={{ minWidth: '100px', transformOrigin: 'right center' }}
@@ -3504,9 +3593,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
               }}
             >
               <span className="text-xs pl-1 pr-3" style={{ minWidth: '65px', display: 'inline-block' }}>
-                {originalEventState?.id ? 'Edit event' : 'Add event'}
+                {originalEventState?.id && !originalEventState?.isDraft ? 'Edit event' : 'Add event'}
               </span>
-              <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && hasChanges ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
+              <div className={`flex items-center px-2 outline outline-1 outline-offset-[-1px] outline-dark-border dark:outline-dark-border dark:bg-black/5 p-1 rounded-[5px] ${eventState.title.trim() && (hasChanges || originalEventState?.isDraft) ? 'text-dark-text dark:text-dark-text bg-white/10' : 'bg-black/5 text-light-text/30 dark:text-dark-text/30 bg-black/5'}`}>
                 <Return className="w-3 h-3" />
               </div>
             </motion.button>

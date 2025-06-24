@@ -43,6 +43,17 @@ export const useEventRendering = (
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   const [tagUpdateKey, setTagUpdateKey] = useState(0);
   const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => localStorage.getItem('defaultEventColor') || '#F59E0B');
+
+  // Listen for default event color updates
+  useEffect(() => {
+    const handleDefaultColorUpdate = () => {
+      setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
+    };
+
+    window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
+    return () => window.removeEventListener('default-event-color-updated', handleDefaultColorUpdate);
+  }, []);
 
   // Helper function to get fresh tag data from localStorage
   const getFreshTagData = useCallback((tagId) => {
@@ -357,12 +368,12 @@ export const useEventRendering = (
                   }
                 }}
               >
-                {!event.isTask && (
-                  <div
-                    className="absolute left-0 top-0 bottom-0 w-1"
-                    style={{ backgroundColor: event.color || "#808080" }}
-                  />
-                )}
+                {!event.isTask && !event.isDraft && (
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-1"
+                      style={{ backgroundColor: event.color || "#808080" }}
+                    />
+                  )}
                 {/* Resize handles */}
                 <div
                   className="absolute top-0 left-0 right-0 h-2 cursor-ns-resize resize-handle hover:bg-primary/20"
@@ -379,7 +390,7 @@ export const useEventRendering = (
                   }}
                 />
                 <div className="px-2 py-1 relative">
-                  <div className="font-medium text-xs">{event.title}</div>
+                  <div className="font-medium text-xs">{event.title || 'New Event'}</div>
                   <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                     {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
                   </div>
@@ -611,7 +622,7 @@ export const useEventRendering = (
         end: task.scheduledDate,
         allDay: true,
         isAllDay: true,
-        color: task.tag?.color || '#6B7280', // Use tag color or default gray
+        color: task.tag?.color || currentDefaultColor, // Use tag color or user's default event color
         isTask: true, // Flag to identify this as a task
         originalTask: task // Keep reference to original task
       }));
@@ -767,7 +778,7 @@ export const useEventRendering = (
 
                               }}
                             >
-                              {!isTask && (
+                              {!isTask && !event.isDraft && (
                                 <div
                                   className="w-1 self-stretch"
                                   style={{ backgroundColor: event.color || "#808080" }}
@@ -785,7 +796,7 @@ export const useEventRendering = (
                                       }}
                                     />
                                   )}
-                                  {event.title}
+                                  {event.title || 'New Event'}
                                 </div>
                               </div>
                             </div>
@@ -861,7 +872,7 @@ export const useEventRendering = (
                             }
                           }}
                         >
-                          {!event.isTask && (
+                          {!event.isTask && !event.isDraft && (
                             <div
                               className="w-1 self-stretch"
                               style={{ backgroundColor: event.color || "#808080" }}
@@ -880,7 +891,7 @@ export const useEventRendering = (
                               />
                             )}
                             <div className="font-medium text-xs truncate">
-                              {event.title}
+                              {event.title || 'New Event'}
                             </div>
                             </div>
                             <div className="flex items-center gap-1 ml-auto">
@@ -972,7 +983,7 @@ export const useEventRendering = (
         end: task.scheduledDate,
         allDay: true,
         isAllDay: true,
-        color: task.tag?.color || '#6B7280', // Use tag color or default gray
+        color: task.tag?.color || currentDefaultColor, // Use tag color or user's default event color
         isTask: true, // Flag to identify this as a task
         originalTask: task // Keep reference to original task
       }));
@@ -1043,7 +1054,7 @@ export const useEventRendering = (
                             }
                           }}
                         >
-                          {!event.isTask && (
+                          {!event.isTask && !event.isDraft && (
                             <div
                               className="absolute left-0 top-0 bottom-0 w-1"
                               style={{ backgroundColor: event.color || "#808080" }}
@@ -1063,7 +1074,7 @@ export const useEventRendering = (
                                   }}
                                 />
                               )}
-                              {event.title}
+                              {event.title || 'New Event'}
                               </div>
                               <div className="flex items-center gap-1 ml-auto">
                                  {((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || (event.originalTask?.seriesId && event.originalTask?.originalBaseId)) && (

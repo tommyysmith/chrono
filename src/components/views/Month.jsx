@@ -2,6 +2,14 @@ import { format, isSameDay, addDays, startOfDay, endOfDay, isWithinInterval, par
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+// Helper function to get default event color
+const getDefaultEventColor = () => {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  }
+  return '#F59E0B';
+};
+
 function getMonthDays(year, month) {
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
@@ -33,6 +41,8 @@ export default function Month({
   events,
   handleEventClick,
   handleEventContextMenu,
+  commandBarRef,
+  setEvents,
 }) {
   const visibleDays = getMonthDays(
     selectedDate.getFullYear(),
@@ -77,6 +87,38 @@ export default function Month({
                   ? "bg-light-background-secondary dark:bg-dark-background-secondary"
                   : ""
               }`}
+              onDoubleClick={(e) => {
+                // Only handle double-click on empty areas, not on events
+                if (e.target.closest('[data-event]')) return;
+                
+                // Create start time at 9 AM on the clicked day
+                const startTime = new Date(dayInfo.date);
+                startTime.setHours(9, 0, 0, 0);
+                
+                // Get default duration from localStorage (default to 60 minutes)
+                const defaultDuration = parseInt(localStorage.getItem('defaultEventDuration') || '60');
+                
+                // Create end time using default duration
+                const endTime = new Date(startTime.getTime() + defaultDuration * 60000);
+                
+                // Create a visual draft event
+                const draftEventId = crypto.randomUUID();
+                const draftEvent = {
+                  id: draftEventId,
+                  title: '',
+                  start: new Date(startTime.getTime()),
+                  end: new Date(endTime.getTime()),
+                  color: localStorage.getItem('defaultEventColor') || '#F59E0B',
+                  repeat: 'none',
+                  isDraft: true
+                };
+                
+                // Add the draft event to the events state
+                setEvents(prev => [...prev, draftEvent]);
+                
+                // Open command bar with draft data
+                commandBarRef.current?.openWithDragData(startTime, endTime, draftEventId);
+              }}
             >
               {/* Date number */}
               <div className="flex justify-end mb-1">
@@ -115,6 +157,7 @@ export default function Month({
                   return (
                     <div
                       key={`${event.id}-${index}`}
+                      data-event="true"
                       onDoubleClick={(e) => {
                         e.stopPropagation();
                         handleEventClick(event);
@@ -131,14 +174,16 @@ export default function Month({
                         opacity: isPastEvent ? 0.5 : 1,
                       }}
                     >
-                      <div
-                        className="w-1 self-stretch mr-1.5"
-                        style={{ backgroundColor: event.color || "#808080" }}
-                      />
+                      {!event.isDraft && (
+                        <div
+                          className="w-1 self-stretch mr-1.5"
+                          style={{ backgroundColor: event.color || getDefaultEventColor() }}
+                        />
+                      )}
                       <span className="text-gray-500 py-1">
                         {format(new Date(event.start), "HH:mm")}
                       </span>
-                      <span className="ml-1 truncate py-1">{event.title}</span>
+                      <span className="ml-1 truncate py-1">{event.title || 'New Event'}</span>
                     </div>
                   );
                 })}

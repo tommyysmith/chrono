@@ -45,15 +45,17 @@ const EventItem = memo(({ event }) => {
   return (
     <div className="flex items-start relative" style={{ opacity: isPastEvent ? 0.5 : 1 }}>
       {/* Left color bar - absolute positioned to fill height */}
-      <div 
-        className="absolute left-0 top-0 bottom-0 w-[4px] rounded-full"
-        style={{ backgroundColor: bgColor }}
-      />
+      {!event.isDraft && (
+        <div 
+          className="absolute left-0 top-0 bottom-0 w-[4px] rounded-full"
+          style={{ backgroundColor: bgColor }}
+        />
+      )}
       
       {/* Content with padding to accommodate the color bar */}
       <div className="flex flex-col pl-4">
         <div className="text-sm mb-1 font-semibold" style={{ color: bgColor }}>
-          {event.title}
+          {event.title || 'New Event'}
           
         </div>
         <div className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">

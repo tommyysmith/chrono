@@ -163,7 +163,7 @@ const DirectionalHoverButton = ({ onClick, isActive, icon: Icon, label, isLogout
   };
 
   const baseClasses = isLogout 
-    ? "flex items-center font-medium space-x-3 px-3 py-2 text-red-600 dark:text-red-400 rounded-lg transition-colors w-full relative overflow-hidden"
+    ? "flex items-center font-medium space-x-3 px-3 py-2 text-red-600 dark:text-red-400 rounded-[9px] transition-colors w-full relative overflow-hidden"
     : `w-full flex items-center font-medium space-x-2 px-2 py-1.5 rounded-[9px] transition-colors relative overflow-hidden hover:text-light-text dark:hover:text-dark-text ${
         isActive
           ? 'bg-black/[0.08] dark:bg-white/5 text-light-text dark:text-dark-text'
@@ -181,7 +181,7 @@ const DirectionalHoverButton = ({ onClick, isActive, icon: Icon, label, isLogout
     <div className="relative">
       {/* Animated Background */}
       <motion.div
-        className={`absolute inset-0 ${overlayBgClass} rounded-lg`}
+        className={`absolute inset-0 ${overlayBgClass} rounded-[9px]`}
         animate={getBackgroundAnimation()}
       />
       
@@ -205,6 +205,8 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
   const [selectedDay, setSelectedDay] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
+  const sliderRef = useRef(null);
+
 
 
   // Handle ESC key to close settings
@@ -300,6 +302,46 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
     push: false,
     desktop: true,
   });
+
+  // Default event color state
+  const [defaultEventColor, setDefaultEventColor] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedColor = localStorage.getItem('defaultEventColor');
+      return savedColor || '#F59E0B'; // Default to orange
+    }
+    return '#F59E0B';
+  });
+
+  // Default event duration state (in minutes)
+  const [defaultEventDuration, setDefaultEventDuration] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedDuration = localStorage.getItem('defaultEventDuration');
+      return savedDuration ? parseInt(savedDuration) : 60; // Default to 60 minutes
+    }
+    return 60;
+  });
+
+  // Save default event color to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('defaultEventColor', defaultEventColor);
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent('default-event-color-updated', {
+        detail: defaultEventColor
+      }));
+    }
+  }, [defaultEventColor]);
+
+  // Save default event duration to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('defaultEventDuration', defaultEventDuration.toString());
+      // Dispatch event to notify other components
+      window.dispatchEvent(new CustomEvent('default-event-duration-updated', {
+        detail: defaultEventDuration
+      }));
+    }
+  }, [defaultEventDuration]);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -1135,6 +1177,156 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
 
   );
 
+  const renderCalendarsContent = () => (
+    <div className="h-full p-16 max-w-3xl overflow-y-auto select-none">
+      <div className="">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Calendars</h1>
+            <p className="text-light-text/50 dark:text-dark-text/50 mt-1">Manage your calendar settings</p>
+          </div>
+          <div className="flex flex-col gap-1 items-center absolute top-8 right-8">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter rounded-lg transition-colors"
+            >
+              <Cross className="w-5 h-5 text-light-text/50 dark:text-dark-text/50" />
+            </button>
+            <span className="tracking-wide font-semibold text-[10px] text-light-text/50 dark:text-dark-text/50">ESC</span>
+          </div>
+        </div>
+
+        {/* Default Event Color Section */}
+        <div className="mb-8">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Default Event Color</h3>
+          <p className="text-light-text/50 dark:text-dark-text/50 text-sm mb-4">Choose the default color for new events.</p>
+          
+          <div className="flex flex-wrap gap-3">
+            {TAG_COLORS.map((color) => {
+              const isSelected = defaultEventColor === color;
+              return (
+                <motion.button
+                  key={color}
+                  className={`relative w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center border-2 ${
+                    isSelected ? 'border-light-text dark:border-dark-text' : 'border-transparent'
+                  }`}
+                  style={{ backgroundColor: color }}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setDefaultEventColor(color)}
+                >
+                  {isSelected && (
+                    <Check className="w-5 h-5 text-white" />
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="w-full h-[1px] bg-light-border dark:bg-dark-border mb-8">
+
+        </div>
+
+        {/* Default Event Duration Section */}
+        <div className="mb-8">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Default duration</h3>
+          <p className="text-light-text/50 dark:text-dark-text/50 text-sm mb-4">Set how long new events should be by default.</p>
+          
+          <div>
+            
+            {/* Custom Animated Slider */}
+            <div className="relative" ref={sliderRef}>
+              {/* Friction points indicators */}
+              <div className="absolute inset-0 flex justify-between items-center pointer-events-none">
+                {[15, 30, 45, 60, 90].map((point) => {
+              const position = ((point - 15) / (90 - 15)) * 100;
+                  return (
+                    <div
+                      key={point}
+                      className="absolute w-1 h-4 rounded-full"
+                      style={{ left: `${position}%`, transform: 'translateX(-50%)' }}
+                    />
+                  );
+                })}
+              </div>
+              
+              <div 
+                ref={sliderRef}
+                className="w-full h-10 border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-lighter rounded-[9px] cursor-pointer relative"
+                onClick={(e) => {
+                  const rect = sliderRef.current.getBoundingClientRect();
+                  const currentX = e.clientX - rect.left;
+                  const percentage = Math.max(0, Math.min(1, currentX / rect.width));
+                  let newDuration = Math.round(15 + (percentage * (90 - 15)));
+                  
+                  // Add friction points with snapping
+                  const frictionPoints = [15, 30, 45, 60, 90];
+                  const snapThreshold = 3; // minutes
+                  
+                  for (const point of frictionPoints) {
+                    if (Math.abs(newDuration - point) <= snapThreshold) {
+                      newDuration = point;
+                      break;
+                    }
+                  }
+                  
+                  // Round to nearest 5 minutes if not snapped to friction point
+                  if (!frictionPoints.includes(newDuration)) {
+                    newDuration = Math.round(newDuration / 5) * 5;
+                  }
+                  
+                  const finalDuration = Math.max(15, Math.min(90, newDuration));
+                  setDefaultEventDuration(finalDuration);
+                }}
+              >
+                <motion.div 
+                  className="relative h-10 bg-light-bg-lighter dark:bg-white/5 rounded-[9px]"
+                  animate={{ width: `${Math.max(10, ((defaultEventDuration - 15) / (90 - 15)) * 90) + 10}%` }}
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                >
+                  {/* Duration text positioned on the left */}
+                  <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xs font-medium text-light-text dark:text-dark-text pointer-events-none">
+                    {defaultEventDuration} min
+                  </div>
+                  {/* Simple handle at the end */}
+                  <div className="absolute w-[8px] h-full bg-white/5 right-0 top-0 rounded-r-[9px]" />
+                </motion.div>
+              </div>
+
+            </div>
+            
+            {/* Duration presets */}
+            <div className="flex gap-2 mt-4">
+              {[15, 30, 45, 60, 90].map((duration) => (
+                <motion.button
+                  key={duration}
+                  onClick={() => setDefaultEventDuration(duration)}
+                  className={`px-3 py-1.5 text-xs rounded-[5px] transition-colors ${
+                    defaultEventDuration === duration
+                      ? 'bg-primary dark:text-light-text text-dark-text'
+                      : 'bg-light-bg-light dark:bg-white/5 text-light-text/70 dark:text-dark-text/70 hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter'
+                  }`}
+
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {duration}m
+                </motion.button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Future calendar settings can be added here */}
+        <div className="border-t border-light-border dark:border-dark-border pt-8">
+          <div className="text-light-text/50 dark:text-dark-text/50">
+            <p>Additional calendar settings will be available here in future updates.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderDefaultContent = () => (
     <div className="h-full p-16 overflow-y-auto">
       <div className="max-w-2xl">
@@ -1225,6 +1417,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
       {/* Main Content */}
       <div className="flex-1 h-full">
         {activeSection === 'profile' ? renderProfileContent() : 
+         activeSection === 'calendars' ? renderCalendarsContent() :
          activeSection === 'todos' ? renderTodosContent() : 
          activeSection === 'appearance' ? renderAppearanceContent() :
          renderDefaultContent()}
