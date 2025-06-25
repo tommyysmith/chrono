@@ -79,8 +79,8 @@ const TodaysTasksProgress = ({ tasks = {}, onAddTask }) => {
 
 
   return (
-    <div className="ml-3 mb-2 mt-4 absolute bottom-[74px] w-[228px]">
-      <div className="bg-light-bg-lighter p-0.5 dark:bg-dark-bg-lighter rounded-[7px]">
+    <div>
+      <div className="bg-light-bg-lighter min-h-0 p-0.5 dark:bg-dark-bg-lighter rounded-[7px]">
         {/* Header */}
         <div className="bg-light-bg dark:bg-dark-bg-light shadow-sm w-fill p-2 rounded-[5px]">
         <div className="flex items-center justify-between mb-3">

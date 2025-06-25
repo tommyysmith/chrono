@@ -36,6 +36,29 @@ const RepeatTaskEditModal = ({
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
 
+    // For 'single' scope editing when this is an edit operation (not drag/resize),
+    // we need to create a properly flagged task for the CommandBar
+    if (editScope === 'single' && isEditOperation) {
+      console.log('🚀 [CHRONO-DEBUG] Preparing single instance edit (keeping in series)');
+      
+      // Create a task for single instance editing (keep in series)
+      const taskForEdit = {
+        ...originalTask,
+        // Mark for single instance editing (don't detach from series)
+        _editScope: 'single'
+      };
+      
+      // Pass the task through onEditConfirm
+      onEditConfirm({
+        scope: editScope,
+        task: taskForEdit,
+        isEditOperation: true
+      });
+      
+      onClose();
+      return;
+    }
+
     // Create a clean task object with just the essential properties
     const updatedTask = {
       ...draggedTask,
@@ -77,9 +100,8 @@ const RepeatTaskEditModal = ({
         end: draggedTask?.end ? new Date(draggedTask.end) : 
              (draggedTask?.scheduledDate ? new Date(draggedTask.scheduledDate) : new Date())
       },
-      // For 'this task' scope, ensure we're using the dragged task's exact position
+      // For 'this task' scope, preserve the exact position while keeping in series
       ...(editScope === 'single' && {
-        _detachedTask: true,
         _preserveExactPosition: true
       })
     };
@@ -91,7 +113,6 @@ const RepeatTaskEditModal = ({
       editScope,
       updateSeries: updatedTask._updateSeries,
       preserveRepeat: updatedTask._preserveRepeat,
-      detachedTask: updatedTask._detachedTask,
       preserveExactPosition: updatedTask._preserveExactPosition
     });
 
@@ -232,7 +253,7 @@ const RepeatTaskEditModal = ({
               )}
             </div>
             <span className="text-light-text dark:text-dark-text text-xs">
-              This task
+              This task only
             </span>
           </label>
 

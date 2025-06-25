@@ -12,6 +12,7 @@ import TagDropdown from "./TagDropdown";
 import TaskItem from "./TaskItem";
 import Checkbox from "./Checkbox";
 import RepeatTaskEditModal from "./RepeatTaskEditModal";
+import DeleteTaskModal from "./DeleteTaskModal";
 import { TAG_COLORS } from "../constants/colors";
 import { Chevron } from "../assets/icons/Chevron";
 import { Calendar } from "../assets/icons/Calendar";
@@ -246,6 +247,10 @@ export default function Sidebar({
   // RepeatTaskEditModal state
   const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
+  
+  // DeleteTaskModal state
+  const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
   const [editingTagId, setEditingTagId] = useState(null);
   const [editingTagName, setEditingTagName] = useState("");
@@ -448,6 +453,47 @@ export default function Sidebar({
       return newTasks;
     });
     setEditingTaskId(null);
+  };
+
+  // Function to open delete modal for recurring tasks
+  const handleOpenDeleteModal = (task) => {
+    setTaskToDelete(task);
+    setIsDeleteTaskModalOpen(true);
+  };
+
+  // Function to handle deletion with scope
+  const handleDeleteWithScope = (scope) => {
+    if (taskToDelete) {
+      handleDeleteTask(taskToDelete.id, scope);
+      setIsDeleteTaskModalOpen(false);
+      setTaskToDelete(null);
+    }
+  };
+
+  // Function to handle task deletion - checks if recurring and opens modal or deletes directly
+  const handleTaskDelete = (taskId, scope = 'single') => {
+    // Find the task to check if it's recurring
+    let taskToCheck = null;
+    Object.keys(tasks).forEach((group) => {
+      if (Array.isArray(tasks[group])) {
+        const foundTask = tasks[group].find(task => task.id === taskId);
+        if (foundTask && !taskToCheck) {
+          taskToCheck = foundTask;
+        }
+      }
+    });
+
+    if (taskToCheck) {
+      const isRecurring = taskToCheck.isRepeat || (taskToCheck.repeat && taskToCheck.repeat !== 'none') || taskToCheck.seriesId;
+      
+      if (isRecurring) {
+        // Open modal for recurring tasks
+        handleOpenDeleteModal(taskToCheck);
+      } else {
+        // Delete directly for non-recurring tasks
+        handleDeleteTask(taskId, scope);
+      }
+    }
   };
 
   const handleDeleteTask = (taskId, scope = 'single') => {
@@ -1121,17 +1167,30 @@ export default function Sidebar({
   }, []);
 
   const handleEditTaskIconClick = (task) => {
+    console.log('🔍 [SIDEBAR-DEBUG] handleEditTaskIconClick called with task:', {
+      id: task.id,
+      title: task.title,
+      isRepeat: task.isRepeat,
+      seriesId: task.seriesId,
+      repeat: task.repeat,
+      scheduledDate: task.scheduledDate
+    });
+    
     if (commandBarRef?.current) {
       // Check if this is a recurring task (base task with repeat property OR instance with seriesId/isRepeat)
       const isRecurringTask = (task.repeat && task.repeat !== 'none') || task.seriesId || task.isRepeat;
       
+      console.log('🔍 [SIDEBAR-DEBUG] isRecurringTask:', isRecurringTask);
+      
       if (isRecurringTask) {
         // Show the RepeatTaskEditModal for recurring tasks
+        console.log('🔍 [SIDEBAR-DEBUG] Opening RepeatTaskEditModal for recurring task');
         setTaskToEdit(task);
         setDraggedTask(task); // For recurring tasks, the "dragged" task is the same as original
         setIsRepeatTaskEditModalOpen(true);
       } else {
         // For non-recurring tasks, open the command bar directly
+        console.log('🔍 [SIDEBAR-DEBUG] Opening CommandBar directly for non-recurring task');
         setEditingTaskId(task.id);
         setOriginalTask(task);
         commandBarRef.current.openForTaskEdit(task);
@@ -1487,7 +1546,7 @@ export default function Sidebar({
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
     <aside className="w-[240px] min-w-[240px] h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
-      <div className="h-full flex flex-col">
+      <div className="h-full flex flex-col justify-between">
         
         <div className="flex-1 min-h-0 relative overflow-hidden">
           <AnimatePresence initial={false} mode="sync">
@@ -1507,74 +1566,43 @@ export default function Sidebar({
                 <div className="flex rounded-[7px] ml-3 p-0.5 bg-black/5 dark:bg-dark-bg-lighter gap-2">
                   {/* "All" Button */}
                   <button
-                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out safari-no-flicker
                                 ${
                                   selectedView === "all"
-                                    ? "font-medium text-light-text dark:text-dark-text"
+                                    ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
                                     : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                                 }`}
                     onClick={() => setSelectedView("all")}
                   >
                     <span className="relative z-10">All</span>
-                    {selectedView === "all" && (
-                      <motion.div
-                        layoutId="activeTabIndicator"
-                        className="absolute inset-0 rounded-[5px] shadow-sm 
-                                   bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% 
-                                   dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] 
-                                   outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border"
-                        transition={{ type: "spring", stiffness: 600, damping: 40 }}
-                      />
-                    )}
                   </button>
 
                   {/* "Completed" Button */}
                   <button
-                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out
+                    className={`group relative flex-grow basis-0 flex items-center justify-center cursor-pointer text-xs h-[24px] rounded-[5px] transition-colors duration-150 ease-in-out safari-no-flicker
                                 ${
                                   selectedView === "completed"
-                                    ? "font-medium text-light-text dark:text-dark-text"
+                                    ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
                                     : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
                                 }`}
                     onClick={() => setSelectedView("completed")}
                   >
                     <span className="relative z-10">Completed</span>
-                    {selectedView === "completed" && (
-                      <motion.div
-                        layoutId="activeTabIndicator" // Same layoutId
-                        className="absolute inset-0 rounded-[5px] shadow-sm 
-                                   bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% 
-                                   dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] 
-                                   outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border"
-                        transition={{ type: "spring", stiffness: 600, damping: 40 }}
-                      />
-                    )}
                   </button>
                 </div>
                 
-                {/* Today's Tasks Progress Widget */}
-                {showTodaysTasks && (
-                  <TodaysTasksProgress 
-                    tasks={tasks} 
-                    onAddTask={(schedule) => {
-                      if (commandBarRef?.current && schedule === 'today') {
-                        commandBarRef.current.openForNewTask(new Date());
-                        // Set scheduled date to today
-                        setTimeout(() => {
-                          const today = new Date();
-                          commandBarRef.current.setScheduledDate?.(today);
-                        }, 50);
-                      }
-                    }}
-                  />
-                )}
-                
-                <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg">
-                  <div className="space-y-1 flex flex-col">
+                <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg safari-layout-stable">
+                  <div className="space-y-1 flex flex-col safari-no-flicker">
                     {selectedView === "all" ? (
                       <>
                         {sections.map((section, index) => (
                           <div key={section.id}>
+                            {/* Add divider before inbox section to separate time-based accordions from user-created tag groups */}
+                            {section.id === "inbox" && (
+                              <div className="ml-3 my-3">
+                                <div className="h-px bg-light-border dark:bg-dark-border"></div>
+                              </div>
+                            )}
                             <div className="overflow-hidden flex-col gap-2 ml-3">
                           <div
                             role="button"
@@ -1607,7 +1635,7 @@ export default function Sidebar({
                             style={{
                               backgroundColor: "transparent",
                             }}
-                            className={`group w-full font-medium flex items-center gap-2 py-3 ${
+                            className={`group w-full font-medium flex items-center gap-2 py-3 safari-no-flicker ${
                               expandedSections[section.id]
                                 ? "bg-light-selected dark:bg-dark-selected"
                                 : ""
@@ -1791,17 +1819,17 @@ export default function Sidebar({
                             )}
                           </div>
 
-                          <AnimatePresence initial={false}>
+                          <AnimatePresence initial={false} mode="wait">
                             {expandedSections[section.id] && (
                               <motion.div
-                                initial={{ height: 0 }}
-                                animate={{ height: "auto" }}
-                                exit={{ height: 0 }}
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
                                 transition={{
-                                  duration: 0.2,
+                                  duration: 0.15,
                                   ease: [0.4, 0, 0.2, 1],
                                 }}
-                                className=""
+                                className="safari-layout-stable"
                               >
                                 <div className="flex flex-col gap-1">
                                   <div className="mt-1 flex flex-col gap-1">
@@ -1813,7 +1841,7 @@ export default function Sidebar({
                                           tag: task.tag || null,
                                         }}
                                         onComplete={handleToggleTaskCompletion}
-                                        onDelete={handleDeleteTask}
+                                        onDelete={handleTaskDelete}
                                         onEdit={handleEditTaskIconClick}
                                         onDoubleClickEdit={handleEditTaskIconClick}
                                         onClick={() =>
@@ -1839,12 +1867,7 @@ export default function Sidebar({
                             )}
                           </AnimatePresence>
                             </div>
-                            {/* Add divider after inbox section to separate pre-determined sections from user-created tag groups */}
-                            {section.id === "inbox" && (
-                              <div className="ml-3 my-3">
-                                <div className="h-px bg-light-border dark:bg-dark-border"></div>
-                              </div>
-                            )}
+
                           </div>
                         ))}
                       </>
@@ -1863,7 +1886,7 @@ export default function Sidebar({
                                     tag: task.tag || null,
                                   }}
                                   onComplete={handleToggleTaskCompletion}
-                                  onDelete={handleDeleteTask}
+                                  onDelete={handleTaskDelete}
                                   onEdit={handleEditTaskIconClick}
                                   onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
@@ -1904,7 +1927,7 @@ export default function Sidebar({
                                     tag: task.tag || null,
                                   }}
                                   onComplete={handleToggleTaskCompletion}
-                                  onDelete={handleDeleteTask}
+                                  onDelete={handleTaskDelete}
                                   onEdit={handleEditTaskIconClick}
                                   onDoubleClickEdit={handleEditTaskIconClick}
                                   onClick={() => setSelectedTaskId(task.id)}
@@ -2094,14 +2117,34 @@ export default function Sidebar({
             </Popover>
           </div>
         )}
-        {/* Tab selector */}
-        <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 border border-light-border dark:border-dark-border flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg">
+        {/* Bottom Section */}
+        <div className="flex flex-col pl-3 gap-3 safari-layout-stable" style={{ paddingBottom: '0.75rem' }}>
+          {/* Today's Tasks Progress Widget */}
+          {showTodaysTasks && (
+            <TodaysTasksProgress 
+              tasks={tasks} 
+              onAddTask={(schedule) => {
+                if (commandBarRef?.current && schedule === 'today') {
+                  commandBarRef.current.openForNewTask(new Date());
+                  // Set scheduled date to today
+                  setTimeout(() => {
+                    const today = new Date();
+                    commandBarRef.current.setScheduledDate?.(today);
+                  }, 50);
+                }
+              }}
+            />
+          )}
+          
+          {/* Tab selector */}
+          <div className="flex justify-center">
+            <div className="border border-light-border dark:border-dark-border inline-flex items-center gap-1 bg-light-bg dark:bg-dark-bg-lighter rounded-[9px] p-1 shadow-lg safari-no-flicker">
           <TooltipProvider delayDuration={0} skipDelayDuration={0}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setActiveTab("tasks")}
-                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
+                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 safari-no-flicker ${
                     activeTab === "tasks"
                       ? "bg-light-bg-lighter dark:bg-dark-bg"
                       : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
@@ -2123,7 +2166,7 @@ export default function Sidebar({
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setActiveTab("agenda")}
-                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 ${
+                  className={`py-2 px-3 rounded-[5px] transition-colors duration-200 safari-no-flicker ${
                     activeTab === "agenda"
                       ? "bg-light-bg-lighter dark:bg-dark-bg"
                       : "hover:bg-light-bg-light dark:hover:bg-dark-bg-lighter"
@@ -2141,6 +2184,8 @@ export default function Sidebar({
               <TooltipContent side="top" align="center" sideOffset={10}>Agenda</TooltipContent>
             </Tooltip>
           </TooltipProvider>
+            </div>
+          </div>
         </div>
       </div>
       
@@ -2154,19 +2199,31 @@ export default function Sidebar({
           setTaskToEdit(null);
           setDraggedTask(null);
         }}
-        onEditConfirm={({ scope, task }) => {
+        onEditConfirm={({ scope, task, isEditOperation }) => {
+          console.log('🚀 [CHRONO-DEBUG] Sidebar onEditConfirm called:', {
+            scope,
+            isEditOperation,
+            taskToEdit: taskToEdit ? { id: taskToEdit.id, title: taskToEdit.title } : null,
+            taskFromModal: task ? { id: task.id, title: task.title, _detachedTask: task._detachedTask, _editScope: task._editScope } : null
+          });
+          
           // Handle the edit confirmation based on scope
           if (scope === 'single') {
-            // For single instance edits, prepare the task for detachment but don't process yet
-            // The detachment will happen when the user saves changes in CommandBar
+            // For single instance edits, edit the instance in place (keep in series)
             const taskForEdit = {
-              ...task,
-              _detachedTask: true,
-              _editScope: 'single',
-              _originalTask: taskToEdit // Keep reference to original for detachment logic
+              ...task, // Use the edited task data from the modal
+              _editScope: 'single'
             };
             
-            // Open CommandBar for editing - detachment will occur on save
+            console.log('🚀 [CHRONO-DEBUG] Opening CommandBar for single instance edit:', {
+              id: taskForEdit.id,
+              title: taskForEdit.title,
+              _editScope: taskForEdit._editScope,
+              seriesId: taskForEdit.seriesId,
+              isRepeat: taskForEdit.isRepeat
+            });
+            
+            // Open CommandBar for editing - keep task in series
             setEditingTaskId(taskToEdit.id);
             setOriginalTask(taskToEdit);
             commandBarRef.current.openForTaskEdit(taskForEdit);
@@ -2193,6 +2250,17 @@ export default function Sidebar({
         draggedTask={draggedTask}
         isEditOperation={true}
         commandBarRef={commandBarRef}
+      />
+      
+      {/* DeleteTaskModal */}
+      <DeleteTaskModal
+        isOpen={isDeleteTaskModalOpen}
+        taskTitle={taskToDelete?.title}
+        onClose={() => {
+          setIsDeleteTaskModalOpen(false);
+          setTaskToDelete(null);
+        }}
+        onDelete={handleDeleteWithScope}
       />
     </aside>
   );

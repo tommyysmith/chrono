@@ -25,6 +25,8 @@
   }
 }
 
+
+
 /* Hide scrollbar for elements with scrollbar-hide class */
 @layer utilities {
   .scrollbar-hide {
@@ -34,6 +36,41 @@
   
   .scrollbar-hide::-webkit-scrollbar {
     display: none;  /* Chrome, Safari and Opera */
+  }
+  
+  /* Safari-specific optimizations to prevent flashing */
+  .safari-no-flicker {
+    -webkit-transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    -webkit-perspective: 1000;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: auto;
+  }
+  
+  /* Optimize fixed positioning for Safari */
+  .safari-fixed-optimize {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  
+  /* Reduce layout thrashing in Safari */
+  .safari-layout-stable {
+    contain: layout style;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  /* Fix select-none for Safari browsers */
+  .select-none {
+    -webkit-user-select: none !important;
+    -moz-user-select: none !important;
+    -ms-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent !important;
   }
 }
 

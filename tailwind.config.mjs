@@ -82,4 +82,9 @@ export default {
       require("tailwindcss-animate"),
       require('tailwind-scrollbar')
 ],
+ safelist: [
+    'pb-3',
+    'pb-3.5',
+    // add any others you need
+  ],
 }

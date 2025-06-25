@@ -1233,6 +1233,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, onUpdateEvent, handleClose]);
 
   const openForTaskEdit = useCallback((task) => {
+    console.log('🚀 [CHRONO-DEBUG] openForTaskEdit called with task:', {
+      id: task.id,
+      title: task.title,
+      isRepeat: task.isRepeat,
+      seriesId: task.seriesId,
+      _detachedTask: task._detachedTask,
+      _editScope: task._editScope
+    });
+    
     setIsOpen(true);
     setIsAddingTask(true);
     setIsAddingEvent(false);
@@ -1247,7 +1256,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     // CRITICAL FIX: For recurring tasks, don't set scheduledDate in UI
     // This prevents users from editing schedule dates of recurring tasks
     // which should be controlled by recurrence patterns only
-    const isRecurringTask = task.seriesId && (task.repeat || task.isRepeat);
+    // EXCEPTION: Allow schedule editing for single instance edits
+    const isRecurringTask = task.seriesId && (task.repeat || task.isRepeat) && task._editScope !== 'single';
     setScheduledDate(isRecurringTask ? null : (task.scheduledDate ? new Date(task.scheduledDate) : null));
     
     // Handle repeat options for recurring task instances
@@ -1274,11 +1284,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       }
     }
     
+    // Store the task with the resolved repeat option for proper comparison later
+    let taskToStore = {...task, _originalRepeatOption: repeatOption};
+    
     setTaskRepeatOption(repeatOption);
     setTaskRepeatSeriesId(repeatSeriesId);
     setTaskRruleOptions(rruleOptions);
     setEditingTaskId(task.id);
-    setTaskToEdit(task);
+    setTaskToEdit(taskToStore);
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -1589,175 +1602,94 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       };
       
       // Check if the repeat option has changed for an existing task
-      const repeatChanged = taskToEdit && taskToEdit.repeat !== taskRepeatOption;
+      // Use the stored _originalRepeatOption which was resolved during task edit initialization
+      const originalRepeatOption = taskToEdit?._originalRepeatOption || taskToEdit?.repeat || 'none';
+      const repeatChanged = taskToEdit && originalRepeatOption !== taskRepeatOption;
+      
+      console.log('🚀 [CHRONO-DEBUG] Recurrence conversion check:', {
+        editingTaskId,
+        taskToEdit: taskToEdit ? {
+          id: taskToEdit.id,
+          title: taskToEdit.title,
+          repeat: taskToEdit.repeat,
+          _originalRepeatOption: taskToEdit._originalRepeatOption
+        } : null,
+        originalRepeatOption,
+        taskRepeatOption,
+        taskRruleOptions,
+        repeatChanged,
+        taskRepeatSeriesId
+      });
       
       // Generate a series ID for recurring tasks if needed
       // Preserve existing seriesId if task was already recurring, even if addToCalendar is false
       const seriesId = taskRepeatOption !== 'none' 
         ? (taskRepeatSeriesId || `series_${Date.now().toString()}`)
         : (taskToEdit && taskToEdit.seriesId && !repeatChanged ? taskToEdit.seriesId : null);
+        
+      console.log('🚀 [CHRONO-DEBUG] Generated seriesId:', seriesId);
 
       if (editingTaskId) {
-        // Check if this is a detached task creation (single instance edit of recurring task)
-        if (taskToEdit && taskToEdit._detachedTask && taskToEdit._editScope === 'single') {
-          console.log('Creating detached task instance for single edit');
-          
-          // Create a new detached task with a new ID
-          const detachedTask = {
-            id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+        // Check if this is a single instance edit of recurring task
+        if (taskToEdit && taskToEdit._editScope === 'single') {
+          console.log('🚀 [CHRONO-DEBUG] Updating single task instance (keeping in series)');
+          console.log('🚀 [CHRONO-DEBUG] Form values:', {
             title: taskTitle.trim(),
             notes: taskNotes.trim(),
             tag: finalTag,
             priority: taskPriority,
             scheduledDate: scheduledDate?.toISOString(),
-            completed: false,
-            createdAt: new Date().toISOString(),
+            addToCalendar
+          });
+          
+          // Update the existing task instance with the edited data
+          // Keep it as part of the series - don't detach it
+          const updatedTask = {
+            ...taskToEdit,
+            // Apply the edited data from the form (form values take priority)
+            title: taskTitle.trim() || taskToEdit.title,
+            notes: taskNotes.trim() || taskToEdit.notes,
+            tag: finalTag !== null ? finalTag : taskToEdit.tag,
+            priority: taskPriority || taskToEdit.priority,
+            scheduledDate: scheduledDate?.toISOString() || taskToEdit.scheduledDate,
             updatedAt: new Date().toISOString(),
-            repeat: 'none', // Detached tasks don't repeat
-            seriesId: null, // Detached tasks have no series
-            isRepeat: false,
             addToCalendar: addToCalendar,
-            // Remove all internal flags
+            // Keep the task as part of the series
+            isRepeat: taskToEdit.isRepeat,
+            seriesId: taskToEdit.seriesId,
+            originalBaseId: taskToEdit.originalBaseId,
+            // Preserve the edit scope for useTaskManagement
+            _editScope: taskToEdit._editScope,
+            // Remove other temporary edit flags
             _detachedTask: undefined,
-            _editScope: undefined,
             _originalTask: undefined
           };
           
-          // Let onCreateTask handle all collection management for detached task
-          onCreateTask(detachedTask);
+          console.log('🚀 [CHRONO-DEBUG] Final updated task (single instance):', updatedTask);
+          console.log('🚀 [CHRONO-DEBUG] Calling onUpdateTask with single instance update...');
           
-          // Handle detachment logic
-          const originalTask = taskToEdit._originalTask;
-          if (originalTask && originalTask.seriesId && originalTask.repeat && originalTask.repeat !== 'none') {
-            console.log('Processing detachment for recurring task:', originalTask.id);
-            
-            // First, find the base task definition for the series BEFORE removing anything
-            const baseTask = updatedTasks.all.find(t => 
-              t.seriesId === originalTask.seriesId && 
-              (t.isRepeat === false || typeof t.isRepeat === 'undefined') && 
-              t.repeat && 
-              t.repeat !== 'none'
-            );
-            
-            // Only remove the original task if it's NOT the base task
-            // If the original task is the base task, we need to keep it for the series
-            const isBaseTask = baseTask && baseTask.id === originalTask.id;
-            
-            if (!isBaseTask) {
-              console.log('Removing original instance from collections after detachment:', originalTask.id);
-              
-              // Remove from all collections
-              updatedTasks.all = updatedTasks.all.filter(t => t.id !== originalTask.id);
-              
-              // Remove from today collection if it exists
-              if (updatedTasks.today) {
-                updatedTasks.today = updatedTasks.today.filter(t => t.id !== originalTask.id);
-              }
-              
-              // Remove from tag collections
-              for (const groupKey in updatedTasks) {
-                if (groupKey !== 'all' && groupKey !== 'today' && Array.isArray(updatedTasks[groupKey])) {
-                  updatedTasks[groupKey] = updatedTasks[groupKey].filter(t => t.id !== originalTask.id);
-                }
-              }
-              
-              // Remove from completed collection if it exists
-              if (updatedTasks.completed) {
-                updatedTasks.completed = updatedTasks.completed.filter(t => t.id !== originalTask.id);
-              }
-            } else {
-              console.log('Original task is the base task, keeping it for series continuation');
-            }
-           
-           // Advance the recurring series by generating the next instance
-           console.log('Advancing recurring series after detachment');
-            
-            if (baseTask) {
-              // Import generateNextDisplayableTaskInstance dynamically
-              import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
-                // Use the current instance's scheduledDate to generate the next occurrence
-                // This ensures proper advancement regardless of which instance in the series is being edited
-                const currentInstanceDate = originalTask.scheduledDate;
-                const nextInstance = generateNextDisplayableTaskInstance(baseTask, currentInstanceDate);
-                
-                if (nextInstance) {
-                  console.log('Generated next instance for recurring series:', nextInstance);
-                  
-                  // Get current tasks from localStorage to ensure we have the latest state
-                  const currentTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-                  
-                  // Update the base task's scheduledDate to advance the series
-                  if (!currentTasks.all) currentTasks.all = [];
-                  currentTasks.all = currentTasks.all.map(t => {
-                    if (t.id === baseTask.id) {
-                      return {
-                        ...t,
-                        scheduledDate: nextInstance.scheduledDate,
-                        updatedAt: new Date().toISOString()
-                      };
-                    }
-                    return t;
-                  });
-                  
-                  // Update base task in tag collections
-                  for (const groupKey in currentTasks) {
-                    if (groupKey !== 'all' && Array.isArray(currentTasks[groupKey])) {
-                      currentTasks[groupKey] = currentTasks[groupKey].map(t => {
-                        if (t.id === baseTask.id) {
-                          return {
-                            ...t,
-                            scheduledDate: nextInstance.scheduledDate,
-                            updatedAt: new Date().toISOString()
-                          };
-                        }
-                        return t;
-                      });
-                    }
-                  }
-                  
-                  // Update base task in today collection if it exists
-                  if (currentTasks.today) {
-                    currentTasks.today = currentTasks.today.map(t => {
-                      if (t.id === baseTask.id) {
-                        return {
-                          ...t,
-                          scheduledDate: nextInstance.scheduledDate,
-                          updatedAt: new Date().toISOString()
-                        };
-                      }
-                      return t;
-                    });
-                  }
-                  
-                  // Save updated tasks
-                  localStorage.setItem('tasks', JSON.stringify(currentTasks));
-                  
-                  // Dispatch events to update UI
-                  window.dispatchEvent(new StorageEvent('storage', {
-                    key: 'tasks',
-                    newValue: JSON.stringify(currentTasks),
-                    url: window.location.href
-                  }));
-                  
-                  window.dispatchEvent(new CustomEvent('tasksUpdated', {
-                    detail: currentTasks
-                  }));
-                  
-                  console.log('Successfully advanced recurring series to next occurrence:', nextInstance.scheduledDate);
-                }
-              }).catch(error => {
-                console.error('Error importing recurrenceUtils:', error);
-              });
-            } else {
-              console.warn('Could not find base task definition for series:', originalTask.seriesId);
-            }
-          }
+          // Update the task instance using the existing update mechanism
+          const result = onUpdateTask(updatedTask);
+          console.log('🚀 [CHRONO-DEBUG] onUpdateTask result:', result);
           
-          // The original recurring task remains unchanged
-          // Call onUpdateTask with detached task to trigger any necessary updates
-          onUpdateTask(detachedTask);
-          
-          console.log('Created detached task:', detachedTask);
+          // Reset form and close
+          setTaskTitle('');
+          setTaskNotes('');
+          setSelectedTag(null);
+          setPendingNewTag(null);
+          setDraftTag(null);
+          setTagSearchText('');
+          setScheduledDate(null);
+          setTaskRepeatOption('none');
+          setTaskRepeatSeriesId(null);
+          setTaskRruleOptions(null);
+          setTaskPriority('Medium');
+          setAddToCalendar(false);
+          setIsAddingTask(false);
+          setEditingTaskId(null);
+          setTaskToEdit(null);
+          handleClose();
+          return;
         } else {
           // Regular task update
           const updatedTask = {
@@ -1771,8 +1703,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             // The base task should keep scheduledDate: undefined, instances keep their dates
             scheduledDate: taskToEdit._updateSeries ? taskToEdit.scheduledDate : scheduledDate?.toISOString(),
             updatedAt: new Date().toISOString(),
-            repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
-            rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : (taskToEdit && taskToEdit.rruleOptions && !repeatChanged ? taskToEdit.rruleOptions : null), // Include task rrule options
+            repeat: taskRepeatOption !== 'none' ? taskRepeatOption : 'none',
+            rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : null,
             seriesId: seriesId,
             // Preserve the original isRepeat value - don't hardcode to false
             isRepeat: taskToEdit.isRepeat,
@@ -1784,14 +1716,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             _updateSeries: taskToEdit._updateSeries
           };
           
-          console.log('📝 [DEBUG] CommandBar sending task update:', {
+          console.log('🚀 [CHRONO-DEBUG] CommandBar sending task update:', {
             id: updatedTask.id,
             title: updatedTask.title,
+            repeat: updatedTask.repeat,
+            rruleOptions: updatedTask.rruleOptions,
+            seriesId: updatedTask.seriesId,
             isRepeat: updatedTask.isRepeat,
             originalBaseId: updatedTask.originalBaseId,
-            seriesId: updatedTask.seriesId,
             _editScope: updatedTask._editScope,
-            _updateSeries: updatedTask._updateSeries
+            _updateSeries: updatedTask._updateSeries,
+            taskRepeatOption: taskRepeatOption,
+            taskRepeatSeriesId: taskRepeatSeriesId
           });
 
           // Update in all tasks
@@ -1843,7 +1779,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           // For series updates, skip local manipulation and let useTaskManagement handle everything
           if (updatedTask._updateSeries) {
             console.log('Series update detected - skipping local manipulation, letting useTaskManagement handle it');
-            onUpdateTask(updatedTask);
+            console.log('🚀 [CHRONO-DEBUG] About to call onUpdateTask with:', {
+            id: updatedTask.id,
+            title: updatedTask.title,
+            repeat: updatedTask.repeat,
+            rruleOptions: updatedTask.rruleOptions,
+            seriesId: updatedTask.seriesId,
+            isRepeat: updatedTask.isRepeat,
+            originalBaseId: updatedTask.originalBaseId,
+            _editScope: updatedTask._editScope,
+            _updateSeries: updatedTask._updateSeries
+          });
+          onUpdateTask(updatedTask);
             
             // Reset form and states
             setTaskTitle('');
@@ -1865,6 +1812,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             return;
           }
 
+          console.log('🚀 [CHRONO-DEBUG] About to call onUpdateTask (regular path) with:', {
+            id: updatedTask.id,
+            title: updatedTask.title,
+            repeat: updatedTask.repeat,
+            rruleOptions: updatedTask.rruleOptions,
+            seriesId: updatedTask.seriesId,
+            isRepeat: updatedTask.isRepeat,
+            originalBaseId: updatedTask.originalBaseId,
+            _editScope: updatedTask._editScope,
+            _updateSeries: updatedTask._updateSeries
+          });
           onUpdateTask(updatedTask);
         }
       } else {
@@ -1879,8 +1837,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           scheduledDate: (taskRepeatOption && taskRepeatOption !== 'none') ? undefined : scheduledDate?.toISOString(),
           completed: false,
           createdAt: new Date().toISOString(),
-          repeat: taskRepeatOption !== 'none' ? taskRepeatOption : (taskToEdit && taskToEdit.repeat && !repeatChanged ? taskToEdit.repeat : 'none'),
-          rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : (taskToEdit && taskToEdit.rruleOptions && !repeatChanged ? taskToEdit.rruleOptions : null), // Include task rrule options
+          repeat: taskRepeatOption !== 'none' ? taskRepeatOption : 'none',
+          rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : null,
           seriesId: seriesId,
           isRepeat: false, // Base task is never a repeat instance
           addToCalendar: addToCalendar
@@ -1975,15 +1933,29 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
   // Handler for saving custom recurrence rule from modal
   const handleSaveRecurrenceRule = useCallback((newOptions) => {
+    console.log('🚀 [CHRONO-DEBUG] handleSaveRecurrenceRule called:', {
+      newOptions,
+      isAddingEvent,
+      isAddingTask,
+      editingTaskId,
+      taskRepeatSeriesId
+    });
+    
     if (isAddingEvent) {
       handleEventChange('repeat', 'custom');
       handleEventChange('rruleOptions', newOptions);
     } else if (isAddingTask) {
       setTaskRepeatOption('custom');
       setTaskRruleOptions(newOptions);
+      // Generate seriesId when applying custom recurrence
+      if (!taskRepeatSeriesId) {
+        const newSeriesId = `series_${Date.now().toString()}`;
+        setTaskRepeatSeriesId(newSeriesId);
+        console.log('🚀 [CHRONO-DEBUG] Generated new seriesId for custom recurrence:', newSeriesId);
+      }
     }
     setIsRecurrenceModalOpen(false);
-  }, [isAddingEvent, isAddingTask, handleEventChange]);
+  }, [isAddingEvent, isAddingTask, handleEventChange, editingTaskId, taskRepeatSeriesId]);
 
   // Function to get display text for repeat option
   const getRepeatDisplayText = (repeatValue, rruleOptions) => {
@@ -2491,7 +2463,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <div className="flex items-center text-light-text/50 dark:text-dark-text/50 gap-2 px-4 py-4 border-b h-[72px] border-light-border dark:border-dark-border">
                               {(() => {
                                 // Check if editing a recurring task - disable schedule editing
-                                const isEditingRecurringTask = taskToEdit && taskToEdit.seriesId && (taskToEdit.repeat || taskToEdit.isRepeat);
+                                // EXCEPTION: Allow schedule editing for single instance edits
+                                const isEditingRecurringTask = taskToEdit && taskToEdit.seriesId && (taskToEdit.repeat || taskToEdit.isRepeat) && taskToEdit._editScope !== 'single';
                                 
                                 if (isEditingRecurringTask) {
                                   return (
@@ -2892,8 +2865,24 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                                 setIsRecurrenceModalOpen(true); // Open modal
                                                 setIsTaskRepeatDropdownOpen(false); // Close popover
                                               } else {
+                                                console.log('🚀 [CHRONO-DEBUG] Task repeat option selected:', {
+                                                  selectedOption: option.id,
+                                                  previousOption: taskRepeatOption,
+                                                  editingTaskId,
+                                                  isAddingTask
+                                                });
+                                                
                                                 setTaskRepeatOption(option.id);
                                                 setTaskRruleOptions(null); // Clear custom rule if selecting preset
+                                                // Generate seriesId when switching from 'none' to any repeat pattern
+                                                if (taskRepeatOption === 'none' && option.id !== 'none') {
+                                                  const newSeriesId = `series_${Date.now().toString()}`;
+                                                  setTaskRepeatSeriesId(newSeriesId);
+                                                  console.log('🚀 [CHRONO-DEBUG] Generated seriesId for repeat option:', newSeriesId);
+                                                } else if (option.id === 'none') {
+                                                  setTaskRepeatSeriesId(null);
+                                                  console.log('🚀 [CHRONO-DEBUG] Cleared seriesId for none option');
+                                                }
                                                 setIsTaskRepeatDropdownOpen(false);
                                               }
                                             }}
@@ -3327,7 +3316,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <div className="flex flex-col gap-2">
                           <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Repeat</span>
                           
-                        <div className="flex flex-row gap-2 hover:text-light-text dark:hover:text-dark-text">
+                        <div className="flex flex-row w-auto gap-2 hover:text-light-text dark:hover:text-dark-text">
 
                           <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
 

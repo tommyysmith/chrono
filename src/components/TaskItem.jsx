@@ -16,7 +16,7 @@ import { Medium } from '../assets/icons/Medium';
 import { High } from '../assets/icons/High';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import DeleteTaskModal from './DeleteTaskModal';
+
 
 // Helper function to get the appropriate priority icon
 const getPriorityIcon = (priority) => {
@@ -61,7 +61,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
 
   // Directional hover effect state
   const [backgroundState, setBackgroundState] = useState("hidden");
@@ -97,48 +97,32 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   }, []);
 
   const handleDirectionalMouseEnter = useCallback((e) => {
-    const direction = calculateDirection(e);
-    setEntryDirection(direction);
-    
-    // phase 1: instantly spawn at cursor position
-    setBackgroundState("entering");
-    
-    // phase 2: animate to center after a brief moment
-    setTimeout(() => {
-      setBackgroundState("centered");
-    }, 10);
-  }, [calculateDirection]);
+    // Simplified hover animation for Safari compatibility
+    setBackgroundState("centered");
+  }, []);
   
   const handleDirectionalMouseLeave = useCallback((e) => {
-    const direction = calculateDirection(e);
-    setLeaveDirection(direction);
-    
-    // phase 3: animate to leave direction
-    setBackgroundState("leaving");
-    
-    // reset to hidden after animation completes
-    setTimeout(() => {
-      setBackgroundState("hidden");
-    }, 150);
-  }, [calculateDirection]);
+    // Simplified leave animation for Safari compatibility
+    setBackgroundState("hidden");
+  }, []);
 
   const getBackgroundAnimation = () => {
     switch (backgroundState) {
       case "hidden":
         return {
           opacity: 0,
-          x: entryDirection.x,
-          y: entryDirection.y,
-          scale: 0.3,
-          transition: { duration: 0 }
+          x: 0,
+          y: 0,
+          scale: 1,
+          transition: { duration: 0.05, ease: "easeOut" }
         };
       case "entering":
         return {
           opacity: 0,
-          x: entryDirection.x,
-          y: entryDirection.y,
-          scale: 0.3,
-          transition: { duration: 0 }
+          x: 0,
+          y: 0,
+          scale: 1,
+          transition: { duration: 0.05, ease: "easeOut" }
         };
       case "centered":
         return {
@@ -146,23 +130,23 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           x: 0,
           y: 0,
           scale: 1,
-          transition: { duration: 0.1, ease: "easeOut" }
+          transition: { duration: 0.05, ease: "easeOut" }
         };
       case "leaving":
         return {
           opacity: 0,
-          x: leaveDirection.x,
-          y: leaveDirection.y,
+          x: 0,
+          y: 0,
           scale: 1,
-          transition: { duration: 0.1, ease: "easeOut" }
+          transition: { duration: 0.05, ease: "easeOut" }
         };
       default:
         return {
           opacity: 0,
           x: 0,
           y: 0,
-          scale: 0.3,
-          transition: { duration: 0 }
+          scale: 1,
+          transition: { duration: 0.05, ease: "easeOut" }
         };
     }
   };
@@ -235,21 +219,8 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   };
 
   const handleDelete = () => {
-    // If the task is recurring, show the delete modal
-    if (taskIsRecurring) {
-      setIsDeleteModalOpen(true);
-      setIsPopoverOpen(false);
-    } else {
-      // For non-recurring tasks, delete directly
-      onDelete(task.id);
-      setIsPopoverOpen(false);
-    }
-  };
-
-  // Handle deletion with scope for recurring tasks
-  const handleDeleteWithScope = (scope) => {
-    onDelete(task.id, scope);
-    setIsDeleteModalOpen(false);
+    onDelete(task.id);
+    setIsPopoverOpen(false);
   };
 
   // Determine if the item should be top-aligned
@@ -422,7 +393,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
       </div>
 
       {/* More icon shown on hover */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {isHovering && (
           <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
             <PopoverTrigger asChild>
@@ -430,8 +401,8 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.1 }}
-                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] items-center hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
+                transition={{ duration: 0.05, ease: "easeOut" }}
+                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>
@@ -458,13 +429,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         )}
       </AnimatePresence>
 
-        {/* Delete Modal for Recurring Tasks */}
-        <DeleteTaskModal 
-          isOpen={isDeleteModalOpen}
-          taskTitle={task.title}
-          onClose={() => setIsDeleteModalOpen(false)}
-          onDelete={handleDeleteWithScope}
-        />
+
       </div>
     </div>
   );
