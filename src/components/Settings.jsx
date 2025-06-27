@@ -47,7 +47,9 @@ import { Clock } from '../assets/icons/Clock';
 import { Drag } from '../assets/icons/Drag';
 import { Search } from '../assets/icons/Search';
 import { Trash } from '../assets/icons/Trash';
+import { Shift } from '../assets/icons/Shift';
 import { TAG_COLORS } from '../constants/colors';
+import { ArrowAlt } from '../assets/icons/ArrowAlt';
 
 // Directional Hover Button Component
 const DirectionalHoverButton = ({ onClick, isActive, icon: Icon, label, isLogout = false }) => {
@@ -205,7 +207,9 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
   const [selectedDay, setSelectedDay] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [dayFilter, setDayFilter] = useState('');
+  const [dayPopoverOpen, setDayPopoverOpen] = useState(false);
   const sliderRef = useRef(null);
+  const dayInputRef = useRef(null);
 
 
 
@@ -266,11 +270,27 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
     // Clear day selection when month changes
     setSelectedDay('');
     setDayFilter('');
+    
+    // Focus the day input and open popover after month selection
+    setTimeout(() => {
+      if (dayInputRef.current) {
+        dayInputRef.current.focus();
+        setDayPopoverOpen(true);
+      }
+    }, 100);
   };
 
   const handleDaySelect = (day) => {
     setSelectedDay(day);
     setDayFilter(day);
+    setDayPopoverOpen(false);
+  };
+
+  const handleRemoveBirthday = () => {
+    setSelectedMonth('');
+    setMonthFilter('');
+    setSelectedDay('');
+    setDayFilter('');
   };
 
   const handleMonthInputChange = (e) => {
@@ -450,7 +470,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                     placeholder="eg. March"
                     value={monthFilter}
                     onChange={handleMonthInputChange}
-                    className="w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-light-border dark:focus:ring-dark-border focus:border-transparent cursor-text"
+                    className="w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:bg-black/[0.15] dark:focus:bg-white/[0.15] focus:outline-none cursor-text"
                   />
                 </PopoverTrigger>
                 <PopoverContent 
@@ -486,15 +506,16 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
             </div>
             <div>
               <label className="block text-xs font-medium text-light-text/50 dark:text-dark-text/50 mb-2">Day</label>
-              <Popover>
+              <Popover open={dayPopoverOpen} onOpenChange={setDayPopoverOpen}>
                 <PopoverTrigger asChild>
                   <input
+                    ref={dayInputRef}
                     type="text"
                     placeholder={selectedMonth ? "eg. 11" : "Select month first"}
                     value={dayFilter}
                     onChange={handleDayInputChange}
                     disabled={!selectedMonth}
-                    className={`w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-light-border dark:focus:ring-dark-border focus:border-transparent ${
+                    className={`w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:bg-black/[0.15] dark:focus:bg-white/[0.15] focus:outline-none ${
                       selectedMonth ? 'cursor-text' : 'cursor-not-allowed opacity-50'
                     }`}
                   />
@@ -531,6 +552,16 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
               </Popover>
             </div>
           </div>
+          
+          {/* Remove button - only show when both month and day are selected */}
+          {selectedMonth && selectedDay && (
+            <button
+              onClick={handleRemoveBirthday}
+              className="mt-3 text-xs font-medium text-red-500 dark:text-red-500 hover:text-red-600 dark:hover:text-red-400"
+            >
+              Remove
+            </button>
+          )}
         </div>
 
         {/* Location Section */}
@@ -540,7 +571,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
           <input
             type="text"
             placeholder="e.g Berlin, Germany"
-            className="w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-light-border dark:focus:ring-dark-border focus:border-transparent"
+            className="w-full px-3 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:bg-black/[0.15] dark:focus:bg-white/[0.15] focus:outline-none"
           />
         </div>
 
@@ -818,6 +849,13 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
   const [colorMenuPosition, setColorMenuPosition] = useState({ x: 0, y: 0 });
   const [selectedTagId, setSelectedTagId] = useState(null);
 
+  // Slider drag state
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartX, setDragStartX] = useState(0);
+  const [dragStartDuration, setDragStartDuration] = useState(0);
+  const [dragDisplayValue, setDragDisplayValue] = useState(0);
+  const [justFinishedDragging, setJustFinishedDragging] = useState(false);
+
   // @dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -881,6 +919,75 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
     tag.label.toLowerCase().includes(tagFilter.toLowerCase())
   );
 
+  // Helper function to get display value (rounded to nearest 5min)
+  const getDisplayDuration = () => {
+    // During drag, show the tracked display value; otherwise calculate from current duration
+    return isDragging ? dragDisplayValue : Math.round(defaultEventDuration / 5) * 5;
+  };
+
+  // Slider drag handlers
+  const handleSliderMouseDown = (e) => {
+    if (!sliderRef.current) return;
+    
+    setIsDragging(true);
+    setDragStartX(e.clientX);
+    setDragStartDuration(defaultEventDuration);
+    setDragDisplayValue(Math.round(defaultEventDuration / 5) * 5); // Initialize display value
+    
+    // Prevent text selection during drag
+    e.preventDefault();
+  };
+
+  const handleSliderMouseMove = useCallback((e) => {
+    if (!isDragging || !sliderRef.current) return;
+    
+    const rect = sliderRef.current.getBoundingClientRect();
+    const deltaX = e.clientX - dragStartX;
+    const deltaPercentage = deltaX / rect.width;
+    const deltaDuration = deltaPercentage * (90 - 15); // 75 minute range
+    
+    let newDuration = dragStartDuration + deltaDuration;
+    newDuration = Math.max(15, Math.min(90, newDuration));
+    
+    // Calculate what should be displayed (rounded to 5min)
+    const displayValue = Math.round(newDuration / 5) * 5;
+    
+    setDefaultEventDuration(newDuration); // Keep precise value for smooth animation
+    setDragDisplayValue(displayValue); // Track what user sees
+  }, [isDragging, dragStartX, dragStartDuration]);
+
+  const handleSliderMouseUp = useCallback(() => {
+    if (!isDragging) return;
+    
+    setIsDragging(false);
+    setJustFinishedDragging(true);
+    
+    // Set to exactly what was being displayed during drag
+    setDefaultEventDuration(dragDisplayValue);
+    
+    // Reset the flag after a short delay to allow clicks again
+    setTimeout(() => {
+      setJustFinishedDragging(false);
+    }, 100);
+  }, [isDragging, dragDisplayValue]);
+
+  // Global mouse event listeners for drag
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleSliderMouseMove);
+      document.addEventListener('mouseup', handleSliderMouseUp);
+      document.body.style.cursor = 'grabbing';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleSliderMouseMove);
+      document.removeEventListener('mouseup', handleSliderMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDragging, handleSliderMouseMove, handleSliderMouseUp]);
+
   // Sortable Tag Item Component
   const SortableTagItem = ({ tag }) => {
     const {
@@ -932,7 +1039,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                   setEditingTagName("");
                 }
               }}
-              className="bg-transparent border-none outline-none text-sm text-light-text dark:text-dark-text min-w-0 flex-1"
+              className="bg-transparent border-none outline-none text-sm text-light-text dark:text-dark-text min-w-0 flex-1 focus:bg-black/[0.08] dark:focus:bg-white/[0.08] rounded px-1"
               autoFocus
             />
           ) : (
@@ -1004,7 +1111,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                 </div>
                 <button
                   onClick={() => setShowTodaysTasks(!showTodaysTasks)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-light-border dark:focus:ring-dark-border ${
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
                     showTodaysTasks ? 'bg-primary' : 'bg-black/10 dark:bg-white/10'
                   }`}
                 >
@@ -1092,7 +1199,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                   placeholder="Filter by name"
                   value={tagFilter}
                   onChange={(e) => setTagFilter(e.target.value)}
-                  className="w-56 px-3 pl-9 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-light-border dark:focus:ring-dark-border focus:border-transparent text-sm"
+                  className="w-56 px-3 pl-9 py-2 bg-black/[0.08] rounded-[9px] dark:bg-white/[0.08] text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 focus:bg-black/[0.15] dark:focus:bg-white/[0.15] focus:outline-none text-sm"
                 />
                 </div>
                 <button
@@ -1144,7 +1251,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                         }
                       }}
                       placeholder="Tag group name"
-                      className="bg-transparent border-none outline-none text-sm text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 flex-1"
+                      className="bg-transparent border-none outline-none text-sm text-light-text dark:text-dark-text placeholder-gray-500 dark:placeholder-gray-400 flex-1 focus:bg-black/[0.08] dark:focus:bg-white/[0.08] rounded px-1"
                       autoFocus
                     />
                     <div className="flex items-center gap-1">
@@ -1195,11 +1302,14 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
             <span className="tracking-wide font-semibold text-[10px] text-light-text/50 dark:text-dark-text/50">ESC</span>
           </div>
         </div>
+        <div className="h-[1px] w-full bg-light-border mb-8 dark:bg-dark-border"></div>
 
         {/* Default Event Color Section */}
         <div className="mb-8">
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Default Event Color</h3>
           <p className="text-light-text/50 dark:text-dark-text/50 text-sm mb-4">Choose the default color for new events.</p>
+
+        
           
           <div className="flex flex-wrap gap-3">
             {TAG_COLORS.map((color) => {
@@ -1207,12 +1317,12 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
               return (
                 <motion.button
                   key={color}
-                  className={`relative w-8 h-8 rounded-lg cursor-pointer flex items-center justify-center border-2 ${
-                    isSelected ? 'border-light-text dark:border-dark-text' : 'border-transparent'
+                  className={`relative w-7 h-7 rounded-[9px] cursor-pointer flex items-center justify-center border-2 ${
+                    isSelected ? 'border-black/30' : 'border-transparent'
                   }`}
                   style={{ backgroundColor: color }}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   onClick={() => setDefaultEventColor(color)}
                 >
                   {isSelected && (
@@ -1252,9 +1362,11 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
               </div>
               
               <div 
-                ref={sliderRef}
-                className="w-full h-10 border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-lighter rounded-[9px] cursor-pointer relative"
+                className="w-full h-10 border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-lighter rounded-[9px] relative"
                 onClick={(e) => {
+                  // Prevent click events if we're dragging or just finished dragging
+                  if (isDragging || justFinishedDragging) return;
+                  
                   const rect = sliderRef.current.getBoundingClientRect();
                   const currentX = e.clientX - rect.left;
                   const percentage = Math.max(0, Math.min(1, currentX / rect.width));
@@ -1281,16 +1393,41 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                 }}
               >
                 <motion.div 
-                  className="relative h-10 bg-light-bg-lighter dark:bg-white/5 rounded-[9px]"
-                  animate={{ width: `${Math.max(10, ((defaultEventDuration - 15) / (90 - 15)) * 90) + 10}%` }}
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  className="absolute top-[1px] left-[1px] h-[36px] bg-light-bg-lighter dark:bg-white/5 rounded-[7px] pointer-events-none"
+                  animate={{ 
+                    width: `${((defaultEventDuration - 15) / (90 - 15)) * 80 + 20}%` 
+                  }}
+                  transition={isDragging ? { duration: 0 } : { type: "spring", stiffness: 300, damping: 30 }}
                 >
                   {/* Duration text positioned on the left */}
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-xs font-medium text-light-text dark:text-dark-text pointer-events-none">
-                    {defaultEventDuration} min
+                    {getDisplayDuration()} min
                   </div>
-                  {/* Simple handle at the end */}
-                  <div className="absolute w-[8px] h-full bg-white/5 right-0 top-0 rounded-r-[9px]" />
+                  {/* Draggable handle at the end */}
+                  <div 
+                    className={`absolute w-4 h-[36px] bg-light-border dark:bg-dark-border rounded-r-[7px] right-0 top-1/2 transform -translate-y-1/2 pointer-events-auto cursor-grab transition-all ${
+                      isDragging ? 'cursor-grabbing scale-110 bg-black/5 dark:bg-white/5 border-primary' : 'hover:bg-black/10 dark:hover:bg-white/10'
+                    }`}
+                    onMouseDown={handleSliderMouseDown}
+                  >
+                    {/* Handle grip lines */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="flex flex-col gap-[2px]">
+                        <div className="flex items-center gap-0.5 justify-center">
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        </div>
+                        <div className="flex items-center gap-0.5 justify-center">
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        </div>
+                        <div className="flex items-center gap-0.5 justify-center">
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        <div className="w-[2px] h-[2px] bg-light-text/30 dark:bg-dark-text/30 rounded-full"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </motion.div>
               </div>
 
@@ -1321,6 +1458,146 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
         <div className="border-t border-light-border dark:border-dark-border pt-8">
           <div className="text-light-text/50 dark:text-dark-text/50">
             <p>Additional calendar settings will be available here in future updates.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderShortcutsContent = () => (
+    <div className="h-full p-16 max-w-3xl overflow-y-auto scrollbar-hide">
+      <div className="">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Shortcuts</h1>
+            <p className="text-light-text/50 dark:text-dark-text/50 mt-1">Keyboard shortcuts to help you work faster</p>
+          </div>
+          <div className="flex flex-col gap-1 items-center absolute top-8 right-8">
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter rounded-lg transition-colors"
+            >
+              <Cross className="w-5 h-5 text-light-text/50 dark:text-dark-text/50" />
+            </button>
+            <span className="tracking-wide font-semibold text-[10px] text-light-text/50 dark:text-dark-text/50">ESC</span>
+          </div>
+        </div>
+        <div className="h-[1px] w-full bg-light-border dark:bg-dark-border mb-8"></div>
+
+        {/* Global Shortcuts Section */}
+        <div className="mb-8">
+          <h3 className="text-md font-medium text-gray-900 dark:text-white mb-6">Global</h3>
+          
+          <div className="space-y-4">
+            {/* Create task */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Create task</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <Shift className="w-3 h-3" />
+                </kbd>
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  T
+                </kbd>
+              </div>
+            </div>
+
+            {/* Create event */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Create event</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <Shift className="w-3 h-3" />
+                </kbd>
+                <kbd className="px-2 py-1 h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  E
+                </kbd>
+              </div>
+            </div>
+
+            {/* Toggle sidebar */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Toggle sidebar</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <Shift className="w-3 h-3" />
+                </kbd>
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  S
+                </kbd>
+              </div>
+            </div>
+
+            {/* Agenda view */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Agenda view</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  A
+                </kbd>
+              </div>
+            </div>
+
+            {/* Task view */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Task view</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  T
+                </kbd>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Next week</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <ArrowAlt className="w-3 h-3" />
+                </kbd>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Previous week</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <ArrowAlt className="w-3 h-3 rotate-180" />
+                </kbd>
+              </div>
+            </div>
+
+        <div className="h-[1px] w-full bg-light-border dark:bg-dark-border mb-8"></div>
+
+          <h3 className="text-md font-medium text-gray-900 dark:text-white mb-6">Multi-task Editing</h3>
+
+          <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Complete tasks</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  D
+                </kbd>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Set priority</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  P
+                </kbd>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Set tag </span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  T
+                </kbd>
+              </div>
+            </div>
+
+            
           </div>
         </div>
       </div>
@@ -1420,6 +1697,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
          activeSection === 'calendars' ? renderCalendarsContent() :
          activeSection === 'todos' ? renderTodosContent() : 
          activeSection === 'appearance' ? renderAppearanceContent() :
+         activeSection === 'shortcuts' ? renderShortcutsContent() :
          renderDefaultContent()}
       </div>
       

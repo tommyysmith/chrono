@@ -722,6 +722,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         updatedAt: new Date().toISOString()
       };
 
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+        console.log('🔄 [MULTI-SELECT-DEBUG] Flagging recurring task instance for single update:', task.id);
+      }
+
       onUpdateTask(updatedTask);
     });
     // Clear selection after bulk update
@@ -809,6 +815,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           priority: priority,
           updatedAt: new Date().toISOString()
         };
+
+        // For recurring task instances, flag for single instance update
+        if (task.isRepeat === true && task.seriesId) {
+          updatedTask._editScope = 'single';
+          console.log('🔄 [MULTI-SELECT-DEBUG] Flagging recurring task instance for single priority update:', task.id);
+        }
+
         onUpdateTask(updatedTask);
       }
     });
@@ -840,6 +853,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           tag: tag, // Store the full tag object, not just the ID
           updatedAt: new Date().toISOString()
         };
+
+        // For recurring task instances, flag for single instance update
+        if (task.isRepeat === true && task.seriesId) {
+          updatedTask._editScope = 'single';
+          console.log('🔄 [MULTI-SELECT-DEBUG] Flagging recurring task instance for single tag update:', task.id);
+        }
+
         onUpdateTask(updatedTask);
       }
     });
@@ -899,8 +919,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         updatedAt: new Date().toISOString()
       };
 
+      // For recurring task instances, always flag for single instance update
+      // The scope from the modal is handled separately but we need the _editScope flag
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+        console.log('🔄 [MULTI-SELECT-DEBUG] Flagging recurring task instance for single schedule update:', task.id);
+      }
+
       if (scope) {
-        // For recurring tasks, add the scope to the task object
+        // For recurring tasks, add the scope to the task object (legacy support)
         updatedTask._updateScope = scope;
       }
 
@@ -1886,9 +1913,19 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated, addToCalendar]);
 
   const handleKeyDown = useCallback((e) => {
+    // Don't trigger shortcuts if user is typing in an input field
+    if (e.target.tagName === 'INPUT' || 
+        e.target.tagName === 'TEXTAREA' || 
+        e.target.isContentEditable ||
+        e.target.closest('[contenteditable]')) {
+      return;
+    }
+
     if (e.key === 'Escape') {
-      // Handle escape key - use the same flow as clicking discard
-      if (originalEventState?.isDraft) {
+      // Handle escape key - first check if we're in multi-select mode
+      if (isMultiSelectMode && selectedTasks.size > 0) {
+        handleClearSelection();
+      } else if (originalEventState?.isDraft) {
         handleDiscardDraft();
       } else {
         handleClose();
@@ -1911,17 +1948,40 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       // Handle Shift+E - use the same flow as clicking the Event button
       handleAddEventClick();
       setIsOpen(true);
+    } else if (isMultiSelectMode && selectedTasks.size > 0) {
+      // Multi-select toolbar shortcuts - only work when in multi-select mode
+      if (e.key.toLowerCase() === 'd' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        // Handle 'D' key - trigger Done button
+        handleBulkTaskComplete();
+      } else if (e.key.toLowerCase() === 'p' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        // Handle 'P' key - trigger Priority button
+        handleMultiSelectPriority();
+      } else if (e.key.toLowerCase() === 't' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        // Handle 'T' key - trigger Tag button (only in multi-select mode, without Shift)
+        handleMultiSelectTag();
+      }
     }
   }, [
     handleClose,
     handleSaveChanges,
     handleSaveTask,
     handleAddEventClick,
+    handleDiscardDraft,
+    handleClearSelection,
     isAddingEvent,
     isAddingTask,
     isGoToDateMode,
+    isMultiSelectMode,
+    selectedTasks.size,
+    originalEventState?.isDraft,
     taskRruleOptions, // Add dependency
-    eventState.rruleOptions // Add dependency
+    eventState.rruleOptions, // Add dependency
+    handleBulkTaskComplete,
+    handleMultiSelectPriority,
+    handleMultiSelectTag
   ]);
 
   useEffect(() => {
@@ -2128,7 +2188,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     <div className="flex items-center gap-2 text-sm">
                       <button
                         onClick={handleClearSelection}
-                        className="text-light-text/50 dark:text-dark-text/50 p-2 hover:bg-light-bg-lighter dark:hover:bg-white/5 rounded-[5px] hover:text-light-text dark:hover:text-dark-text"
+                        className="text-light-text/50 dark:text-dark-text/50 p-2 hover:bg-light-bg-lighter dark:hover:bg-white/5 rounded-[5px] hover:text-light-text dark:hover:text-dark-text focus:outline-none focus-visible:outline-none"
                       >
                         
                         <ArrowAlt className="w-4 h-4 rotate-180" />
@@ -2142,52 +2202,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleBulkTaskComplete}
-                        className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                        className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
                       >
                         <Check className="h-3 w-3 text-green-500" />
                         <span className="text-xs px-0.5">Done</span>
                       </button>
-                      <Popover open={isMultiSelectScheduleOpen} onOpenChange={setIsMultiSelectScheduleOpen}>
-                        <PopoverTrigger asChild>
-                          <button
-                            onClick={handleMultiSelectSchedule}
-                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                          >
-                            <CalendarIcon className="h-3 w-3 text-primary" />
-                            <span className="text-xs px-0.5">Schedule</span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent 
-                          className="w-auto p-0 rounded-[9px] bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border shadow-lg"
-                          align="center"
-                          side="top"
-                          sideOffset={8}
-                        >
-                          <div
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <Calendar
-                              mode="single"
-                              selected={pendingScheduleDate}
-                              onSelect={handleMultiSelectDateSelect}
-                              initialFocus
-                            />
-                          </div>
-                        </PopoverContent>
-                      </Popover>
                       <Popover open={isMultiSelectPriorityOpen} onOpenChange={setIsMultiSelectPriorityOpen}>
                         <PopoverTrigger asChild>
                           <button
                             onClick={handleMultiSelectPriority}
-                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
                           >
                             <Lightning className="h-3 w-3 text-blue-500" />
                             <span className="text-xs px-0.5">Priority</span>
                           </button>
                         </PopoverTrigger>
                         <PopoverContent 
-                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 focus:outline-none focus-visible:outline-none"
                           align="center"
                           side="top"
                           sideOffset={8}
@@ -2202,7 +2233,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <button
                                 key={option.id}
                                 type="button"
-                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text focus:outline-none focus-visible:outline-none"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleMultiSelectPrioritySelect(option.id);
@@ -2229,14 +2260,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <PopoverTrigger asChild>
                           <button
                             onClick={handleMultiSelectTag}
-                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                            className="flex items-center gap-1 flex-row px-2 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
                           >
                             <Tag className="h-3 w-3 text-purple-500" />
                             <span className="text-xs px-0.5">Tag</span>
                           </button>
                         </PopoverTrigger>
                         <PopoverContent 
-                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                          className="w-[200px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 focus:outline-none focus-visible:outline-none"
                           align="center"
                           side="top"
                           sideOffset={8}
@@ -2250,7 +2281,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                             {/* No tag option */}
                             <button
                               type="button"
-                              className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                              className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text focus:outline-none focus-visible:outline-none"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleMultiSelectTagSelect(null);
@@ -2265,7 +2296,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               <button
                                 key={tag.id}
                                 type="button"
-                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text"
+                                className="px-2 py-2 text-sm flex items-center justify-between rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 font-medium text-dark-text/70 dark:text-dark-text/70 hover:text-dark-text dark:hover:text-dark-text focus:outline-none focus-visible:outline-none"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleMultiSelectTagSelect(tag);
@@ -2287,9 +2318,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         
                       <button 
                         onClick={handleMultiSelectDelete}
-                        className="w-8 h-8 flex items-center justify-center rounded-[5px] hover:bg-light-bg-lighter dark:hover:bg-white/5 hover:bg-red-50 dark:hover:bg-red-900/20" 
+                        className="flex items-center gap-1 flex-row px-2 h-[32px] ml-2 font-medium shadow-sm bg-gradient-to-b from-red-500/5 to-red-500/10 hover:bg-gradient-to-b hover:from-red-500/10 hover:to-red-500/20 outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
                       >
-                        <Trash className="h-4 w-4 text-red-500" />
+                        <Trash className="h-3 w-3 text-red-500" />
+                        <span className="text-xs px-0.5">Delete</span>
                       </button>
                     </div>
                   </div>

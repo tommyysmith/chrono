@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { addDays } from "date-fns";
+import { addDays, getISOWeek } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import Sidebar from "./Sidebar";
 import DeleteEventModal from "./DeleteEventModal";
@@ -47,6 +47,7 @@ import { SidebarIcon } from "@/assets/icons/Sidebar";
 import { Check } from "@/assets/icons/Check";
 import { Pencil } from "lucide-react";
 import { Chevron } from "@/assets/icons/Chevron";
+import { Shift } from "@/assets/icons/Shift";
 
 // Helper function to get default event color
 const getDefaultEventColor = () => {
@@ -88,6 +89,34 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
     window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
     return () => window.removeEventListener('default-event-color-updated', handleDefaultColorUpdate);
+  }, []);
+
+  // Add keyboard shortcut for sidebar toggle (Shift + S)
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Don't trigger shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || 
+          event.target.tagName === 'TEXTAREA' || 
+          event.target.isContentEditable ||
+          event.target.closest('[contenteditable]')) {
+        return;
+      }
+
+      // Handle Shift + S for sidebar toggle
+      if (event.shiftKey && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        setIsSidebarVisible(prev => !prev);
+        return;
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   // Global click handler to clear task selection when clicking outside
@@ -542,7 +571,19 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         <div className="flex flex-row gap-2 justify-start">
           <TooltipProvider delayDuration={500}>
             <Tooltip>
-              <div className={`flex items-center ${isSidebarVisible ? 'min-w-auto mr-4' : 'min-w-auto mr-4'}`}>
+              <motion.div 
+                className="flex items-center mr-4"
+                animate={{
+                  width: isSidebarVisible ? 228 : 'auto',
+                  minWidth: isSidebarVisible ? 228 : 'auto'
+                }}
+                transition={{
+                  type: "easeInOut",
+                  duration: 0.2,
+                  ease: [0.25, 1, 0.5, 1],
+                }}
+                style={{ willChange: 'width' }}
+              >
               <TooltipTrigger asChild>
                 <button
                   onClick={() => setIsSidebarVisible(!isSidebarVisible)}
@@ -551,10 +592,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   <SidebarIcon className="w-5 h-5 text-light-text dark:text-dark-text" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="start">
-                {isSidebarVisible ? 'Close Sidebar' : 'Open Sidebar'}
-              </TooltipContent>
-              </div>
+              <TooltipContent side="bottom" align="start"><div className="flex flex-row items-center gap-2"><span>{isSidebarVisible ? 'Close sidebar' : 'Open sidebar'}</span> <span className="bg-white/5 flex flex-row items-center justify-center gap-1 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50"><Shift className="w-2.5 h-2.5" /> S </span></div></TooltipContent>
+
+             
+              </motion.div>
             </Tooltip>
           </TooltipProvider>
         </div>
@@ -565,6 +606,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             <span className="text-sm font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
               {selectedDate.getFullYear()}
             </span>
+            <span className="text-[10px] font-semibold px-1.5 py-1 bg-light-bg-lighter dark:bg-white/5 rounded-[5px] font-regular text-light-text/50 dark:text-dark-text/50 ml-2">
+              W{getISOWeek(selectedDate)}
+            </span>
           </div>
           </div>
         
@@ -574,7 +618,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             <PopoverTrigger asChild>
               <motion.div
                 whileTap={{scale: 0.98}}
-                className="flex items-center gap-2 cursor-pointer flex-row px-2.5 h-[36px] font-medium text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+                className="flex items-center gap-2 cursor-pointer flex-row px-2.5 h-[36px] font-medium text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
               >
                 <span className="font-medium">
                   {viewType === ViewType.DAY
@@ -586,7 +630,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 <Chevron className="w-4 h-4 rotate-90" />
               </motion.div>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto p-1 text-xs min-w-36 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg">
+            <PopoverContent align="end" className="w-auto p-1 text-xs min-w-36 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg focus:outline-none focus-visible:outline-none">
               <div className="flex flex-col gap-1">
                 {Object.values(ViewType).map((type) => (
                   <button
@@ -594,7 +638,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     onClick={() => {
                       setViewType(type);
                     }}
-                    className={`w-full rounded text-left px-1 py-1 text-xs font-medium flex items-center justify-between ${
+                    className={`w-full rounded text-left px-1 py-1 text-xs font-medium flex items-center justify-between focus:outline-none focus-visible:outline-none ${
                       viewType === type
                         ? "text-dark-text text-xs dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/5"
                         : "text-dark-text/50 text-xs dark:text-dark-text/50 hover:bg-white/15 dark:hover:bg-white/5"
@@ -751,67 +795,67 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
             />
           </PopoverTrigger>
-          <PopoverContent 
-            ref={contextMenuRef}
-            className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border w-[280px] p-0"
-            sideOffset={5}
-            align="start"
-            side="bottom"
-            forceMount
-          >
-            <div>
-              <div className="flex flex-wrap gap-2 pb-2 p-3">
-                {colors.map((color) => {
-                  const eventForMenu = events.find(e => e.id === contextMenu.eventId);
-                  const isSelected = eventForMenu && eventForMenu.color === color;
-                  return (
-                    <motion.button
-                      key={color}
-                      whileHover={{ scale: 1.1 }} 
-                      whileTap={{ scale: 0.9 }}
-                      className="relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center"
-                      style={{ backgroundColor: color }}
-                      onClick={(e) => handleColorSelect(e, color)}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      {isSelected && (
-                        <Check className="w-3 h-3 text-white" /> 
-                      )}
-                    </motion.button>
-                  );
-                })}
-              </div>
-              <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-              <div className="p-1">
-                <button
-                  className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
-                  onClick={(e) => handleEventDuplicate(e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
-                  Duplicate
-                </button>
-
-                <button
-                  className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all"
-                  onClick={(e) => handleEventEdit(e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Pencil className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
-                  Edit
-                </button>
-
-                <button
-                  className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
-                  onClick={(e) => handleEventDelete(e)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
-                  Delete
-                </button>
-              </div>
+                  <PopoverContent 
+          ref={contextMenuRef}
+          className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border w-[280px] p-0 focus:outline-none focus-visible:outline-none"
+          sideOffset={5}
+          align="start"
+          side="bottom"
+          forceMount
+        >
+          <div>
+            <div className="flex flex-wrap gap-2 pb-2 p-3">
+              {colors.map((color) => {
+                const eventForMenu = events.find(e => e.id === contextMenu.eventId);
+                const isSelected = eventForMenu && eventForMenu.color === color;
+                return (
+                  <motion.button
+                    key={color}
+                    whileHover={{ scale: 1.1 }} 
+                    whileTap={{ scale: 0.9 }}
+                    className="relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center focus:outline-none focus-visible:outline-none"
+                    style={{ backgroundColor: color }}
+                    onClick={(e) => handleColorSelect(e, color)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {isSelected && (
+                      <Check className="w-3 h-3 text-white" /> 
+                    )}
+                  </motion.button>
+                );
+              })}
             </div>
-          </PopoverContent>
+            <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
+            <div className="p-1">
+              <button
+                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all focus:outline-none focus-visible:outline-none"
+                onClick={(e) => handleEventDuplicate(e)}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Copy className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
+                Duplicate
+              </button>
+
+              <button
+                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all focus:outline-none focus-visible:outline-none"
+                onClick={(e) => handleEventEdit(e)}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Pencil className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
+                Edit
+              </button>
+
+              <button
+                className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white focus:outline-none focus-visible:outline-none"
+                onClick={(e) => handleEventDelete(e)}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                <Trash className="w-3 h-3 text-[#EC0F0F] group-hover:text-white  group-hover:dark:text-white group-hover:dark:text-white" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </PopoverContent>
         </Popover>
 
         <DeleteEventModal

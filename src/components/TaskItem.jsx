@@ -180,9 +180,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   // Sync internal multi-select state with external selection state
   useEffect(() => {
-    if (!isSelected) {
-      setIsMultiSelected(false);
-    }
+    setIsMultiSelected(isSelected || false);
   }, [isSelected]);
 
   const handleClick = (e) => {
@@ -197,6 +195,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
       setTimeout(() => {
         // Toggle selection: if already selected, deselect it
         onSelect(task.id, e, isSelected);
+        // Update local state to reflect the new selection state
         setIsMultiSelected(!isSelected);
       }, 0);
       // Don't call onClick when using multi-select to avoid conflicting selection states
@@ -402,23 +401,23 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.05, ease: "easeOut" }}
-                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
+                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border focus:outline-none focus-visible:outline-none`}
               >
                 <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
               </motion.button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border">
+            <PopoverContent align="start" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border focus:outline-none focus-visible:outline-none">
               <div className="flex flex-col gap-1">
                 <button
                   onClick={handleEdit}
-                  className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5"
+                  className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5 focus:outline-none focus-visible:outline-none"
                 >
                   <Pencil className="w-3 h-3 text-dark-text dark:text-dark-text" />
                   Edit
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white text-[#EC0F0F]"
+                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white text-[#EC0F0F] focus:outline-none focus-visible:outline-none"
                 >
                   <Trash className="w-3 h-3" />
                   Delete

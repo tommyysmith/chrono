@@ -88,6 +88,45 @@ export default function Sidebar({
     }
   }, [activeTab]);
 
+  // Add keyboard shortcuts for tab switching
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Don't trigger shortcuts if user is typing in an input field
+      if (event.target.tagName === 'INPUT' || 
+          event.target.tagName === 'TEXTAREA' || 
+          event.target.isContentEditable ||
+          event.target.closest('[contenteditable]')) {
+        return;
+      }
+
+      // Don't trigger if modifier keys are pressed
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+
+      switch (event.key.toLowerCase()) {
+        case 'a':
+          event.preventDefault();
+          setActiveTab("agenda");
+          break;
+        case 't':
+          event.preventDefault();
+          setActiveTab("tasks");
+          break;
+        default:
+          break;
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on component unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []); // Empty dependency array since setActiveTab is stable
+
   const [expandedSections, setExpandedSections] = useState(() => {
     // Try to load from localStorage first (only in browser)
     if (typeof window !== 'undefined') {
@@ -2159,7 +2198,8 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" align="center" sideOffset={10}>Tasks</TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Tasks</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50">T</span></div></TooltipContent>
+
             </Tooltip>
 
             <Tooltip>
@@ -2181,7 +2221,7 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" align="center" sideOffset={10}>Agenda</TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Agenda</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50">A</span></div></TooltipContent>
             </Tooltip>
           </TooltipProvider>
             </div>

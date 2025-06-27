@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useCallback, memo, useEffect } from 'react';
-import { format, isToday, isSameDay, startOfWeek, endOfWeek, isWithinInterval, addDays } from 'date-fns';
+import { format, isToday, isSameDay, startOfWeek, endOfWeek, isWithinInterval, addDays, parseISO, isAfter } from 'date-fns';
 import { useTaskManagement } from '../hooks/useTaskManagement';
 import { Repeat } from '../assets/icons/Repeat';
 import { Chevron } from '../assets/icons/Chevron';
@@ -156,99 +156,104 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   const filterTasks = useCallback((date) => {
     console.log(`[AgendaView] Filtering tasks for date: ${format(date, 'yyyy-MM-dd')}`);
     
-    // Start by loading all tasks from localStorage to ensure we have the latest
-    let allTasks = [];
+    // Load all tasks from localStorage to ensure we have the latest
+    let storedTasks = {};
     try {
       const savedTasks = localStorage.getItem('tasks');
       if (savedTasks) {
-        const parsedTasks = JSON.parse(savedTasks);
-        // Collect all tasks from all collections
-        Object.values(parsedTasks)
-          .filter(Array.isArray)
-          .forEach(group => {
-            allTasks.push(...group);
-          });
-        // Remove duplicates based on id
-        allTasks = Array.from(new Map(allTasks.map(task => [task.id, task])).values());
+        storedTasks = JSON.parse(savedTasks);
       }
     } catch (e) {
       console.error('Error parsing tasks from localStorage:', e);
-      // Fallback to the passed tasks prop
-      allTasks = tasks;
+      storedTasks = tasks || {};
     }
     
-    console.log(`[AgendaView] Found ${allTasks.length} total tasks in localStorage`);
+    console.log(`[AgendaView] Processing tasks from localStorage`);
     
-    // Process tasks similar to Sidebar's approach
-    const uniqueTasks = allTasks
-      .filter(task => !task.completed) // Skip completed tasks
-      .reduce((unique, task) => {
-        // For recurring tasks, handle them specially
-        if (task.repeat && task.repeat !== 'none') {
-          // For base tasks (isRepeat === false), check if there's an active instance
-          if (task.isRepeat === false) {
-            const hasActiveInstance = allTasks.some(t => 
-              t.seriesId === task.seriesId && 
-              t.isRepeat === true && 
-              !t.completed
+    // Use the exact same filtering logic as Sidebar
+    const allTasks = Object.values(storedTasks)
+      .filter(Array.isArray) // Filter out any non-array values
+      .reduce((unique, group) => {
+        group.forEach((task) => {
+          // Skip completed tasks (they should only appear in the completed tab)
+          if (task.completed) {
+            return;
+          }
+          
+          // For recurring tasks, we want to handle them specially
+          if (task.repeat && task.repeat !== 'none') {
+            // For base tasks (isRepeat === false), we should check if there's an active instance
+            if (task.isRepeat === false) {
+              const hasActiveInstance = Object.values(storedTasks)
+                .filter(Array.isArray)
+                .some(taskGroup => 
+                  taskGroup.some(t => {
+                    return t.seriesId === task.seriesId && 
+                           t.isRepeat === true && 
+                           !t.completed;
+                  })
+                );
+              
+              if (hasActiveInstance) {
+                return; // Skip the base task if an active instance exists
+              }
+              
+              if (!task.scheduledDate && task.repeat && task.repeat !== 'none') {
+                task = {
+                  ...task,
+                  scheduledDate: new Date().toISOString() 
+                };
+              }
+            }
+            
+            const existingSeriesInstance = Object.values(unique).find(
+              t => t.seriesId === task.seriesId && t.isRepeat && !t.completed
             );
             
-            if (hasActiveInstance) {
-              return unique; // Skip the base task if an active instance exists
-            }
-            
-            // If no active instance and no scheduled date, set to today
-            if (!task.scheduledDate && task.repeat && task.repeat !== 'none') {
-              task = {
-                ...task,
-                scheduledDate: new Date().toISOString() 
-              };
-            }
-          }
-          
-          // Check if we already have an instance for this series
-          const existingSeriesInstance = Object.values(unique).find(
-            t => t.seriesId === task.seriesId && t.isRepeat && !t.completed
-          );
-          
-          if (existingSeriesInstance) {
-            if (task.isRepeat && task.scheduledDate && existingSeriesInstance.scheduledDate) {
-              const taskDate = parseISO(task.scheduledDate);
-              const existingDate = parseISO(existingSeriesInstance.scheduledDate);
-              if (isAfter(existingDate, taskDate)) { // current task is earlier
-                delete unique[existingSeriesInstance.id]; // remove later instance
-                unique[task.id] = task; // add earlier instance
-              } else {
-                return unique; // existing instance is earlier or same, keep it
+            if (existingSeriesInstance) {
+              if (task.isRepeat && task.scheduledDate && existingSeriesInstance.scheduledDate) {
+                const taskDate = parseISO(task.scheduledDate);
+                const existingDate = parseISO(existingSeriesInstance.scheduledDate);
+                if (isAfter(existingDate, taskDate)) { // current task is earlier
+                  delete unique[existingSeriesInstance.id]; // remove later instance
+                  unique[task.id] = task; // add earlier instance
+                } else {
+                   // existing instance is earlier or same, so keep it and skip current task
+                  return; 
+                }
+              } else if (task.isRepeat) { 
+                // if existing is found, and current is an instance, but date issue, prefer existing by default
+                return; 
               }
-            } else if (task.isRepeat) { 
-              return unique; // prefer existing by default
+              // If current task is base and existing instance found, base was already skipped if instance active
+            } else {
+              unique[task.id] = task; // No existing instance, or current task is preferred
             }
-          } else {
-            unique[task.id] = task; // No existing instance, add this one
+            return; // Handled recurring task
           }
-          return unique;
-        }
-        
-        // For non-recurring tasks
-        unique[task.id] = task;
+          
+          // For non-recurring tasks
+          unique[task.id] = task;
+        });
         return unique;
       }, {});
+
+    const allTasksArray = Object.values(allTasks);
     
     // Now filter for tasks scheduled for this specific date
-    const tasksForDate = Object.values(uniqueTasks).filter(task => {
-      if (!task.scheduledDate) return false;
-      
-      try {
-        const taskDate = new Date(task.scheduledDate);
-        return isSameDay(taskDate, date);
-      } catch (error) {
-        console.error('Error parsing task date:', task.id, error);
-        return false;
-      }
-    }).sort((a, b) => {
-      return a.title.localeCompare(b.title);
-    });
+    const tasksForDate = allTasksArray
+      .filter(task => {
+        if (!task.scheduledDate) return false;
+        
+        try {
+          const taskDate = new Date(task.scheduledDate);
+          return isSameDay(taskDate, date);
+        } catch (error) {
+          console.error('Error parsing task date:', task.id, error);
+          return false;
+        }
+      })
+      .sort((a, b) => a.title.localeCompare(b.title));
     
     console.log(`[AgendaView] Tasks for ${format(date, 'yyyy-MM-dd')}: ${tasksForDate.length}`);
     return tasksForDate;
@@ -275,33 +280,10 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     return tasks;
   }, [filterTasks, currentDate]);
   
-  // Handler for completing a task instance
-  const handleTaskComplete = useCallback((task) => {
-    console.log('[AgendaView] Handling task completion:', JSON.parse(JSON.stringify(task)));
-    
-    if (handleToggleTaskCompletion) {
-      if (task.isRepeat) {
-        // For any recurring instance, pass the full task object.
-        // handleToggleTaskCompletion is now responsible for ensuring it exists or creating it.
-        console.log('[AgendaView] Toggling recurring task instance (passing full object):', task.id);
-        handleToggleTaskCompletion(task, 'single');
-      } else {
-        // For regular, non-recurring tasks, passing the ID is fine.
-        console.log('[AgendaView] Toggling regular task with ID:', task.id);
-        handleToggleTaskCompletion(task.id, 'single');
-      }
-    }
-
-    // If the parent component has its own onTaskComplete, call it.
-    // This is usually for UI updates or other side effects in the parent.
-    if (onTaskComplete) {
-      onTaskComplete(task.id); // Parent might only need the ID.
-    }
-    
-    // Force a re-render to update the UI immediately after initiating the toggle.
-    // The actual data update will happen asynchronously via localStorage and events.
+  // Force a re-render when tasks change to update the UI
+  const forceRefresh = useCallback(() => {
     setCurrentDate(prev => new Date(prev.getTime()));
-  }, [onTaskComplete, handleToggleTaskCompletion, setCurrentDate]);
+  }, []);
 
   // Add an effect to refresh tasks when tasks are updated
   useEffect(() => {
@@ -309,23 +291,20 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     const handleStorageChange = (e) => {
       if (e.key === 'tasks') {
         console.log('[AgendaView] Tasks updated in localStorage, refreshing view');
-        // Force a re-render by updating the current date
-        setCurrentDate(prev => new Date(prev.getTime()));
+        forceRefresh();
       }
     };
     
     // Listen for custom task update events (for in-app updates)
     const handleTasksUpdated = (event) => {
       console.log('[AgendaView] Received tasksUpdated event');
-      // Force a re-render by updating the current date
-      setCurrentDate(prev => new Date(prev.getTime()));
+      forceRefresh();
     };
     
     // Listen for tags-updated events to refresh task data when tag names change
     const handleTagsUpdated = (event) => {
       console.log('[AgendaView] Received tags-updated event');
-      // Force a re-render by updating the current date to refresh task data
-      setCurrentDate(prev => new Date(prev.getTime()));
+      forceRefresh();
     };
     
     // Add event listeners
@@ -343,22 +322,22 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
       window.removeEventListener('tags-updated', handleTagsUpdated);
       window.removeEventListener('tasks-updated', handleTasksUpdated);
     };
-  }, []);
+  }, [forceRefresh]);
   
   // Add a function to handle task deletion
-  const handleTaskDelete = useCallback((taskId, scope = 'single') => {
-    console.log(`[AgendaView] Deleting task ${taskId} with scope: ${scope}`);
+  const handleTaskDelete = useCallback((taskId) => {
+    console.log(`[AgendaView] Deleting task ${taskId}`);
     
     if (onTaskDelete) {
-      onTaskDelete(taskId, scope);
+      onTaskDelete(taskId);
     }
     
     // Force a refresh after deletion
-    setCurrentDate(prev => new Date(prev.getTime()));
-  }, [onTaskDelete]);
+    forceRefresh();
+  }, [onTaskDelete, forceRefresh]);
   
-  // Note: ensureActiveRecurringInstances is now handled automatically by useTaskManagement
-  // No need to call it manually from components to avoid race conditions and duplicates
+  // Note: Task instance generation is handled automatically by useTaskManagement
+  // AgendaView delegates to the task management system for all recurring task logic
 
   // Determine if we need to show the selector
   const showSelector = filteredEvents.length > 0 && filteredTasks.length > 0;
@@ -550,44 +529,13 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                         tag: task.tag || null  // Ensure tag is always passed
                       }}
                       hideScheduledDate={true}  // Hide scheduled date in AgendaView
-                      onComplete={() => handleTaskComplete(task)}
+                      onComplete={handleToggleTaskCompletion}
                       checked={task.completed}
-                      onDelete={(id) => handleTaskDelete(id, 'single')}
+                      onDelete={handleTaskDelete}
                       onDoubleClickEdit={(task) => {
-                        // If this is a recurring task instance, we need to find and edit the base task
-                        if (task.isRepeat && task.seriesId) {
-                          // Use same approach as Sidebar - get the base task
-                          try {
-                            const savedTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-                            // Find base task (task with seriesId that isn't an instance)
-                            let baseTask = null;
-                            
-                            // Look through all collections
-                            Object.values(savedTasks)
-                              .filter(Array.isArray)
-                              .forEach(collection => {
-                                const found = collection.find(t => 
-                                  t.seriesId === task.seriesId && !t.isRepeat
-                                );
-                                if (found && !baseTask) baseTask = found;
-                              });
-                            
-                            if (baseTask) {
-                              // Edit the base task instead
-                              onTaskEdit(baseTask);
-                            } else {
-                              // Fallback to editing the instance
-                              onTaskEdit(task);
-                            }
-                          } catch (e) {
-                            console.error('Error finding base task:', e);
-                            // Fallback to editing the instance
-                            onTaskEdit(task);
-                          }
-                        } else {
-                          // Regular task, edit normally
-                          onTaskEdit(task);
-                        }
+                        // Let the parent component handle the edit logic
+                        // It will determine if it's a recurring task and handle accordingly
+                        onTaskEdit(task);
                       }}
                       isSelected={commandBarSelectedTasks.has(task.id)}
                       onSelect={(taskId, e, isSelected) => {
