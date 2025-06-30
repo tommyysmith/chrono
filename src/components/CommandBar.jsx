@@ -3738,12 +3738,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onSave={handleSaveRecurrenceRule}
       startDate={(() => {
         const startDate = isAddingEvent ? createLocalDateTime(eventState.date, eventState.startTime) : scheduledDate || new Date();
-        console.log('🐛 [DEBUG] StartDate passed to RecurrenceModal:', {
+        
+        console.log('🔵 CommandBar calculating startDate:', {
           eventStateDate: eventState.date,
           eventStateStartTime: eventState.startTime,
-          calculatedStartDate: startDate,
-          calculatedStartDateISO: startDate.toISOString()
+          calculatedStartDate: startDate.toISOString()
         });
+        
         return startDate;
       })()}
     />

@@ -113,6 +113,13 @@ const generatePreviewParts = (options, startDate) => {
 };
 
 export default function RecurrenceEditor({ value, onChange, startDate }) {
+  // Add a log that will always execute when component renders
+  console.log('🔴 RecurrenceEditor RENDER:', {
+    startDate,
+    startDateISO: startDate instanceof Date ? startDate.toISOString() : startDate,
+    startDateType: typeof startDate
+  });
+
   const [options, setOptions] = useState(() => value || defaultOptions);
   const [previewParts, setPreviewParts] = useState([]); // Add state for parts
   const [endType, setEndType] = useState(() => {
@@ -185,11 +192,10 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
       effectiveDtstart = new Date();
     }
     
-    console.log('🐛 [RECURRENCE-EDITOR] Setting dtstart:', {
+    console.log('🟡 RecurrenceEditor setting dtstart:', {
       originalStartDate: startDate,
       effectiveDtstart: effectiveDtstart,
-      effectiveDtstartISO: effectiveDtstart.toISOString(),
-      type: typeof startDate
+      effectiveDtstartISO: effectiveDtstart.toISOString()
     });
     
     const optionsWithDtstart = {
