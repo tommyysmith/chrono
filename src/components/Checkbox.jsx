@@ -19,16 +19,26 @@ const checkVariants = {
 export default function Checkbox({ checked, onChange }) {
   const handleChange = (e) => {
     e.stopPropagation();
-    console.log('Checkbox clicked, current state:', checked);
+    e.preventDefault();
+    console.log('Checkbox clicked, current state:', checked, 'changing to:', !checked);
     onChange?.();
+  };
+
+  const handleMouseDown = (e) => {
+    e.stopPropagation();
   };
 
   return (
     <button
       onClick={handleChange}
-      className={`relative w-[14px] h-[14px] rounded-[5px] bg-light-bg dark:bg-dark-bg-lighter border flex items-center justify-center group ${
-        checked ? 'bg-primary dark:bg-primary border-primary' : 'border border-black/25 dark:border-white/20'
+      onMouseDown={handleMouseDown}
+      className={`relative w-[14px] h-[14px] rounded-[5px] bg-light-bg dark:bg-dark-bg-lighter border flex items-center justify-center group transition-colors duration-150 ${
+        checked ? 'bg-primary dark:bg-primary border-primary' : 'border border-black/25 dark:border-white/20 hover:border-primary/50'
       }`}
+      type="button"
+      aria-checked={checked}
+      role="checkbox"
+      tabIndex={0}
     >
       {/* Animated Checkmark (visible when checked) */}
       <svg

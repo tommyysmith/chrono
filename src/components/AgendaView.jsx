@@ -523,7 +523,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                   
                   return (
                     <TaskItem 
-                      key={task.id} 
+                      key={`agenda-${task.id}`} 
                       task={{
                         ...task,
                         tag: task.tag || null  // Ensure tag is always passed

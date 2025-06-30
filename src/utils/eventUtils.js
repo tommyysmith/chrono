@@ -57,16 +57,91 @@ export const findOverlappingGroup = (targetEvent, allEvents) => {
 };
 
 export const getEventStyle = (event, overlappingEvents = [], viewType) => {
-  const manipulatedEventId = "cb79391d-c1de-4a47-b6ca-cad9a3b524c5"; // Temporary ID for debugging
+  // For task blocks, return minimal styles to let Tailwind classes handle styling
+  if (event.isTaskBlock) {
+    const style = {
+      position: "absolute",
+      zIndex: 10,
+      overflow: "hidden",
+      cursor: "pointer",
+    };
 
-  // Log times specifically for the manipulated event ID
-  if (event.id === manipulatedEventId) {
-    console.log(`[getEventStyle] Received times for manipulated event (${event.id}):`, {
-      start: event.start,
-      end: event.end,
-    });
+    // Only add positioning and sizing, no colors or other styling
+    if (event.isAllDay) {
+      style.top = "8px";
+    } else {
+      if (event.start) {
+        const minutes = event.start.getHours() * 60 + event.start.getMinutes();
+        style.top = `${minutes * (80 / 60)}px`;
+      }
+
+      if (event.end) {
+        const startMinutes = event.start.getHours() * 60 + event.start.getMinutes();
+        const endMinutes = event.end.getHours() * 60 + event.end.getMinutes();
+        const calculatedHeight = (endMinutes - startMinutes) * (80 / 60);
+        const minHeight = 15;
+        style.height = `${Math.max(calculatedHeight - 2, minHeight - 2)}px`;
+      }
+    }
+
+    // Add positioning for week/day views
+    if (viewType === ViewType.WEEK) {
+      const startDayIndex = event.start.getDay();
+      const baseLeft = startDayIndex * (100 / 7);
+      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
+
+      if (overlappingInTime.length > 0) {
+        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
+          const startDiff = a.start.getTime() - b.start.getTime();
+          if (startDiff !== 0) return startDiff;
+          const aDuration = a.end.getTime() - a.start.getTime();
+          const bDuration = b.end.getTime() - b.start.getTime();
+          if (aDuration !== bDuration) return bDuration - aDuration;
+          return (a.id || "").localeCompare(b.id || "");
+        });
+
+        const eventIndex = sortedEvents.findIndex((e) => e.id === event.id);
+        const totalEvents = overlappingInTime.length + 1;
+        const columnWidth = 100 / 7;
+        const eventWidth = (columnWidth * 0.95) / totalEvents;
+        const offset = eventWidth * eventIndex + columnWidth * 0.025;
+
+        style.width = `calc(${eventWidth}% - 8px)`;
+        style.left = `${baseLeft + offset}%`;
+      } else {
+        style.width = `calc(${100 / 7}% - 20px)`;
+        style.left = `calc(${baseLeft}% + 2px)`;
+      }
+    } else {
+      const overlappingInTime = findOverlappingGroup(event, overlappingEvents);
+
+      if (overlappingInTime.length > 0) {
+        const sortedEvents = [event, ...overlappingInTime].sort((a, b) => {
+          const startDiff = a.start.getTime() - b.start.getTime();
+          if (startDiff !== 0) return startDiff;
+          const aDuration = a.end.getTime() - a.start.getTime();
+          const bDuration = b.end.getTime() - b.start.getTime();
+          if (aDuration !== bDuration) return bDuration - aDuration;
+          return (a.id || "").localeCompare(b.id || "");
+        });
+
+        const eventIndex = sortedEvents.findIndex((e) => e.id === event.id);
+        const totalEvents = overlappingInTime.length + 1;
+        const eventWidth = 95 / totalEvents;
+        const offset = eventWidth * eventIndex + 2.5;
+
+        style.width = `calc(${eventWidth}% - 16px)`;
+        style.left = `${offset}%`;
+      } else {
+        style.width = "calc(95% - 16px)";
+        style.left = "2.5%";
+      }
+    }
+
+    return style;
   }
 
+  // Regular event styling
   const style = {
     position: "absolute",
     zIndex: 10,
@@ -78,8 +153,8 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
     cursor: "pointer",
   };
 
-  // Only apply backgroundColor for events, not tasks
-  if (!event.isTask) {
+  // Only apply backgroundColor for events, not tasks or task blocks
+  if (!event.isTask && !event.isTaskBlock) {
     style.backgroundColor = event.color ? `${event.color}20` : "#80808020";
   }
 
@@ -89,9 +164,9 @@ export const getEventStyle = (event, overlappingEvents = [], viewType) => {
     style.opacity = 0.3;
     style.backgroundColor = event.color ? `${event.color}10` : "#80808010";
   } else {
-    // Add lower opacity for past events (only for non-draft events)
+    // Add lower opacity for past events (only for non-draft events, excluding task blocks)
     const now = new Date();
-    if (event.end < now) {
+    if (event.end < now && !event.isTaskBlock) {
       style.opacity = 0.5;
     }
   }

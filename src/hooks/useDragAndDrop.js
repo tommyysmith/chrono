@@ -235,13 +235,26 @@ export function useDragAndDrop({
               startDiff: finalDraggedEvent.start.getTime() - dragStartOriginalEvent.start.getTime(),
               endDiff: finalDraggedEvent.end.getTime() - dragStartOriginalEvent.end.getTime()
             };
-            handleUpdateEvent({ 
+            
+            // Task block drag operations are now handled by @dnd-kit in Calendar.jsx
+            // This manual drag logic is only for regular events
+            
+            // Add timestamp for recent drag tracking
+            const eventWithTimestamp = {
               ...finalDraggedEvent,
+              lastDragTime: Date.now(),
               _editScope: 'single', 
               _timeChange: nonRepeatedTimeChange, 
-              _isDragging: true,
+              _isDragging: false, // Drag is complete
               _isResizing: false,
-            });
+            };
+            
+            // Update the event in state first
+            setEvents(prev => prev.map(e => 
+              e.id === finalDraggedEvent.id ? eventWithTimestamp : e
+            ));
+            
+            handleUpdateEvent(eventWithTimestamp);
           }
         }
 
@@ -650,9 +663,56 @@ export function useDragAndDrop({
                 isEditOperation: false,
               });
             } else {
+                              // Check if this is a task block and update the original task
+                if (resizedEvent.isTaskBlock && resizedEvent.originalTask) {
+                  const handleTaskUpdate = (updatedTask) => {
+                    // Update task in localStorage
+                    const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+                    
+                    // Update in all collections
+                    Object.keys(tasks).forEach(groupKey => {
+                      if (Array.isArray(tasks[groupKey])) {
+                        tasks[groupKey] = tasks[groupKey].map(t => 
+                          t.id === updatedTask.id ? updatedTask : t
+                        );
+                      }
+                    });
+                    
+                    // Save back to localStorage
+                    localStorage.setItem('tasks', JSON.stringify(tasks));
+                    
+                    // Dispatch events for UI updates - ensure both event types are dispatched
+                    window.dispatchEvent(new CustomEvent('tasks-updated', { detail: tasks }));
+                    window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: { tasks } }));
+                    window.dispatchEvent(new StorageEvent('storage', {
+                      key: 'tasks',
+                      newValue: JSON.stringify(tasks),
+                      url: window.location.href
+                    }));
+                  };
+                  
+                  // Update the original task with new scheduled date and duration
+                  const durationMinutes = Math.round((resizedEvent.end.getTime() - resizedEvent.start.getTime()) / (1000 * 60));
+                  const updatedTask = {
+                    ...resizedEvent.originalTask,
+                    scheduledDate: resizedEvent.start.toISOString(),
+                    duration: durationMinutes, // Update duration on resize
+                    addToCalendar: true,
+                    updatedAt: new Date().toISOString()
+                  };
+                  
+                  // Handle recurring tasks
+                  if (updatedTask.isRepeat === true && updatedTask.seriesId) {
+                    updatedTask._editScope = 'single';
+                  }
+                  
+                  handleTaskUpdate(updatedTask);
+                }
+              
               // For non-repeated events, update directly
-              handleUpdateEvent({
+              const eventWithTimestamp = {
                 ...resizedEvent,
+                lastDragTime: Date.now(), // Add timestamp for recent resize tracking
                 _exactPosition: {
                   start: new Date(resizedEvent.start.getTime()),
                   end: new Date(resizedEvent.end.getTime())
@@ -668,10 +728,17 @@ export function useDragAndDrop({
                 _updateSeries: true,
                 // Flag for the type of operation
                 _isDragging: false,
-                _isResizing: true,
+                _isResizing: false, // Resize is complete
                 // Add the preserveRepeat flag to fix error
                 _preserveRepeat: true
-              });
+              };
+              
+              // Update the event in state first
+              setEvents(prev => prev.map(e => 
+                e.id === resizedEvent.id ? eventWithTimestamp : e
+              ));
+              
+              handleUpdateEvent(eventWithTimestamp);
             }
           }
         }
@@ -690,12 +757,12 @@ export function useDragAndDrop({
         resizedEventRef.current = null;
         originalEventRef.current = null;
 
-        window.removeEventListener("mousemove", handleMove);
-        window.removeEventListener("mouseup", handleUp);
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
       };
 
-      window.addEventListener("mousemove", handleMove);
-      window.addEventListener("mouseup", handleUp);
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
     },
     [events, setEvents, setRepeatEditModalState, handleUpdateEvent, currentDate]
   );

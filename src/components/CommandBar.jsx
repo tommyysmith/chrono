@@ -392,7 +392,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   // Don't automatically save tags to localStorage
   // Tags will be saved when a task is created or updated
   const [taskNotes, setTaskNotes] = useState('');
-  const [addToCalendar, setAddToCalendar] = useState(false);
   const [originalEventState, setOriginalEventState] = useState(null);
   const [eventState, setEventState] = useState({
     title: '',
@@ -971,7 +970,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setSelectedTag(null);
     setPendingNewTag(null);
     setDraftTag(null);
-    setAddToCalendar(false);
     setTagSearchText('');
     setIsTagDropdownOpen(false);
     setIsRepeatDropdownOpen(false); // Reset repeat dropdown state
@@ -1277,7 +1275,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setSelectedTag(task.tag || null);
     setDraftTag(task.tag || null);
     setTaskPriority(task.priority || 'Medium');
-    setAddToCalendar(task.addToCalendar || false);
     setTagSearchText(''); // Don't set the tag search text when editing
     
     // CRITICAL FIX: For recurring tasks, don't set scheduledDate in UI
@@ -1440,7 +1437,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null);
       setTaskPriority('None'); // Reset priority to default
-      setAddToCalendar(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
       
@@ -1649,7 +1645,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       });
       
       // Generate a series ID for recurring tasks if needed
-      // Preserve existing seriesId if task was already recurring, even if addToCalendar is false
+      // Preserve existing seriesId if task was already recurring
       const seriesId = taskRepeatOption !== 'none' 
         ? (taskRepeatSeriesId || `series_${Date.now().toString()}`)
         : (taskToEdit && taskToEdit.seriesId && !repeatChanged ? taskToEdit.seriesId : null);
@@ -1665,8 +1661,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             notes: taskNotes.trim(),
             tag: finalTag,
             priority: taskPriority,
-            scheduledDate: scheduledDate?.toISOString(),
-            addToCalendar
+            scheduledDate: scheduledDate?.toISOString()
           });
           
           // Update the existing task instance with the edited data
@@ -1680,7 +1675,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             priority: taskPriority || taskToEdit.priority,
             scheduledDate: scheduledDate?.toISOString() || taskToEdit.scheduledDate,
             updatedAt: new Date().toISOString(),
-            addToCalendar: addToCalendar,
             // Keep the task as part of the series
             isRepeat: taskToEdit.isRepeat,
             seriesId: taskToEdit.seriesId,
@@ -1711,7 +1705,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           setTaskRepeatSeriesId(null);
           setTaskRruleOptions(null);
           setTaskPriority('Medium');
-          setAddToCalendar(false);
           setIsAddingTask(false);
           setEditingTaskId(null);
           setTaskToEdit(null);
@@ -1737,7 +1730,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             isRepeat: taskToEdit.isRepeat,
             // Explicitly preserve originalBaseId for recurring task instances
             originalBaseId: taskToEdit.originalBaseId,
-            addToCalendar: addToCalendar,
             // Pass through scope information for series-wide updates
             _editScope: taskToEdit._editScope,
             _updateSeries: taskToEdit._updateSeries
@@ -1831,7 +1823,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             setTaskRepeatSeriesId(null);
             setTaskRruleOptions(null);
             setTaskPriority('Medium');
-            setAddToCalendar(false);
             setIsAddingTask(false);
             setEditingTaskId(null);
             setTaskToEdit(null);
@@ -1867,8 +1858,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           repeat: taskRepeatOption !== 'none' ? taskRepeatOption : 'none',
           rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : null,
           seriesId: seriesId,
-          isRepeat: false, // Base task is never a repeat instance
-          addToCalendar: addToCalendar
+          isRepeat: false // Base task is never a repeat instance
         };
         
         // For recurring tasks, preserve the user's scheduled date for startDateOfSeries calculation
@@ -1901,7 +1891,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setTaskRepeatSeriesId(null);
       setTaskRruleOptions(null); // Reset task custom rule state
       setTaskPriority('Medium'); // Reset priority to default
-      setAddToCalendar(false);
       setIsAddingTask(false);
       setEditingTaskId(null);
       setTaskToEdit(null);
@@ -1910,7 +1899,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       console.error('Error saving task:', error);
       // You might want to show an error message to the user here
     }
-  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated, addToCalendar]);
+  }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
   const handleKeyDown = useCallback((e) => {
     // Don't trigger shortcuts if user is typing in an input field
@@ -2936,20 +2925,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                     </div>
                                   </PopoverContent>
                                 </Popover>
-                              </div>                              <div className="flex items-center gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
-
-                                <div className="flex flex-grow justify-end items-center gap-2">
-                                  <label className="relative inline-flex items-center cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={addToCalendar}
-                                      onChange={(e) => setAddToCalendar(e.target.checked)}
-                                    />
-                                    <div className="w-7 h-4 bg-light-text/30 dark:bg-dark-text/50 peer-checked:bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:shadow-sm after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-500"></div>
-                                  </label>
-                                  <span className="text-xs text-light-text/50 dark:text-dark-text/50">Add to calendar</span>
-                                </div>
                               </div>
                 
                       </div>

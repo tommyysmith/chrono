@@ -733,11 +733,20 @@ export function useTaskManagement() {
           
           // Save and dispatch events
           localStorage.setItem("tasks", JSON.stringify(tasks));
+          
+          // Dispatch both event types that components listen to
           window.dispatchEvent(new StorageEvent('storage', {
             key: 'tasks',
             newValue: JSON.stringify(tasks),
             url: window.location.href
           }));
+          
+          // Dispatch the tasks-updated event that Sidebar listens to
+          window.dispatchEvent(new CustomEvent('tasks-updated', {
+            detail: tasks
+          }));
+          
+          // Dispatch the tasksUpdated event for compatibility
           window.dispatchEvent(new CustomEvent('tasksUpdated', {
             detail: { tasks: tasks }
           }));
@@ -995,11 +1004,20 @@ export function useTaskManagement() {
           
           // Save and dispatch events
           localStorage.setItem("tasks", JSON.stringify(tasks));
+          
+          // Dispatch both event types that components listen to
           window.dispatchEvent(new StorageEvent('storage', {
             key: 'tasks',
             newValue: JSON.stringify(tasks),
             url: window.location.href
           }));
+          
+          // Dispatch the tasks-updated event that Sidebar listens to
+          window.dispatchEvent(new CustomEvent('tasks-updated', {
+            detail: tasks
+          }));
+          
+          // Dispatch the tasksUpdated event for compatibility
           window.dispatchEvent(new CustomEvent('tasksUpdated', {
             detail: { tasks: tasks }
           }));
@@ -1139,11 +1157,20 @@ export function useTaskManagement() {
         
         // Save and dispatch events
         localStorage.setItem("tasks", JSON.stringify(tasks));
+        
+        // Dispatch both event types that components listen to
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'tasks',
           newValue: JSON.stringify(tasks),
           url: window.location.href
         }));
+        
+        // Dispatch the tasks-updated event that Sidebar listens to
+        window.dispatchEvent(new CustomEvent('tasks-updated', {
+          detail: tasks
+        }));
+        
+        // Dispatch the tasksUpdated event for compatibility
         window.dispatchEvent(new CustomEvent('tasksUpdated', {
           detail: { tasks: tasks }
         }));
@@ -1489,12 +1516,19 @@ export function useTaskManagement() {
       console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Saved tasks to localStorage');
       console.log('🔥 CHRONO_DEBUG_SERIES [FINAL SAVE] Final saved tasks.all count:', tasks.all.length);
       
-      // Dispatch events to ensure UI updates
+      // Dispatch both event types that components listen to
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'tasks',
         newValue: JSON.stringify(tasks),
         url: window.location.href
       }));
+      
+      // Dispatch the tasks-updated event that Sidebar listens to
+      window.dispatchEvent(new CustomEvent('tasks-updated', {
+        detail: tasks
+      }));
+      
+      // Dispatch the tasksUpdated event for compatibility
       window.dispatchEvent(new CustomEvent('tasksUpdated', {
         detail: { tasks: tasks } // Send the fully updated tasks object
       }));
@@ -1665,13 +1699,19 @@ export function useTaskManagement() {
       // Save to localStorage
       localStorage.setItem("tasks", JSON.stringify(tasks));
       
-      // Dispatch events
+      // Dispatch both event types that components listen to
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'tasks',
         newValue: JSON.stringify(tasks),
         url: window.location.href
       }));
       
+      // Dispatch the tasks-updated event that Sidebar listens to
+      window.dispatchEvent(new CustomEvent('tasks-updated', {
+        detail: tasks
+      }));
+      
+      // Dispatch the tasksUpdated event for compatibility
       window.dispatchEvent(new CustomEvent('tasksUpdated', {
         detail: { tasks: tasks }
       }));
@@ -1782,11 +1822,20 @@ export function useTaskManagement() {
     if (updated) {
 
       localStorage.setItem("tasks", JSON.stringify(tasks));
+      
+      // Dispatch both event types that components listen to
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'tasks',
         newValue: JSON.stringify(tasks),
         url: window.location.href
       }));
+      
+      // Dispatch the tasks-updated event that Sidebar listens to
+      window.dispatchEvent(new CustomEvent('tasks-updated', {
+        detail: tasks
+      }));
+      
+      // Dispatch the tasksUpdated event for compatibility
       window.dispatchEvent(new CustomEvent('tasksUpdated', {
         detail: { tasks: tasks }
       }));

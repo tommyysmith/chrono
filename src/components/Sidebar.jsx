@@ -366,9 +366,11 @@ export default function Sidebar({
   // Listen for tasks-updated event from CommandBar and tasksUpdated from useTaskManagement
   useEffect(() => {
     const handleTasksUpdated = (event) => {
+      console.log('📋 [SIDEBAR-DEBUG] Received task update event:', event.type, event.detail);
       // Update tasks state when event is received
       // Handle both event.detail and event.detail.tasks formats
       const newTasks = event.detail.tasks || event.detail;
+      console.log('📋 [SIDEBAR-DEBUG] Setting new tasks:', newTasks);
       setTasks(newTasks);
     };
 

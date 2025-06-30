@@ -1,5 +1,6 @@
 import { format, isSameDay } from "date-fns";
 import { useEffect } from "react";
+import { useDroppable } from '@dnd-kit/core';
 import TimeIndicator from "./TimeIndicator";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -24,7 +25,17 @@ export default function Day({
   timeGridRef,
   commandBarRef,
   setEvents,
+  taskDropPreview,
 }) {
+  // Setup droppable for @dnd-kit
+  const { setNodeRef, isOver } = useDroppable({
+    id: 'day-calendar-grid',
+    data: {
+      type: 'calendar',
+      viewType: 'day'
+    }
+  });
+
   // Auto-scroll to current time position on mount and date change
   useEffect(() => {
     if (timeGridRef.current) {
@@ -122,6 +133,8 @@ export default function Day({
               </div>
             </div>
 
+
+
             {/* Events layer */}
             <div className="relative h-full">
               {/* Drag overlays */}
@@ -141,10 +154,24 @@ export default function Day({
                   }}
                 />
               )}
+
+              {/* Task drop preview */}
+              {taskDropPreview && (
+                <div
+                  className="absolute pointer-events-none z-20 bg-primary/20 rounded"
+                  style={{
+                    left: "0%",
+                    width: "100%",
+                    top: `${taskDropPreview.start.getHours() * 80 + taskDropPreview.start.getMinutes() * (80/60)}px`,
+                    height: `${((taskDropPreview.end.getTime() - taskDropPreview.start.getTime()) / (1000 * 60)) * (80/60)}px`,
+                  }}
+                />
+              )}
             </div>
 
-            {/* Interaction layer */}
+            {/* Interaction layer - now also a drop zone */}
             <div
+              ref={setNodeRef}
               onDoubleClick={(e) => {
                 const container = e.currentTarget.closest(".calendar-grid");
                 if (!container) return;
@@ -199,7 +226,7 @@ export default function Day({
               onClick={(e) => handleCellClick(e, new Date(selectedDate))}
               onDragOver={(e) => handleDragOver(e)}
               onDrop={(e) => handleDrop(e, new Date(selectedDate))}
-              className="absolute inset-0"
+              className={`absolute inset-0 ${isOver ? 'z-30' : ''}`}
             />
           </div>
         </div>
