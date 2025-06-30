@@ -105,10 +105,7 @@ const RepeatEditModal = ({
       })
     };
 
-    // Production debugging alert
-    if (process.env.NODE_ENV === 'production' && editScope === 'all') {
-      alert(`MODAL DEBUG: Original=${originalEvent.start.toISOString()} | Dragged=${draggedEvent.start.toISOString()} | Same=${originalEvent.start.toISOString() === draggedEvent.start.toISOString()}`);
-    }
+
 
     console.log('🟡 [REPEAT-EDIT-MODAL] Confirming edit with flags:', {
       id: updatedEvent.id,

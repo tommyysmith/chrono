@@ -825,54 +825,45 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             endChanged: event.end.getTime() !== eventToPush.end.getTime()
           });
         } else {
-          // For other events, apply the manipulated event's TIME to the original event's DATE
-          const originalEventDate = new Date(event.start); // Date component from the original event
+          // For other events, apply the TIME DIFFERENCE (not absolute time) to preserve their original schedule
+          // Calculate the time difference from the manipulated event
+          const originalManipulatedEvent = allEvents.find(e => e.id === manipulatedId);
+          if (!originalManipulatedEvent) {
+            console.error('[CASE ALL] Could not find original manipulated event for comparison');
+            eventToPush = event; // Keep original event unchanged if we can't calculate difference
+          } else {
+            const startTimeDiff = updatedEvent.start.getTime() - originalManipulatedEvent.start.getTime();
+            const endTimeDiff = updatedEvent.end.getTime() - originalManipulatedEvent.end.getTime();
 
-          // Get the target time components from the updated (manipulated) event
-          const targetStartHours = updatedEvent.start.getHours();
-          const targetStartMinutes = updatedEvent.start.getMinutes();
-          const targetStartSeconds = updatedEvent.start.getSeconds();
-          const targetEndHours = updatedEvent.end.getHours();
-          const targetEndMinutes = updatedEvent.end.getMinutes();
-          const targetEndSeconds = updatedEvent.end.getSeconds();
+            // Apply the time difference to this event's original times
+            const newEventStart = new Date(event.start.getTime() + startTimeDiff);
+            const newEventEnd = new Date(event.end.getTime() + endTimeDiff);
 
-          // Construct the new start date/time
-          const newEventStart = new Date(originalEventDate);
-          newEventStart.setHours(targetStartHours, targetStartMinutes, targetStartSeconds, 0);
+            console.log(`[CASE ALL - Other Event ${event.id}] Applying time difference:`, {
+              originalStart: event.start,
+              originalEnd: event.end,
+              startTimeDiff: startTimeDiff / (1000 * 60), // in minutes for readability
+              endTimeDiff: endTimeDiff / (1000 * 60), // in minutes for readability
+              newStart: newEventStart,
+              newEnd: newEventEnd,
+            });
 
-          // Construct the new end date/time
-          const newEventEnd = new Date(originalEventDate);
-          newEventEnd.setHours(targetEndHours, targetEndMinutes, targetEndSeconds, 0);
-
-          // Handle cases where the event might cross midnight
-          if (newEventEnd <= newEventStart) {
-            newEventEnd.setDate(newEventEnd.getDate() + 1);
+            eventToPush = {
+              ...event,
+              title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+              description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+              color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+              isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+              start: newEventStart, // Apply time difference to original start
+              end: newEventEnd,     // Apply time difference to original end
+              seriesId: event.seriesId,
+              isRepeat: true,
+              repeat: originalBaseEvent.repeat,
+              rrule: originalBaseEvent.rrule,
+              // Preserve rruleOptions from original base event or from options if available
+              rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+            };
           }
-
-          console.log(`[CASE ALL - Other Event ${event.id}] Time Construction:`, {
-            originalStart: event.start,
-            originalEnd: event.end,
-            targetStartTime: `${targetStartHours}:${targetStartMinutes}`,
-            targetEndTime: `${targetEndHours}:${targetEndMinutes}`,
-            constructedNewStart: newEventStart,
-            constructedNewEnd: newEventEnd,
-          });
-
-          eventToPush = {
-            ...event,
-            title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
-            description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
-            color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
-            isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-            start: newEventStart, // Apply newly constructed date/time
-            end: newEventEnd,       // Apply newly constructed date/time
-            seriesId: event.seriesId,
-            isRepeat: true,
-            repeat: originalBaseEvent.repeat,
-            rrule: originalBaseEvent.rrule,
-            // Preserve rruleOptions from original base event or from options if available
-            rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-          };
         }
         updatedSeriesEvents.push(eventToPush);
       });
