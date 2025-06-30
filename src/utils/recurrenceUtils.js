@@ -764,72 +764,36 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
       seriesEvents.forEach(event => {
         let eventToPush;
         if (event.id === manipulatedId) {
-          // --- ENHANCED DEBUG FOR PRODUCTION ISSUE ---
-          console.log('[CASE ALL - MANIPULATED EVENT DEBUG] Event ID match found:', {
+          // For the manipulated event, always use the dragged position from updatedEvent
+          // This is the event the user actually moved, so it should be at the new position
+          console.log('[CASE ALL - MANIPULATED EVENT] Using dragged position for manipulated event:', {
             eventId: event.id,
-            manipulatedId,
-            updatedEventStart: updatedEvent.start,
-            updatedEventEnd: updatedEvent.end,
-            updatedEventStartTime: updatedEvent.start?.getTime(),
-            updatedEventEndTime: updatedEvent.end?.getTime(),
-            hasExactPosition: !!updatedEvent._exactPosition,
-            exactPosition: updatedEvent._exactPosition ? {
-              start: updatedEvent._exactPosition.start,
-              end: updatedEvent._exactPosition.end
-            } : null,
-            isDragging: updatedEvent._isDragging,
-            isResizing: updatedEvent._isResizing,
-            preserveExactPosition: updatedEvent._preserveExactPosition
+            originalStart: event.start,
+            originalEnd: event.end,
+            newStart: updatedEvent.start,
+            newEnd: updatedEvent.end
           });
 
-          // Try multiple sources for the correct position, prioritizing exact position metadata
-          let finalStart, finalEnd;
-          
-          if (updatedEvent._preserveExactPosition && updatedEvent._exactPosition) {
-            console.log('[CASE ALL - MANIPULATED] Using _exactPosition due to _preserveExactPosition flag');
-            finalStart = new Date(updatedEvent._exactPosition.start.getTime());
-            finalEnd = new Date(updatedEvent._exactPosition.end.getTime());
-          } else if (updatedEvent._exactPosition && (updatedEvent._isDragging || updatedEvent._isResizing)) {
-            console.log('[CASE ALL - MANIPULATED] Using _exactPosition due to drag/resize flags');
-            finalStart = new Date(updatedEvent._exactPosition.start.getTime());
-            finalEnd = new Date(updatedEvent._exactPosition.end.getTime());
-          } else {
-            console.log('[CASE ALL - MANIPULATED] Using updatedEvent start/end times');
-            finalStart = new Date(updatedEvent.start.getTime());
-            finalEnd = new Date(updatedEvent.end.getTime());
-          }
-
-          // For the manipulated event, use the exact final times from updatedEvent
           eventToPush = {
             ...event,
             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-            start: finalStart,
-            end: finalEnd,
+            start: new Date(updatedEvent.start.getTime()), // Use the dragged position
+            end: new Date(updatedEvent.end.getTime()),     // Use the dragged position
             seriesId: event.seriesId,
             isRepeat: true,
             repeat: event.repeat,
             rrule: originalBaseEvent.rrule,
-            // Preserve rruleOptions from original base event or from options if available
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
-          console.log('[CASE ALL] Processing manipulated event - FINAL RESULT:', {
-            id: event.id, 
-            originalStart: event.start, 
-            originalEnd: event.end,
-            newStart: eventToPush.start, 
-            newEnd: eventToPush.end,
-            startChanged: event.start.getTime() !== eventToPush.start.getTime(),
-            endChanged: event.end.getTime() !== eventToPush.end.getTime()
-          });
         } else {
           // For other events, apply the TIME DIFFERENCE (not absolute time) to preserve their original schedule
-          // Calculate the time difference from the manipulated event
-          const originalManipulatedEvent = allEvents.find(e => e.id === manipulatedId);
+          // Find the original position of the manipulated event within the series
+          const originalManipulatedEvent = seriesEvents.find(e => e.id === manipulatedId);
           if (!originalManipulatedEvent) {
-            console.error('[CASE ALL] Could not find original manipulated event for comparison');
+            console.error('[CASE ALL] Could not find original manipulated event in series for comparison');
             eventToPush = event; // Keep original event unchanged if we can't calculate difference
           } else {
             const startTimeDiff = updatedEvent.start.getTime() - originalManipulatedEvent.start.getTime();
