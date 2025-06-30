@@ -23,5 +23,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/404",
+      "destination": "/not-found"
+    }
   ]
 } 
