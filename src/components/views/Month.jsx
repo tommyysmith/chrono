@@ -181,7 +181,22 @@ export default function Month({
                         />
                       )}
                       <span className="text-gray-500 py-1">
-                        {format(new Date(event.start), "HH:mm")}
+                        {(() => {
+                          const timeStr = format(new Date(event.start), "HH:mm");
+                          // Debug logging for production issues
+                          if (event.repeat === 'custom' || event.rruleOptions) {
+                            console.log('🐛 [MONTH-VIEW] Custom recurring event display:', {
+                              eventId: event.id,
+                              rawStart: event.start,
+                              rawStartType: typeof event.start,
+                              rawStartTime: event.start instanceof Date ? event.start.toISOString() : 'not a date',
+                              formattedTime: timeStr,
+                              repeat: event.repeat,
+                              hasRRuleOptions: !!event.rruleOptions
+                            });
+                          }
+                          return timeStr;
+                        })()}
                       </span>
                       <span className="ml-1 truncate py-1">{event.title || 'New Event'}</span>
                     </div>

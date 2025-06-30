@@ -3736,7 +3736,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onOpenChange={setIsRecurrenceModalOpen}
       initialValue={isAddingEvent ? eventState.rruleOptions : taskRruleOptions}
       onSave={handleSaveRecurrenceRule}
-      startDate={isAddingEvent ? parse(eventState.date, 'yyyy-MM-dd', new Date()) : scheduledDate || new Date()}
+      startDate={isAddingEvent ? createLocalDateTime(eventState.date, eventState.startTime) : scheduledDate || new Date()}
     />
 
     {/* RepeatTaskEditModal for Multi-select */}

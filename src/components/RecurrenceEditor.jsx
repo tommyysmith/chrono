@@ -175,19 +175,22 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
   useEffect(() => {
     if (!onChange) return;
     
-    // Create options with timezone-aware dtstart for the parent
+    // CRITICAL FIX: Use the exact startDate provided, don't create new Date objects
+    // This preserves the original event's exact time and avoids timezone conversion issues
     let effectiveDtstart;
     if (startDate) {
-      if (typeof startDate === 'string') {
-        // Parse string date in local timezone
-        effectiveDtstart = new Date(startDate);
-      } else {
-        // Use the Date object directly
-        effectiveDtstart = new Date(startDate);
-      }
+      // Always use the startDate exactly as provided
+      effectiveDtstart = startDate instanceof Date ? startDate : new Date(startDate);
     } else {
       effectiveDtstart = new Date();
     }
+    
+    console.log('🐛 [RECURRENCE-EDITOR] Setting dtstart:', {
+      originalStartDate: startDate,
+      effectiveDtstart: effectiveDtstart,
+      effectiveDtstartISO: effectiveDtstart.toISOString(),
+      type: typeof startDate
+    });
     
     const optionsWithDtstart = {
       ...options,
