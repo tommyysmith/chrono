@@ -184,25 +184,20 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
     if (ruleOptions.dtstart) ruleOptions.dtstart = new Date(ruleOptions.dtstart);
     if (ruleOptions.until) ruleOptions.until = new Date(ruleOptions.until);
 
-    // ---> Set dtstart appropriately for custom recurrence <---
-    // For custom recurrence patterns, respect the dtstart in rruleOptions if it exists
-    // Only override if there's a specific start time on the event
-    if (!ruleOptions.dtstart && baseEvent.start instanceof Date && !isNaN(baseEvent.start)) {
-        // Only set dtstart if it's not already specified in the custom rule
-        ruleOptions.dtstart = new Date(baseEvent.start); // Use a clean copy
-        console.log(`[generateRecurringEvents] Setting dtstart from baseEvent.start: ${ruleOptions.dtstart.toISOString()}`);
+    // ---> ALWAYS use the baseEvent.start as dtstart for consistency <---
+    // This ensures the event's actual scheduled time is respected
+    if (baseEvent.start instanceof Date && !isNaN(baseEvent.start)) {
+        ruleOptions.dtstart = new Date(baseEvent.start);
+        console.log(`[generateRecurringEvents] Using baseEvent.start as dtstart: ${ruleOptions.dtstart.toISOString()}`);
     } else if (ruleOptions.dtstart) {
-        // Ensure dtstart from rruleOptions is a proper Date object
-        ruleOptions.dtstart = new Date(ruleOptions.dtstart);
+        // Fallback to dtstart from rruleOptions if baseEvent.start is invalid
         console.log(`[generateRecurringEvents] Using dtstart from rruleOptions: ${ruleOptions.dtstart.toISOString()}`);
     } else {
-        console.warn(`[generateRecurringEvents] No valid dtstart found in rruleOptions or baseEvent.start for event ${baseEvent.id}. Using current date as fallback.`);
+        console.warn(`[generateRecurringEvents] No valid dtstart found, using current date as fallback.`);
         ruleOptions.dtstart = new Date(); // Fallback to now, but log warning
     }
 
-    // Create the RRule. The dtstart from ruleOptions should now be correct.
-    // We previously assumed ruleOptions.dtstart was sufficient, but for new custom events,
-    // baseEvent.start dictates the initial time.
+    // Create the RRule with the corrected dtstart
     try {
       rrule = new RRule(ruleOptions);
       console.log('[generateRecurringEvents] RRule created with final dtstart:', rrule.options.dtstart);

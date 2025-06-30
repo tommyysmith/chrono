@@ -185,7 +185,26 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
   }, [options, memoizedDtstart, onChange]);
 
   const handleOptionChange = (key, newValue) => {
-    setOptions(prev => ({ ...prev, [key]: newValue }));
+    setOptions(prev => {
+      const newOpts = { ...prev, [key]: newValue };
+      
+      // If changing frequency to weekly, ensure we have at least one weekday selected
+      if (key === 'freq' && newValue === RRule.WEEKLY) {
+        // If no weekdays are currently selected, default to the day of the week from startDate
+        if (!newOpts.byweekday || newOpts.byweekday.length === 0) {
+          const effectiveStartDate = startDate || new Date();
+          const startDayOfWeek = effectiveStartDate.getDay(); // 0=Sun, 1=Mon, etc.
+          // Convert to RRule weekday format (0=Mon, 6=Sun)
+          const rruleWeekday = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+          newOpts.byweekday = [new Weekday(rruleWeekday)];
+          
+          // Also update selectedWeekdays state
+          setSelectedWeekdays([rruleWeekday]);
+        }
+      }
+      
+      return newOpts;
+    });
   };
 
   const handleEndTypeChange = (newEndType) => {
