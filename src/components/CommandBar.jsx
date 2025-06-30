@@ -324,6 +324,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
   };
 
+  // Helper functions to create timezone-aware dates
+  const createLocalDateTime = useCallback((dateStr, timeStr) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    // Create date in local timezone, not UTC
+    return new Date(year, month - 1, day, hours, minutes);
+  }, []);
+
+  const createLocalDate = useCallback((dateStr, hours = 0, minutes = 0) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    // Create date in local timezone, not UTC
+    return new Date(year, month - 1, day, hours, minutes);
+  }, []);
+
   const [isAddingEvent, setIsAddingEvent] = useState(false);
   const [isAddingTask, setIsAddingTask] = useState(false);
   
@@ -1166,19 +1180,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
   const handleSaveChanges = useCallback(() => {
-    // Helper function to create timezone-aware dates
-    const createLocalDateTime = (dateStr, timeStr) => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      const [hours, minutes] = timeStr.split(':').map(Number);
-      // Create date in local timezone, not UTC
-      return new Date(year, month - 1, day, hours, minutes);
-    };
-
-    const createLocalDate = (dateStr, hours = 0, minutes = 0) => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      // Create date in local timezone, not UTC
-      return new Date(year, month - 1, day, hours, minutes);
-    };
 
     const eventData = {
       id: originalEventState?.id,
@@ -1238,7 +1239,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
 
     handleClose({ skipDelete: true });
-  }, [originalEventState, eventState, onUpdateEvent, onCreateEvent, handleClose]);
+  }, [originalEventState, eventState, onUpdateEvent, onCreateEvent, handleClose, createLocalDateTime, createLocalDate]);
 
   const handleDiscardDraft = useCallback(() => {
     if (originalEventState?.isDraft) {

@@ -113,17 +113,6 @@ const generatePreviewParts = (options, startDate) => {
 };
 
 export default function RecurrenceEditor({ value, onChange, startDate }) {
-  // Add a log that will always execute when component renders
-  console.log('🔴 RecurrenceEditor RENDER:', {
-    startDate,
-    startDateISO: startDate instanceof Date ? startDate.toISOString() : startDate,
-    startDateType: typeof startDate
-  });
-
-  // Add an alert that can't be missed
-  if (startDate) {
-    alert(`RecurrenceEditor received startDate: ${startDate instanceof Date ? startDate.toISOString() : startDate}`);
-  }
 
   const [options, setOptions] = useState(() => value || defaultOptions);
   const [previewParts, setPreviewParts] = useState([]); // Add state for parts
