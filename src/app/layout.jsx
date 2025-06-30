@@ -1,10 +1,9 @@
-"use client";
-
 import { ThemeProvider } from "next-themes";
-import { TauriProvider } from "../components/TauriProvider";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
+// Force dynamic rendering to avoid static generation issues
+export const dynamic = 'force-dynamic';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,27 +15,28 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const metadata = {
+  title: "Chrono - Task & Calendar Management",
+  description: "A modern task and calendar management application",
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-
-      </head>
+      <head />
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-light-bg-light dark:bg-dark-bg`}
       >
-        <TauriProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
-              {children}
-            </div>
-          </ThemeProvider>
-        </TauriProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
+            {children}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );
