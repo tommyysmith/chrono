@@ -108,6 +108,12 @@ export function useDragAndDrop({
             start: new Date(event.start.getTime()),
             end: new Date(event.end.getTime()),
           };
+          
+          // Production debugging for initial drag
+          if (process.env.NODE_ENV === 'production') {
+            alert(`DRAG STARTED: ${event.id} at ${event.start.toISOString()}`);
+          }
+          
           console.log('[DragDebug] handleDragStart dragStartOriginalEvent (set on first move):', JSON.parse(JSON.stringify(dragStartOriginalEvent)));
         }
 
@@ -213,6 +219,10 @@ export function useDragAndDrop({
           // Get the final dragged event from ref
           const finalDraggedEvent = finalDraggedEventRef.current;
           
+          // Use alert for production debugging - this won't be stripped
+          if (process.env.NODE_ENV === 'production') {
+            alert(`DRAG DEBUG: ${finalDraggedEvent ? `Found dragged event: ${finalDraggedEvent.start.toISOString()} -> ${finalDraggedEvent.end.toISOString()}` : 'NO DRAGGED EVENT FOUND!'}`);
+          }
           console.log('[DragDebug] handleUp - Using finalDraggedEvent from ref:', finalDraggedEvent ? {
             id: finalDraggedEvent.id,
             start: finalDraggedEvent.start.toISOString(),
