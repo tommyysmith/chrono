@@ -769,6 +769,41 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
       seriesEvents.forEach(event => {
         let eventToPush;
         if (event.id === manipulatedId) {
+          // --- ENHANCED DEBUG FOR PRODUCTION ISSUE ---
+          console.log('[CASE ALL - MANIPULATED EVENT DEBUG] Event ID match found:', {
+            eventId: event.id,
+            manipulatedId,
+            updatedEventStart: updatedEvent.start,
+            updatedEventEnd: updatedEvent.end,
+            updatedEventStartTime: updatedEvent.start?.getTime(),
+            updatedEventEndTime: updatedEvent.end?.getTime(),
+            hasExactPosition: !!updatedEvent._exactPosition,
+            exactPosition: updatedEvent._exactPosition ? {
+              start: updatedEvent._exactPosition.start,
+              end: updatedEvent._exactPosition.end
+            } : null,
+            isDragging: updatedEvent._isDragging,
+            isResizing: updatedEvent._isResizing,
+            preserveExactPosition: updatedEvent._preserveExactPosition
+          });
+
+          // Try multiple sources for the correct position, prioritizing exact position metadata
+          let finalStart, finalEnd;
+          
+          if (updatedEvent._preserveExactPosition && updatedEvent._exactPosition) {
+            console.log('[CASE ALL - MANIPULATED] Using _exactPosition due to _preserveExactPosition flag');
+            finalStart = new Date(updatedEvent._exactPosition.start.getTime());
+            finalEnd = new Date(updatedEvent._exactPosition.end.getTime());
+          } else if (updatedEvent._exactPosition && (updatedEvent._isDragging || updatedEvent._isResizing)) {
+            console.log('[CASE ALL - MANIPULATED] Using _exactPosition due to drag/resize flags');
+            finalStart = new Date(updatedEvent._exactPosition.start.getTime());
+            finalEnd = new Date(updatedEvent._exactPosition.end.getTime());
+          } else {
+            console.log('[CASE ALL - MANIPULATED] Using updatedEvent start/end times');
+            finalStart = new Date(updatedEvent.start.getTime());
+            finalEnd = new Date(updatedEvent.end.getTime());
+          }
+
           // For the manipulated event, use the exact final times from updatedEvent
           eventToPush = {
             ...event,
@@ -776,8 +811,8 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-            start: new Date(updatedEvent.start.getTime()),
-            end: new Date(updatedEvent.end.getTime()),
+            start: finalStart,
+            end: finalEnd,
             seriesId: event.seriesId,
             isRepeat: true,
             repeat: event.repeat,
@@ -785,7 +820,15 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             // Preserve rruleOptions from original base event or from options if available
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
-          console.log('[CASE ALL] Processing manipulated event:', {id: event.id, newStart: eventToPush.start, newEnd: eventToPush.end});
+          console.log('[CASE ALL] Processing manipulated event - FINAL RESULT:', {
+            id: event.id, 
+            originalStart: event.start, 
+            originalEnd: event.end,
+            newStart: eventToPush.start, 
+            newEnd: eventToPush.end,
+            startChanged: event.start.getTime() !== eventToPush.start.getTime(),
+            endChanged: event.end.getTime() !== eventToPush.end.getTime()
+          });
         } else {
           // For other events, apply the manipulated event's TIME to the original event's DATE
           const originalEventDate = new Date(event.start); // Date component from the original event

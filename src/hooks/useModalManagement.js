@@ -145,7 +145,20 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           _currentDate: new Date()
         };
 
-        console.log('ModalManagement - Updating event:', {
+        console.log('🔵 [MODAL-MANAGEMENT] Received from RepeatEditModal:', {
+          eventId: event.id,
+          scope,
+          eventStart: event.start.toISOString(),
+          eventEnd: event.end.toISOString(),
+          draggedEventStart: draggedEvent ? draggedEvent.start.toISOString() : 'null',
+          draggedEventEnd: draggedEvent ? draggedEvent.end.toISOString() : 'null',
+          originalEventStart: originalEvent ? originalEvent.start.toISOString() : 'null',
+          originalEventEnd: originalEvent ? originalEvent.end.toISOString() : 'null',
+          isDragOrResize,
+          isSingleEventEdit
+        });
+
+        console.log('🔵 [MODAL-MANAGEMENT] Sending to handleUpdateEvent:', {
           id: eventToUpdate.id,
           scope,
           start: eventToUpdate.start.toISOString(),
@@ -157,7 +170,8 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
             end: eventToUpdate._exactPosition.end.toISOString()
           } : null,
           detachedEvent: eventToUpdate._detachedEvent,
-          preserveExactPosition: eventToUpdate._preserveExactPosition
+          preserveExactPosition: eventToUpdate._preserveExactPosition,
+          timeChange: eventToUpdate._timeChange
         });
 
         // Use the handleUpdateEvent function to ensure consistent state updates

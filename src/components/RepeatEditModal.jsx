@@ -23,8 +23,31 @@ const RepeatEditModal = ({
     if (isOpen) {
       setEditScope('single');
       hasSubmitted.current = false;
+      
+      // Debug logging for production issue
+      console.log('🟡 [REPEAT-EDIT-MODAL] Modal opened with props:', {
+        eventId: event?.id,
+        draggedEventId: draggedEvent?.id,
+        originalEventId: originalEvent?.id,
+        eventTimes: event ? {
+          start: event.start.toISOString(),
+          end: event.end.toISOString()
+        } : null,
+        draggedEventTimes: draggedEvent ? {
+          start: draggedEvent.start.toISOString(),
+          end: draggedEvent.end.toISOString()
+        } : null,
+        originalEventTimes: originalEvent ? {
+          start: originalEvent.start.toISOString(),
+          end: originalEvent.end.toISOString()
+        } : null,
+        draggedEventFlags: draggedEvent ? {
+          _isDragging: draggedEvent._isDragging,
+          _isResizing: draggedEvent._isResizing
+        } : null
+      });
     }
-  }, [isOpen]);
+  }, [isOpen, event, draggedEvent, originalEvent]);
 
   // Handle radio button selection
   const handleRadioSelect = (scope) => {
@@ -82,7 +105,7 @@ const RepeatEditModal = ({
       })
     };
 
-    console.log('RepeatEditModal - Confirming edit with flags:', {
+    console.log('🟡 [REPEAT-EDIT-MODAL] Confirming edit with flags:', {
       id: updatedEvent.id,
       isDragging: updatedEvent._isDragging,
       isResizing: updatedEvent._isResizing,
@@ -92,7 +115,17 @@ const RepeatEditModal = ({
       exactPosition: updatedEvent._exactPosition ? {
         start: updatedEvent._exactPosition.start.toISOString(),
         end: updatedEvent._exactPosition.end.toISOString()
-      } : null
+      } : null,
+      preserveExactPosition: updatedEvent._preserveExactPosition,
+      detachedEvent: updatedEvent._detachedEvent,
+      originalEventTimes: {
+        start: originalEvent.start.toISOString(),
+        end: originalEvent.end.toISOString()
+      },
+      draggedEventTimes: {
+        start: draggedEvent.start.toISOString(),
+        end: draggedEvent.end.toISOString()
+      }
     });
 
     // Always update through onEditConfirm to ensure consistent handling

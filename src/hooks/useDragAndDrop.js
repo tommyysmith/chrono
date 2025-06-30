@@ -55,6 +55,7 @@ export function useDragAndDrop({
   const resizedEventRef = useRef(null);
   const wasResizingRef = useRef(false);
   const originalEventRef = useRef(null);
+  const finalDraggedEventRef = useRef(null);
 
   const handleDragStart = useCallback(
     (e, event) => {
@@ -86,8 +87,8 @@ export function useDragAndDrop({
       // Store the original event for potential reversion
       let dragStartOriginalEvent = null;
 
-      // Track the final dragged position
-      let finalDraggedEvent = null;
+      // Reset the dragged event ref
+      finalDraggedEventRef.current = null;
 
       console.log('[DragDebug] handleDragStart event:', JSON.parse(JSON.stringify(event))); // Log initial event
 
@@ -176,14 +177,22 @@ export function useDragAndDrop({
               // --- End Revised Constraint Logic ---
 
               // Store the constrained dragged event details for later use in handleUp
-              finalDraggedEvent = {
+              const draggedEventUpdate = {
                 ...e,
                 start: new Date(finalStartTime.getTime()), // Use final start
                 end: new Date(finalEndTime.getTime()),   // Use final end
               };
-              console.log('[DragDebug] handleMove finalDraggedEvent (being set):', JSON.parse(JSON.stringify(finalDraggedEvent)));
+              
+              // Store in ref for reliable access in handleUp
+              finalDraggedEventRef.current = {
+                ...draggedEventUpdate,
+                start: new Date(draggedEventUpdate.start.getTime()),
+                end: new Date(draggedEventUpdate.end.getTime()),
+              };
+              
+              console.log('[DragDebug] handleMove finalDraggedEvent (stored in ref):', JSON.parse(JSON.stringify(finalDraggedEventRef.current)));
 
-              return finalDraggedEvent; // Update the preview
+              return draggedEventUpdate; // Update the preview
             }
             return e;
           })
@@ -200,6 +209,15 @@ export function useDragAndDrop({
           // Check if this is a repeated event
           const isRepeatedEvent =
             event.seriesId || (event.repeat && event.repeat !== "none");
+          
+          // Get the final dragged event from ref
+          const finalDraggedEvent = finalDraggedEventRef.current;
+          
+          console.log('[DragDebug] handleUp - Using finalDraggedEvent from ref:', finalDraggedEvent ? {
+            id: finalDraggedEvent.id,
+            start: finalDraggedEvent.start.toISOString(),
+            end: finalDraggedEvent.end.toISOString()
+          } : 'null');
 
           if (isRepeatedEvent && finalDraggedEvent) {
             // For repeated events, show the RepeatEditModal
@@ -257,6 +275,9 @@ export function useDragAndDrop({
             handleUpdateEvent(eventWithTimestamp);
           }
         }
+
+        // Clean up the ref
+        finalDraggedEventRef.current = null;
 
         setDragState({
           isResizing: false,
