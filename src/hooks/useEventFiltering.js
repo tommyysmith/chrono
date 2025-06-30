@@ -125,6 +125,11 @@ export const useEventFiltering = () => {
 
   const getTaskEventsForView = useCallback((selectedDate, viewType, currentDefaultColor) => {
     // Get tasks from localStorage and filter for calendar tasks
+    // Check if we're in a browser environment before accessing localStorage
+    if (typeof window === 'undefined') {
+      return []; // Return empty array during SSR
+    }
+    
     const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
     const allTasks = tasks.all || [];
     
