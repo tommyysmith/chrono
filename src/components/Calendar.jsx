@@ -27,6 +27,7 @@ import { TaskDragPreview } from "./TaskItem";
 import { TaskEventDragPreview } from "./TaskEventItem";
 import { EventDragPreview } from "./EventItem";
 import { generateEventId } from "../utils/eventUtils";
+import { generateRecurringEvents } from "../utils/recurrenceUtils";
 import {
   handlePrevious,
   handleNext,
@@ -1044,10 +1045,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         // Generate repeated events if repeat option is set
         let allEvents;
         if (newEvent.repeat && newEvent.repeat !== "none") {
-          const repeatedEvents = generateRepeatedEvents(
-            newEvent,
-            newEvent.repeat
-          );
+          const repeatedEvents = generateRecurringEvents(newEvent);
           allEvents = [...nonRepeatedEvents, ...repeatedEvents];
         } else {
           allEvents = [...nonRepeatedEvents, newEvent];

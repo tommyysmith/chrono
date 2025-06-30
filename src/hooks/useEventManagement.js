@@ -13,11 +13,29 @@ export function useEventManagement(commandBarRef) {
       try {
         const parsedEvents = JSON.parse(savedEvents)
           .filter(event => !event.isDraft) // Filter out draft events on page refresh
-          .map((event) => ({
-            ...event,
-            start: new Date(event.start),
-            end: new Date(event.end),
-          }));
+          .map((event) => {
+            // Parse regular date fields
+            const processedEvent = {
+              ...event,
+              start: new Date(event.start),
+              end: new Date(event.end),
+            };
+
+            // ✅ Fix: Parse rruleOptions dates for custom recurrence patterns
+            if (event.rruleOptions) {
+              processedEvent.rruleOptions = { ...event.rruleOptions };
+              
+              // Convert dtstart and until from strings to Date objects
+              if (event.rruleOptions.dtstart) {
+                processedEvent.rruleOptions.dtstart = new Date(event.rruleOptions.dtstart);
+              }
+              if (event.rruleOptions.until) {
+                processedEvent.rruleOptions.until = new Date(event.rruleOptions.until);
+              }
+            }
+
+            return processedEvent;
+          });
         setEvents(parsedEvents);
       } catch (error) {
         console.error("Error parsing saved events:", error);

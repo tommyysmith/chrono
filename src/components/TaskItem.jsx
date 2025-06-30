@@ -17,6 +17,7 @@ import { Medium } from '../assets/icons/Medium';
 import { High } from '../assets/icons/High';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { RRule, Weekday } from 'rrule'; // ✅ Fix: Move RRule import to top level
 
 
 // Helper function to get the appropriate priority icon
@@ -439,7 +440,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
                 {(() => {
                   if (task.repeat === 'custom' && task.rruleOptions) {
                     try {
-                      const { RRule, Weekday } = require('rrule');
+                      // ✅ Fix: Use top-level import instead of dynamic require
                       const options = {...task.rruleOptions};
                       
                       // Ensure dtstart is a proper Date object

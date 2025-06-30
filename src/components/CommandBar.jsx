@@ -1166,14 +1166,32 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
   const handleSaveChanges = useCallback(() => {
+    // Helper function to create timezone-aware dates
+    const createLocalDateTime = (dateStr, timeStr) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      // Create date in local timezone, not UTC
+      return new Date(year, month - 1, day, hours, minutes);
+    };
+
+    const createLocalDate = (dateStr, hours = 0, minutes = 0) => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      // Create date in local timezone, not UTC
+      return new Date(year, month - 1, day, hours, minutes);
+    };
+
     const eventData = {
       id: originalEventState?.id,
       title: eventState.title.trim(),
       description: eventState.description,
-      start: (eventState.isAllDay || eventState.isMultiDay) ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+      start: (eventState.isAllDay || eventState.isMultiDay) 
+        ? createLocalDate(eventState.date, 0, 0)
+        : createLocalDateTime(eventState.date, eventState.startTime),
       end: eventState.isMultiDay 
-        ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date())
-        : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date())),
+        ? createLocalDate(eventState.endDate, 23, 59)
+        : (eventState.isAllDay 
+          ? createLocalDate(eventState.date, 23, 59)
+          : createLocalDateTime(eventState.date, eventState.endTime)),
       allDay: eventState.isAllDay || eventState.isMultiDay,
       isAllDay: eventState.isAllDay || eventState.isMultiDay,
       isMultiDay: eventState.isMultiDay,
@@ -1191,10 +1209,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       _originalSeriesId: originalEventState?._originalSeriesId || originalEventState?.seriesId,
       _originalEvent: originalEventState?._originalEvent || originalEventState,
       _exactPosition: {
-        start: (eventState.isAllDay || eventState.isMultiDay) ? parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date()),
+        start: (eventState.isAllDay || eventState.isMultiDay) 
+          ? createLocalDate(eventState.date, 0, 0)
+          : createLocalDateTime(eventState.date, eventState.startTime),
         end: eventState.isMultiDay 
-          ? parse(`${eventState.endDate} 23:59`, 'yyyy-MM-dd HH:mm', new Date())
-          : (eventState.isAllDay ? parse(`${eventState.date} 23:59`, 'yyyy-MM-dd HH:mm', new Date()) : parse(`${eventState.date} ${eventState.endTime}`, 'yyyy-MM-dd HH:mm', new Date()))
+          ? createLocalDate(eventState.endDate, 23, 59)
+          : (eventState.isAllDay 
+            ? createLocalDate(eventState.date, 23, 59)
+            : createLocalDateTime(eventState.date, eventState.endTime))
       },
       // Preserve repeat properties for series updates
       _preserveRepeat: originalEventState?._preserveRepeat || false,
@@ -1294,8 +1316,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         id: eventId,
         title: '',
         description: '',
-        start: startTime,
-        end: endTime,
+        start: new Date(startTime),
+        end: new Date(endTime),
         allDay: false,
         color: currentDefaultColor,
         repeat: 'none',
@@ -1305,18 +1327,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       const eventState = {
         title: '',
         description: '',
-        date: format(startTime, 'yyyy-MM-dd'),
-        endDate: format(startTime, 'yyyy-MM-dd'), // Initialize end date
-        startTime: format(startTime, 'HH:mm'),
-        endTime: format(endTime, 'HH:mm'),
+        date: format(new Date(startTime), 'yyyy-MM-dd'),
+        endDate: format(new Date(startTime), 'yyyy-MM-dd'), // Initialize end date
+        startTime: format(new Date(startTime), 'HH:mm'),
+        endTime: format(new Date(endTime), 'HH:mm'),
         isAllDay: false,
         isMultiDay: false, // Initialize multi-day flag
         color: currentDefaultColor,
         repeat: 'none',
         seriesId: null,
         rruleOptions: null, // Init rruleOptions for new event
-        _preservedStartTime: format(startTime, 'HH:mm'), // Initialize preserved start time
-        _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
+        _preservedStartTime: format(new Date(startTime), 'HH:mm'), // Initialize preserved start time
+        _preservedEndTime: format(new Date(endTime), 'HH:mm') // Initialize preserved end time
       };
 
       setOriginalEventState(draftEventData);
@@ -1325,9 +1347,17 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setHasChanges(false);
     },
     openWithTime: (date) => {
-      const roundedTimeStr = roundToNearest15Min(format(date, 'HH:mm'));
-      const roundedTime = parse(roundedTimeStr, 'HH:mm', date);
-      const endTime = new Date(roundedTime.getTime() + 60 * 60 * 1000);
+      const inputDate = new Date(date);
+      const roundedTimeStr = roundToNearest15Min(format(inputDate, 'HH:mm'));
+      
+      // Create timezone-aware times
+      const roundedTime = new Date(inputDate);
+      const [hours, minutes] = roundedTimeStr.split(':').map(Number);
+      roundedTime.setHours(hours, minutes, 0, 0);
+      
+      const endTime = new Date(roundedTime);
+      endTime.setHours(hours + 1, minutes, 0, 0);
+      
       const newEventData = {
         title: '',
         description: '',
@@ -1363,12 +1393,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setHasChanges(false);
     },
     openForNewEvent: (date) => {
-      // Create a date object at 9:00 AM for the given date
-      const startTime = new Date(date);
+      // Create timezone-aware date objects
+      const inputDate = new Date(date);
+      const startTime = new Date(inputDate);
       startTime.setHours(9, 0, 0, 0);
       
-      // Create an end time 1 hour later
-      const endTime = new Date(startTime);
+      const endTime = new Date(inputDate);
       endTime.setHours(10, 0, 0, 0);
       
       // Set up the event state without creating an actual event
@@ -2982,9 +3012,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                             className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskRepeatOption === option.id ? 'font-semibold' : ''}`}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              if (option.id === 'custom') {
-                                                setIsRecurrenceModalOpen(true); // Open modal
-                                                setIsTaskRepeatDropdownOpen(false); // Close popover
+                                                                                              if (option.id === 'custom') {
+                                                  setIsRecurrenceModalOpen(true); // Open modal
+                                                  setIsTaskRepeatDropdownOpen(false); // Close popover
                                               } else {
                                                 console.log('🚀 [CHRONO-DEBUG] Task repeat option selected:', {
                                                   selectedOption: option.id,
@@ -3706,11 +3736,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onOpenChange={setIsRecurrenceModalOpen}
       initialValue={isAddingEvent ? eventState.rruleOptions : taskRruleOptions}
       onSave={handleSaveRecurrenceRule}
-      startDate={isAddingEvent ? 
-        (eventState.isAllDay || eventState.isMultiDay) ? 
-          parse(`${eventState.date} 00:00`, 'yyyy-MM-dd HH:mm', new Date()) : 
-          parse(`${eventState.date} ${eventState.startTime}`, 'yyyy-MM-dd HH:mm', new Date())
-        : scheduledDate || new Date()}
+      startDate={(() => {
+        const startDate = isAddingEvent ? 
+          (eventState.isAllDay || eventState.isMultiDay) ? 
+            createLocalDateTime(eventState.date, '00:00') : 
+            createLocalDateTime(eventState.date, eventState.startTime)
+          : scheduledDate || new Date();
+        
+        console.log('🔵 CommandBar calculating startDate:', {
+          eventStateDate: eventState.date,
+          eventStateStartTime: eventState.startTime,
+          isAllDay: eventState.isAllDay,
+          isMultiDay: eventState.isMultiDay,
+          calculatedStartDate: startDate.toISOString()
+        });
+        
+        return startDate;
+      })()}
     />
 
     {/* RepeatTaskEditModal for Multi-select */}

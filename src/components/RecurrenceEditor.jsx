@@ -113,6 +113,18 @@ const generatePreviewParts = (options, startDate) => {
 };
 
 export default function RecurrenceEditor({ value, onChange, startDate }) {
+  // Add a log that will always execute when component renders
+  console.log('🔴 RecurrenceEditor RENDER:', {
+    startDate,
+    startDateISO: startDate instanceof Date ? startDate.toISOString() : startDate,
+    startDateType: typeof startDate
+  });
+
+  // Add an alert that can't be missed
+  if (startDate) {
+    alert(`RecurrenceEditor received startDate: ${startDate instanceof Date ? startDate.toISOString() : startDate}`);
+  }
+
   const [options, setOptions] = useState(() => value || defaultOptions);
   const [previewParts, setPreviewParts] = useState([]); // Add state for parts
   const [endType, setEndType] = useState(() => {
@@ -175,17 +187,63 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
   useEffect(() => {
     if (!onChange) return;
     
-    // Create options with dtstart for the parent
+    // CRITICAL FIX: Use the exact startDate provided, don't create new Date objects
+    // This preserves the original event's exact time and avoids timezone conversion issues
+    let effectiveDtstart;
+    if (startDate) {
+      // Always use the startDate exactly as provided
+      effectiveDtstart = startDate instanceof Date ? startDate : new Date(startDate);
+    } else {
+      effectiveDtstart = new Date();
+    }
+    
+    console.log('🟡 RecurrenceEditor setting dtstart:', {
+      originalStartDate: startDate,
+      effectiveDtstart: effectiveDtstart,
+      effectiveDtstartISO: effectiveDtstart.toISOString()
+    });
+    
     const optionsWithDtstart = {
       ...options,
-      dtstart: memoizedDtstart
+      dtstart: effectiveDtstart
     };
     
     onChange(optionsWithDtstart);
-  }, [options, memoizedDtstart, onChange]);
+  }, [options, startDate, onChange]);
 
   const handleOptionChange = (key, newValue) => {
-    setOptions(prev => ({ ...prev, [key]: newValue }));
+    setOptions(prev => {
+      const newOpts = { ...prev, [key]: newValue };
+      
+      // If changing frequency to weekly, ensure we have at least one weekday selected
+      if (key === 'freq' && newValue === RRule.WEEKLY) {
+        // If no weekdays are currently selected, default to the day of the week from startDate
+        if (!newOpts.byweekday || newOpts.byweekday.length === 0) {
+          // Use the actual startDate provided from the event, ensuring timezone consistency
+          const effectiveStartDate = startDate || new Date();
+          
+          // Create a timezone-aware date to avoid UTC conversion issues
+          let startDayOfWeek;
+          if (typeof effectiveStartDate === 'string') {
+            // If startDate is a string, parse it in local timezone
+            const date = new Date(effectiveStartDate);
+            startDayOfWeek = date.getDay();
+          } else {
+            // If it's already a Date object, use it directly
+            startDayOfWeek = effectiveStartDate.getDay();
+          }
+          
+          // Convert to RRule weekday format (0=Mon, 6=Sun)
+          const rruleWeekday = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+          newOpts.byweekday = [new Weekday(rruleWeekday)];
+          
+          // Also update selectedWeekdays state
+          setSelectedWeekdays([rruleWeekday]);
+        }
+      }
+      
+      return newOpts;
+    });
   };
 
   const handleEndTypeChange = (newEndType) => {
@@ -219,18 +277,39 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
       if (newMode === 'dayOfMonth') {
         delete newOpts.bysetpos;
         delete newOpts.byweekday; // Clear weekday settings for monthly
-        if (!newOpts.bymonthday) newOpts.bymonthday = (startDate || new Date()).getDate(); // Default to start date's day
+        if (!newOpts.bymonthday) {
+          // Use timezone-aware date calculation
+          const effectiveStartDate = startDate || new Date();
+          let dayOfMonth;
+          if (typeof effectiveStartDate === 'string') {
+            // Parse string date in local timezone
+            const date = new Date(effectiveStartDate);
+            dayOfMonth = date.getDate();
+          } else {
+            dayOfMonth = effectiveStartDate.getDate();
+          }
+          newOpts.bymonthday = dayOfMonth;
+        }
       } else { // dayOfWeek mode
         delete newOpts.bymonthday;
         if (!newOpts.bysetpos || !newOpts.byweekday) {
-          // Calculate default: e.g., second Tuesday
-          const start = startDate || new Date();
-          const dayOfMonth = start.getDate();
+          // Calculate default: e.g., second Tuesday - using timezone-aware calculation
+          const effectiveStartDate = startDate || new Date();
+          let dayOfMonth, startDayOfWeek;
+          
+          if (typeof effectiveStartDate === 'string') {
+            const date = new Date(effectiveStartDate);
+            dayOfMonth = date.getDate();
+            startDayOfWeek = date.getDay(); // 0=Sun, 1=Mon...
+          } else {
+            dayOfMonth = effectiveStartDate.getDate();
+            startDayOfWeek = effectiveStartDate.getDay();
+          }
+          
           const weekOfMonth = Math.ceil(dayOfMonth / 7); // Approximation
-          const rruleDay = start.getDay(); // 0=Sun, 1=Mon...
           newOpts.bysetpos = weekOfMonth > 4 ? -1 : weekOfMonth; // Use -1 for last
           // Convert raw day index to Weekday instance
-          newOpts.byweekday = [new Weekday(rruleDay === 0 ? 6 : rruleDay - 1)]; // Convert Sunday(0) to 6, others to n-1
+          newOpts.byweekday = [new Weekday(startDayOfWeek === 0 ? 6 : startDayOfWeek - 1)]; // Convert Sunday(0) to 6, others to n-1
         }
       }
       return newOpts;
