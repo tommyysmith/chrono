@@ -36,11 +36,33 @@ export const useCalendarData = () => {
 
       const defaultViewId = getDefaultViewId();
       eventsData = eventsData.map(event => {
-        if (typeof event.viewId === 'undefined' || event.viewId === null) {
-          migratedEvents = true;
-          return { ...event, viewId: defaultViewId };
+        // Parse all date fields including rruleOptions
+        const processedEvent = {
+          ...event,
+          // Parse regular date fields if they exist
+          ...(event.start && { start: new Date(event.start) }),
+          ...(event.end && { end: new Date(event.end) }),
+        };
+
+        // ✅ Fix: Parse rruleOptions dates for custom recurrence patterns
+        if (event.rruleOptions) {
+          processedEvent.rruleOptions = { ...event.rruleOptions };
+          
+          // Convert dtstart and until from strings to Date objects
+          if (event.rruleOptions.dtstart) {
+            processedEvent.rruleOptions.dtstart = new Date(event.rruleOptions.dtstart);
+          }
+          if (event.rruleOptions.until) {
+            processedEvent.rruleOptions.until = new Date(event.rruleOptions.until);
+          }
         }
-        return event;
+
+        // Handle viewId migration
+        if (typeof processedEvent.viewId === 'undefined' || processedEvent.viewId === null) {
+          migratedEvents = true;
+          return { ...processedEvent, viewId: defaultViewId };
+        }
+        return processedEvent;
       });
 
       if (migratedEvents) {
