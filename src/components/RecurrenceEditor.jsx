@@ -175,14 +175,27 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
   useEffect(() => {
     if (!onChange) return;
     
-    // Create options with dtstart for the parent
+    // Create options with timezone-aware dtstart for the parent
+    let effectiveDtstart;
+    if (startDate) {
+      if (typeof startDate === 'string') {
+        // Parse string date in local timezone
+        effectiveDtstart = new Date(startDate);
+      } else {
+        // Use the Date object directly
+        effectiveDtstart = new Date(startDate);
+      }
+    } else {
+      effectiveDtstart = new Date();
+    }
+    
     const optionsWithDtstart = {
       ...options,
-      dtstart: memoizedDtstart
+      dtstart: effectiveDtstart
     };
     
     onChange(optionsWithDtstart);
-  }, [options, memoizedDtstart, onChange]);
+  }, [options, startDate, onChange]);
 
   const handleOptionChange = (key, newValue) => {
     setOptions(prev => {
@@ -192,8 +205,20 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
       if (key === 'freq' && newValue === RRule.WEEKLY) {
         // If no weekdays are currently selected, default to the day of the week from startDate
         if (!newOpts.byweekday || newOpts.byweekday.length === 0) {
+          // Use the actual startDate provided from the event, ensuring timezone consistency
           const effectiveStartDate = startDate || new Date();
-          const startDayOfWeek = effectiveStartDate.getDay(); // 0=Sun, 1=Mon, etc.
+          
+          // Create a timezone-aware date to avoid UTC conversion issues
+          let startDayOfWeek;
+          if (typeof effectiveStartDate === 'string') {
+            // If startDate is a string, parse it in local timezone
+            const date = new Date(effectiveStartDate);
+            startDayOfWeek = date.getDay();
+          } else {
+            // If it's already a Date object, use it directly
+            startDayOfWeek = effectiveStartDate.getDay();
+          }
+          
           // Convert to RRule weekday format (0=Mon, 6=Sun)
           const rruleWeekday = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
           newOpts.byweekday = [new Weekday(rruleWeekday)];
@@ -238,18 +263,39 @@ export default function RecurrenceEditor({ value, onChange, startDate }) {
       if (newMode === 'dayOfMonth') {
         delete newOpts.bysetpos;
         delete newOpts.byweekday; // Clear weekday settings for monthly
-        if (!newOpts.bymonthday) newOpts.bymonthday = (startDate || new Date()).getDate(); // Default to start date's day
+        if (!newOpts.bymonthday) {
+          // Use timezone-aware date calculation
+          const effectiveStartDate = startDate || new Date();
+          let dayOfMonth;
+          if (typeof effectiveStartDate === 'string') {
+            // Parse string date in local timezone
+            const date = new Date(effectiveStartDate);
+            dayOfMonth = date.getDate();
+          } else {
+            dayOfMonth = effectiveStartDate.getDate();
+          }
+          newOpts.bymonthday = dayOfMonth;
+        }
       } else { // dayOfWeek mode
         delete newOpts.bymonthday;
         if (!newOpts.bysetpos || !newOpts.byweekday) {
-          // Calculate default: e.g., second Tuesday
-          const start = startDate || new Date();
-          const dayOfMonth = start.getDate();
+          // Calculate default: e.g., second Tuesday - using timezone-aware calculation
+          const effectiveStartDate = startDate || new Date();
+          let dayOfMonth, startDayOfWeek;
+          
+          if (typeof effectiveStartDate === 'string') {
+            const date = new Date(effectiveStartDate);
+            dayOfMonth = date.getDate();
+            startDayOfWeek = date.getDay(); // 0=Sun, 1=Mon...
+          } else {
+            dayOfMonth = effectiveStartDate.getDate();
+            startDayOfWeek = effectiveStartDate.getDay();
+          }
+          
           const weekOfMonth = Math.ceil(dayOfMonth / 7); // Approximation
-          const rruleDay = start.getDay(); // 0=Sun, 1=Mon...
           newOpts.bysetpos = weekOfMonth > 4 ? -1 : weekOfMonth; // Use -1 for last
           // Convert raw day index to Weekday instance
-          newOpts.byweekday = [new Weekday(rruleDay === 0 ? 6 : rruleDay - 1)]; // Convert Sunday(0) to 6, others to n-1
+          newOpts.byweekday = [new Weekday(startDayOfWeek === 0 ? 6 : startDayOfWeek - 1)]; // Convert Sunday(0) to 6, others to n-1
         }
       }
       return newOpts;
