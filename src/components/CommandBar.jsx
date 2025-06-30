@@ -3012,9 +3012,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                                             className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${taskRepeatOption === option.id ? 'font-semibold' : ''}`}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              if (option.id === 'custom') {
-                                                setIsRecurrenceModalOpen(true); // Open modal
-                                                setIsTaskRepeatDropdownOpen(false); // Close popover
+                                                                                              if (option.id === 'custom') {
+                                                  setIsRecurrenceModalOpen(true); // Open modal
+                                                  setIsTaskRepeatDropdownOpen(false); // Close popover
                                               } else {
                                                 console.log('🚀 [CHRONO-DEBUG] Task repeat option selected:', {
                                                   selectedOption: option.id,
@@ -3736,7 +3736,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onOpenChange={setIsRecurrenceModalOpen}
       initialValue={isAddingEvent ? eventState.rruleOptions : taskRruleOptions}
       onSave={handleSaveRecurrenceRule}
-      startDate={isAddingEvent ? createLocalDateTime(eventState.date, eventState.startTime) : scheduledDate || new Date()}
+      startDate={(() => {
+        const startDate = isAddingEvent ? createLocalDateTime(eventState.date, eventState.startTime) : scheduledDate || new Date();
+        console.log('🐛 [DEBUG] StartDate passed to RecurrenceModal:', {
+          eventStateDate: eventState.date,
+          eventStateStartTime: eventState.startTime,
+          calculatedStartDate: startDate,
+          calculatedStartDateISO: startDate.toISOString()
+        });
+        return startDate;
+      })()}
     />
 
     {/* RepeatTaskEditModal for Multi-select */}
