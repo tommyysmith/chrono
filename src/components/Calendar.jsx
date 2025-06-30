@@ -400,7 +400,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       
       // Add drag preview styling similar to sidebar drag
       if (event._isPreview || event._isDragging) {
-        style.opacity = 0.8;
+        style.opacity = 0.4;
         style.transform = 'scale(1.02)';
         style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
         style.zIndex = 1000;
@@ -422,7 +422,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     // Add preview styling
     if (event._isPreview || event._isDragging) {
       style.border = '2px dashed #fff';
-      style.opacity = 0.8;
+      style.opacity = 0.4;
       style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
       style.transform = 'scale(1.02)';
       style.zIndex = 1000;
@@ -1243,7 +1243,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   <SidebarIcon className="w-5 h-5 text-light-text dark:text-dark-text" />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom" align="start"><div className="flex flex-row items-center gap-2"><span>{isSidebarVisible ? 'Close sidebar' : 'Open sidebar'}</span> <span className="bg-white/5 flex flex-row items-center justify-center gap-1 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50"><Shift className="w-2.5 h-2.5" /> S </span></div></TooltipContent>
+              <TooltipContent side="bottom" align="start"><div className="flex flex-row items-center gap-2"><span>{isSidebarVisible ? 'Close sidebar' : 'Open sidebar'}</span> <span className="bg-white/5 flex flex-row items-center justify-center gap-1 text-[9px] rounded-[5px] px-1 border border-dark-border text-dark-text/50"><Shift className="w-2.5 h-2.5" /> S </span></div></TooltipContent>
 
              
               </motion.div>
@@ -1617,6 +1617,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           []
         )}
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
+        onOpenSettings={useCallback(() => setIsSettingsOpen(true), [])}
+        isDraggingTask={isDraggingTask}
       />
       {TaskContextMenuPopover && <TaskContextMenuPopover />}
       

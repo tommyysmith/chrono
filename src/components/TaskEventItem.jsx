@@ -44,7 +44,7 @@ const TaskEventItem = ({
 
   const getTaskEventClasses = () => {
     const baseClasses = "absolute z-10 overflow-hidden cursor-pointer select-none event-item";
-    const editingClasses = event.isEditing || dragState.eventId === event.id ? "border-primary" : "";
+    const editingClasses = event.isEditing || dragState.eventId === event.id ? "" : "";
 
     if (event.isTaskBlock) {
       return `${baseClasses} bg-light-bg-light dark:bg-dark-bg-lighter text-light-text dark:text-dark-text border border-dashed border-light-border dark:border-dark-border rounded-[5px] ${editingClasses}`;
@@ -53,7 +53,7 @@ const TaskEventItem = ({
     return `${baseClasses} border-1 border-dashed border-light-border dark:border-dark-border rounded-[5px] bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm ${
       editingClasses
         ? "border-primary bg-gray-100/90 dark:bg-gray-700/90"
-        : "border-gray-300 dark:border-gray-600"
+        : "border-gray-300 dark:border-gray-600"  
     }`;
   };
 
@@ -83,7 +83,7 @@ const TaskEventItem = ({
         <TooltipTrigger asChild>
           <motion.div
             ref={setNodeRef}
-            className={`${getTaskEventClasses()} ${repeatClass} ${isDragging ? 'opacity-50' : ''}`}
+            className={`${getTaskEventClasses()} ${repeatClass} ${isDragging ? 'opacity-30' : ''}`}
             style={{ ...eventStyle, ...dragStyle }}
             onDoubleClick={(e) => {
               e.stopPropagation();

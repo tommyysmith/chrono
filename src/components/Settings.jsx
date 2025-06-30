@@ -1528,6 +1528,19 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
               </div>
             </div>
 
+            {/* Open settings */}
+            <div className="flex items-center justify-between py-3">
+              <span className="text-light-text dark:text-dark-text text-sm">Open settings</span>
+              <div className="flex items-center gap-2">
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  <Shift className="w-3 h-3" />
+                </kbd>
+                <kbd className="h-[24px] w-[24px] bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-md text-xs font-mono text-light-text dark:text-dark-text flex items-center justify-center">
+                  .
+                </kbd>
+              </div>
+            </div>
+
             {/* Agenda view */}
             <div className="flex items-center justify-between py-3">
               <span className="text-light-text dark:text-dark-text text-sm">Agenda view</span>
@@ -1632,6 +1645,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
   return (
     <motion.div 
       className="fixed inset-0 bg-light-bg dark:bg-dark-bg z-50 flex overflow-hidden"
+      data-settings-modal
       variants={settingsVariants}
       initial="hidden"
       animate="visible"

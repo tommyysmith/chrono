@@ -158,7 +158,7 @@ export default function Day({
               {/* Task drop preview */}
               {taskDropPreview && (
                 <div
-                  className="absolute pointer-events-none z-20 bg-primary/20 rounded"
+                  className="absolute pointer-events-none z-20 bg-primary/10 rounded"
                   style={{
                     left: "0%",
                     width: "100%",

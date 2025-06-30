@@ -240,7 +240,7 @@ const TabSelector = ({ activeTab, onTabChange, ...props }) => {
   );
 };
 
-const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onToggleTaskCompletion, onClose, onDateSelect }, ref) => {
+const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onToggleTaskCompletion, onClose, onDateSelect, onOpenSettings, isDraggingTask = false }, ref) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -610,38 +610,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
   }, [isAddingEvent]);
 
-  // Add keyboard shortcuts for date navigation
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      // Only handle arrow keys when no input is focused and no modals are open
-      if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
-        return;
-      }
-      
-      // Check if any dropdowns or modals are open
-      if (isDatePickerOpen || isScheduleOpen || isTagDropdownOpen || isTaskRepeatDropdownOpen || 
-          isPriorityDropdownOpen || isRepeatDropdownOpen || showColorPicker || 
-          isRecurrenceModalOpen || showRepeatEditModal) {
-        return;
-      }
-
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        onPrevious();
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        onNext();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onPrevious, onNext, isDatePickerOpen, isScheduleOpen, isTagDropdownOpen, 
-      isTaskRepeatDropdownOpen, isPriorityDropdownOpen, isRepeatDropdownOpen, 
-      showColorPicker, isRecurrenceModalOpen, showRepeatEditModal]);
+  // Combined keyboard shortcuts handler
 
   const [previewEvent, setPreviewEvent] = useState(null);
 
@@ -1540,16 +1509,10 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
     if (isRepeatDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') {
-          setIsRepeatDropdownOpen(false);
-        }
-      });
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleClickOutside);
     };
   }, [isRepeatDropdownOpen]);
 
@@ -1902,41 +1865,150 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
   const handleKeyDown = useCallback((e) => {
-    // Don't trigger shortcuts if user is typing in an input field
-    if (e.target.tagName === 'INPUT' || 
+    console.log('[CommandBar] Keyboard event received:', e.key, {
+      target: e.target.tagName,
+      isAddingEvent,
+      isAddingTask,
+      isOpen,
+      selectedTasksSize: selectedTasks.size
+    });
+
+    // Check if user is typing in an input field
+    const isTypingInInput = e.target.tagName === 'INPUT' || 
         e.target.tagName === 'TEXTAREA' || 
         e.target.isContentEditable ||
-        e.target.closest('[contenteditable]')) {
+        e.target.closest('[contenteditable]');
+
+    // Check if the input field is part of the CommandBar
+    const isCommandBarInput = e.target.closest('[data-command-bar]');
+
+    // Don't trigger shortcuts if user is typing in an input field OUTSIDE the CommandBar
+    // ESC and Enter will be handled by their specific logic above
+    if (isTypingInInput && !isCommandBarInput && e.key !== 'Escape' && e.key !== 'Enter') {
+      console.log('[CommandBar] Ignoring keyboard event - user is typing in input field outside CommandBar');
       return;
     }
 
-    if (e.key === 'Escape') {
-      // Handle escape key - first check if we're in multi-select mode
-      if (isMultiSelectMode && selectedTasks.size > 0) {
-        handleClearSelection();
-      } else if (originalEventState?.isDraft) {
-        handleDiscardDraft();
-      } else {
-        handleClose();
-      }
-    } else if (e.key === 'Enter' && !e.shiftKey) {
+    // For Shift+T, Shift+E, and Shift+. always allow them to work (global shortcuts)
+    if (e.key === 'T' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
       e.preventDefault();
-      // Handle enter key - use the same flow as clicking save
-      if (isAddingEvent) {
-        handleSaveChanges();
-      } else if (isAddingTask) {
-        handleSaveTask();
-      }
-    } else if (e.key === 'T' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
-      e.preventDefault();
-      // Handle Shift+T - use the same flow as clicking the Task button
+      e.stopPropagation();
+      console.log('[CommandBar] Handling Shift+T');
       setIsAddingTask(true);
       setIsOpen(true);
+      return;
     } else if (e.key === 'E' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
       e.preventDefault();
-      // Handle Shift+E - use the same flow as clicking the Event button
+      e.stopPropagation();
+      console.log('[CommandBar] Handling Shift+E');
       handleAddEventClick();
       setIsOpen(true);
+      return;
+    } else if ((e.key === '.' || e.key === '>') && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[CommandBar] Handling Shift+. (Settings)');
+      if (onOpenSettings) {
+        onOpenSettings();
+      }
+      return;
+    }
+
+    // Check if any dropdowns or modals are open (for arrow key navigation only)
+    // Note: RepeatEditModal and RepeatTaskEditModal handle their own ESC/Enter with capture
+    const isModalOrDropdownOpen = isDatePickerOpen || isScheduleOpen || isTagDropdownOpen || 
+      isTaskRepeatDropdownOpen || isPriorityDropdownOpen || isRepeatDropdownOpen || 
+      showColorPicker || isRecurrenceModalOpen || showRepeatEditModal || 
+      isMultiSelectScheduleOpen || isMultiSelectPriorityOpen || isMultiSelectTagOpen ||
+      isRepeatTaskEditModalOpen;
+
+    if (e.key === 'Escape') {
+      // Check if Settings modal is open by looking for it in the DOM
+      const settingsModal = document.querySelector('[data-settings-modal]');
+      const isSettingsOpen = settingsModal !== null;
+
+      if (isSettingsOpen) {
+        // Let Settings handle ESC first
+        console.log('[CommandBar] Settings is open, letting it handle ESC');
+        return;
+      }
+
+      // Check if CommandBar should handle ESC
+      const shouldHandleEsc = isRepeatDropdownOpen || isTaskRepeatDropdownOpen || 
+        isPriorityDropdownOpen || isTagDropdownOpen || isScheduleOpen || 
+        showRepeatEditModal || isRepeatTaskEditModalOpen || isRecurrenceModalOpen || 
+        (isMultiSelectMode && selectedTasks.size > 0) || originalEventState?.isDraft || 
+        isAddingEvent || isAddingTask;
+
+      if (shouldHandleEsc) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[CommandBar] Handling ESC key');
+        
+        // Handle escape key - close open dropdowns first, then other actions
+        if (isRepeatDropdownOpen) {
+          setIsRepeatDropdownOpen(false);
+        } else if (isTaskRepeatDropdownOpen) {
+          setIsTaskRepeatDropdownOpen(false);
+        } else if (isPriorityDropdownOpen) {
+          setIsPriorityDropdownOpen(false);
+        } else if (isTagDropdownOpen) {
+          setIsTagDropdownOpen(false);
+        } else if (isScheduleOpen) {
+          setIsScheduleOpen(false);
+        } else if (showRepeatEditModal) {
+          setShowRepeatEditModal(false);
+        } else if (isRepeatTaskEditModalOpen) {
+          setIsRepeatTaskEditModalOpen(false);
+        } else if (isRecurrenceModalOpen) {
+          setIsRecurrenceModalOpen(false);
+        } else if (isMultiSelectMode && selectedTasks.size > 0) {
+          handleClearSelection();
+        } else if (originalEventState?.isDraft) {
+          handleDiscardDraft();
+        } else if (isAddingEvent || isAddingTask) {
+          console.log('[CommandBar] Closing from creation mode');
+          handleClose();
+        } else {
+          handleClose();
+        }
+        return;
+      } else {
+        // Let ESC bubble up to other components
+        console.log('[CommandBar] Letting ESC bubble up to other components');
+        return;
+      }
+    }
+    
+    if (e.key === 'Enter' && !e.shiftKey) {
+      // Only handle Enter when actively adding event or task
+      if (isAddingEvent || isAddingTask) {
+        e.preventDefault();
+        e.stopPropagation(); // Only stop propagation when CommandBar should handle it
+        console.log('[CommandBar] Handling ENTER key');
+        
+        // Handle enter key - use the same flow as clicking save
+        if (isAddingEvent) {
+          console.log('[CommandBar] Saving event');
+          handleSaveChanges();
+        } else if (isAddingTask) {
+          console.log('[CommandBar] Saving task');
+          handleSaveTask();
+        }
+        return;
+      } else {
+        // Let Enter bubble up to other components when not actively using CommandBar
+        console.log('[CommandBar] Letting ENTER bubble up to other components');
+        return;
+      }
+    }
+    
+    if (e.key === 'ArrowLeft' && !isModalOrDropdownOpen) {
+      e.preventDefault();
+      onPrevious();
+    } else if (e.key === 'ArrowRight' && !isModalOrDropdownOpen) {
+      e.preventDefault();
+      onNext();
     } else if (isMultiSelectMode && selectedTasks.size > 0) {
       // Multi-select toolbar shortcuts - only work when in multi-select mode
       if (e.key.toLowerCase() === 'd' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -1966,17 +2038,45 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     isMultiSelectMode,
     selectedTasks.size,
     originalEventState?.isDraft,
-    taskRruleOptions, // Add dependency
-    eventState.rruleOptions, // Add dependency
+    taskRruleOptions,
+    eventState.rruleOptions,
+    eventState.title,
+    hasChanges,
+    taskTitle,
     handleBulkTaskComplete,
     handleMultiSelectPriority,
-    handleMultiSelectTag
+    handleMultiSelectTag,
+    onPrevious,
+    onNext,
+    onOpenSettings,
+    isDatePickerOpen,
+    isScheduleOpen,
+    isTagDropdownOpen,
+    isTaskRepeatDropdownOpen,
+    isPriorityDropdownOpen,
+    isRepeatDropdownOpen,
+    showColorPicker,
+    isRecurrenceModalOpen,
+    showRepeatEditModal,
+    isMultiSelectScheduleOpen,
+    isMultiSelectPriorityOpen,
+    isMultiSelectTagOpen,
+    setIsRepeatDropdownOpen,
+    setIsTaskRepeatDropdownOpen,
+    setIsPriorityDropdownOpen,
+    setIsTagDropdownOpen,
+    setIsScheduleOpen,
+    isRepeatTaskEditModalOpen,
+    setShowRepeatEditModal,
+    setIsRepeatTaskEditModalOpen,
+    setIsRecurrenceModalOpen
   ]);
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
+    // Use normal bubbling so that modal overlays (like Settings) get events first
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
 
@@ -2079,21 +2179,21 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
-        {(isOpen || selectedTasks.size > 0) && (
+        {(isOpen || selectedTasks.size > 0) && !isDraggingTask && (
           <motion.div 
             key="commandBar-container"
             ref={containerRef}
             initial={{ 
-              opacity: 0,
-              scale: 0.95,
-              y: 20,
+
+
+              y: 140,
               backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
             }}
             animate={{              opacity: 1,              scale: 1,              y: 0,              width: activeContentKey === 'default' ? (contentBounds.width || 'auto') : ((contentBounds.width || 0) + 32),              height: Math.max(contentBounds.height || BASE_HEIGHT, BASE_HEIGHT),              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"            }}
             exit={{
-              opacity: 0,
-              scale: 0.95,
-              y: 20,
+
+
+              y: 140,
               width: previousSizeRef.current.width || 'auto',
               height: previousSizeRef.current.height || 'auto'
             }}

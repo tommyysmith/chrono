@@ -2200,7 +2200,7 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Tasks</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50">T</span></div></TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Tasks</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-dark-text/50">T</span></div></TooltipContent>
 
             </Tooltip>
 
@@ -2223,7 +2223,7 @@ export default function Sidebar({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Agenda</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-light-text/50 dark:text-dark-text/50">A</span></div></TooltipContent>
+              <TooltipContent side="top" align="center" sideOffset={10}><div className="flex flex-row items-center gap-2"><span>Agenda</span> <span className="bg-white/5 text-[9px] rounded-[5px] px-1 border border-dark-border text-dark-text/50">A</span></div></TooltipContent>
             </Tooltip>
           </TooltipProvider>
             </div>

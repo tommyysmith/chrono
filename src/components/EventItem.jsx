@@ -65,7 +65,7 @@ const EventItem = ({
         <TooltipTrigger asChild>
           <motion.div
             ref={setNodeRef}
-            className={`${getEventClasses()} ${repeatClass} ${isDragging ? 'opacity-50' : ''}`}
+            className={`${getEventClasses()} ${repeatClass} ${isDragging ? 'opacity-30' : ''}`}
             style={{ ...eventStyle, ...dragTransform }}
             onDoubleClick={(e) => {
               e.stopPropagation();
@@ -117,12 +117,14 @@ const EventItem = ({
               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                 {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
               </div>
-              {isRepeatEvent && (
-                <div className="absolute bottom-1 right-1">
-                  <Repeat className="w-3 h-3" />
-                </div>
-              )}
             </div>
+
+            {/* Recurring icon - absolutely positioned in bottom right of entire event */}
+            {isRepeatEvent && (
+              <div className="absolute bottom-1 right-1 z-20">
+                <Repeat className="w-3 h-3" />
+              </div>
+            )}
           </motion.div>
         </TooltipTrigger>
         <TooltipContent side="right" align="start">

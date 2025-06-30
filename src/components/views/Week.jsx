@@ -175,7 +175,7 @@ export default function Week({
               {/* Task drop preview */}
               {taskDropPreview && (
                 <div
-                  className="absolute pointer-events-none z-20 bg-primary/20 rounded"
+                  className="absolute pointer-events-none z-20 bg-black/5 dark:bg-white/5"
                   style={{
                     left: `${(taskDropPreview.column / 7) * 100}%`,
                     width: `${100 / 7}%`,
