@@ -1234,6 +1234,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             <Tooltip>
               <motion.div 
                 className="flex items-center mr-4"
+                initial={{
+                  width: isSidebarVisible ? 228 : 'auto',
+                  minWidth: isSidebarVisible ? 228 : 'auto'
+                }}
                 animate={{
                   width: isSidebarVisible ? 228 : 'auto',
                   minWidth: isSidebarVisible ? 228 : 'auto'
@@ -1279,7 +1283,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             <PopoverTrigger asChild>
               <motion.div
                 whileTap={{scale: 0.98}}
-                className="flex items-center gap-2 cursor-pointer flex-row px-2.5 h-[36px] font-medium text-light-text/50 text-sm dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text rounded-[5px] focus:outline-none focus-visible:outline-none"
+                className="flex items-center gap-2 text-xs rounded-[5px] select-none flex-row px-2.5 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text text-xs dark:text-dark-text hover:text-light-text dark:hover:text-dark-text focus:outline-light-border dark:focus:outline-dark-border focus-visible:outline-light-border dark:focus-visible:outline-dark-border"
               >
                 <span className="font-medium">
                   {viewType === ViewType.DAY
@@ -1288,7 +1292,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     ? "Week"
                     : "Month"}
                 </span>
-                <Chevron className="w-4 h-4 rotate-90" />
+                <Chevron className="w-3 h-3 rotate-90" />
               </motion.div>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto p-1 text-xs min-w-36 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg focus:outline-none focus-visible:outline-none">

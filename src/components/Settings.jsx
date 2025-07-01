@@ -51,153 +51,24 @@ import { Shift } from '../assets/icons/Shift';
 import { TAG_COLORS } from '../constants/colors';
 import { ArrowAlt } from '../assets/icons/ArrowAlt';
 
-// Directional Hover Button Component
+// Simplified Hover Button Component
 const DirectionalHoverButton = ({ onClick, isActive, icon: Icon, label, isLogout = false }) => {
-  const [backgroundState, setBackgroundState] = useState("hidden");
-  const [entryDirection, setEntryDirection] = useState({ x: 0, y: 0 });
-  const [leaveDirection, setLeaveDirection] = useState({ x: 0, y: 0 });
-  const buttonRef = useRef(null);
-
-  // Reset background state when isActive changes
-  useEffect(() => {
-    if (isActive && !isLogout) {
-      setBackgroundState("hidden");
-    }
-  }, [isActive, isLogout]);
-
-  const calculateDirection = useCallback((e) => {
-    if (!buttonRef.current) return { x: 0, y: 0 };
-    
-    const rect = buttonRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-    
-    const mouseX = e.clientX;
-    const mouseY = e.clientY;
-    
-    const offsetX = mouseX - centerX;
-    const offsetY = mouseY - centerY;
-    
-    // Reduce travel distance by applying a multiplier (0.3 = 30% of original distance)
-    const distanceMultiplier = 0.3;
-    
-    return { 
-      x: offsetX * distanceMultiplier, 
-      y: offsetY * distanceMultiplier 
-    };
-  }, []);
-
-  const handleMouseEnter = useCallback((e) => {
-    // Don't show hover effect for active items (except logout)
-    if (isActive && !isLogout) return;
-    
-    const direction = calculateDirection(e);
-    setEntryDirection(direction);
-    
-    // phase 1: instantly spawn at cursor position
-    setBackgroundState("entering");
-    
-    // phase 2: animate to center after a brief moment
-    setTimeout(() => {
-      setBackgroundState("centered");
-    }, 10);
-  }, [calculateDirection, isActive, isLogout]);
-  
-  const handleMouseLeave = useCallback((e) => {
-    // Don't show hover effect for active items (except logout)
-    if (isActive && !isLogout) return;
-    
-    const direction = calculateDirection(e);
-    setLeaveDirection(direction);
-    
-    // phase 3: animate to leave direction
-    setBackgroundState("leaving");
-    
-    // reset to hidden after animation completes
-    setTimeout(() => {
-      setBackgroundState("hidden");
-    }, 150);
-  }, [calculateDirection, isActive, isLogout]);
-
-  const getBackgroundAnimation = () => {
-    switch (backgroundState) {
-      case "hidden":
-        return {
-          opacity: 0,
-          x: entryDirection.x,
-          y: entryDirection.y,
-          scale: 0.3,
-          transition: { duration: 0 }
-        };
-      case "entering":
-        return {
-          opacity: 0,
-          x: entryDirection.x,
-          y: entryDirection.y,
-          scale: 0.3,
-          transition: { duration: 0 }
-        };
-      case "centered":
-        return {
-          opacity: 1,
-          x: 0,
-          y: 0,
-          scale: 1,
-          transition: { duration: 0.1, ease: "easeOut" }
-        };
-      case "leaving":
-        return {
-          opacity: 0,
-          x: leaveDirection.x,
-          y: leaveDirection.y,
-          scale: 1,
-          transition: { duration: 0.1, ease: "easeOut" }
-        };
-      default:
-        return {
-          opacity: 0,
-          x: 0,
-          y: 0,
-          scale: 0.3,
-          transition: { duration: 0 }
-        };
-    }
-  };
-
   const baseClasses = isLogout 
-    ? "flex items-center font-medium space-x-3 px-3 py-2 text-red-600 dark:text-red-400 rounded-[9px] transition-colors w-full relative overflow-hidden"
-    : `w-full flex items-center font-medium space-x-2 px-2 py-1.5 rounded-[9px] transition-colors relative overflow-hidden hover:text-light-text dark:hover:text-dark-text ${
+    ? "flex items-center font-medium space-x-3 px-3 py-2 text-red-600 dark:text-red-400 rounded-[9px] transition-colors w-full hover:bg-red-50 dark:hover:bg-red-900/20"
+    : `w-full flex items-center font-medium space-x-2 px-2 py-1.5 rounded-[9px] transition-colors hover:text-light-text dark:hover:text-dark-text ${
         isActive
           ? 'bg-black/[0.08] dark:bg-white/5 text-light-text dark:text-dark-text'
-          : 'text-light-text/50 dark:text-dark-text/50'
+          : 'text-light-text/50 dark:text-dark-text/50 hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter'
       }`;
 
-  const overlayBgClass = isLogout
-    ? "bg-red-50 dark:bg-red-900/20"
-    : "bg-light-bg-lighter dark:bg-dark-bg-lighter";
-
-  // Only apply hover styles if not active (except for logout)
-  const hoverClasses = (isActive && !isLogout) ? '' : 'hover:bg-transparent';
-
   return (
-    <div className="relative">
-      {/* Animated Background */}
-      <motion.div
-        className={`absolute inset-0 ${overlayBgClass} rounded-[9px]`}
-        animate={getBackgroundAnimation()}
-      />
-      
-      <button
-        ref={buttonRef}
-        onClick={onClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`${baseClasses} ${hoverClasses}`}
-      >
-        <Icon className="w-4 h-4 relative z-10" />
-        <span className="text-sm relative z-10">{label}</span>
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      className={baseClasses}
+    >
+      <Icon className="w-4 h-4" />
+      <span className="text-sm">{label}</span>
+    </button>
   );
 };
 
@@ -1156,14 +1027,14 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
                       <Calendar className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">Today</span>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">Tasks that are passed scheduled date</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">Tasks that are due today</span>
                   </div>
                   <div className="flex items-center gap-3 p-2 px-0 rounded-lg">
                     <div className="flex items-center gap-2">
                       <InboxAlt className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-900 dark:text-white">Inbox</span>
                     </div>
-                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">Tasks that are unsorted</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 ml-auto">Tasks that are unsorted (no tag)</span>
                   </div>
                   <div className="flex items-center gap-3 p-2 px-0 rounded-lg">
                     <div className="flex items-center gap-2">
@@ -1394,6 +1265,9 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
               >
                 <motion.div 
                   className="absolute top-[1px] left-[1px] h-[36px] bg-light-bg-lighter dark:bg-white/5 rounded-[7px] pointer-events-none"
+                  initial={{ 
+                    width: `${((defaultEventDuration - 15) / (90 - 15)) * 80 + 20}%` 
+                  }}
                   animate={{ 
                     width: `${((defaultEventDuration - 15) / (90 - 15)) * 80 + 20}%` 
                   }}
@@ -1655,8 +1529,8 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
       <div className="w-[600px] h-full bg-light-bg-light dark:bg-dark-bg-light border-r border-light-border dark:border-dark-border overflow-y-auto flex justify-end">
         <div className="p-6 pt-16 w-64">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-8 h-8 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center">
-              <span className="text-gray-600 dark:text-gray-300 text-sm font-medium">TS</span>
+            <div className="w-10 h-10 bg-light-bg-lighter border border-light-border dark:border-dark-border rounded-full flex items-center justify-center">
+              <span className="text-light-text/50 dark:text-dark-text/50 text-sm font-medium">TS</span>
             </div>
             <div>
               <h2 className="text-sm font-medium text-gray-900 dark:text-white">Tom Smith</h2>

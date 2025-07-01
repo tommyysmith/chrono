@@ -89,7 +89,7 @@ export default function Week({
                   </div>
                   <div className="text-xs text-light-text dark:text-dark-text font-semibold">
                     {isSameDay(date, new Date()) ? (
-                      <span className="text-white bg-primary px-1 py-1 rounded-md">
+                      <span className="text-white bg-primary h-5 w-5 flex items-center justify-center rounded-[5px]">
                         {format(date, "d")}
                       </span>
                     ) : (

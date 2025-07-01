@@ -74,9 +74,9 @@ const EventItem = ({
             onContextMenu={(e) => onContextMenu(e, event)}
             {...attributes}
           >
-            {/* Draggable area - excludes resize handles */}
+            {/* Draggable area - now covers entire event including title and time */}
             <div 
-              className="absolute inset-0 top-3 bottom-3 cursor-pointer"
+              className="absolute inset-0 cursor-pointer z-0"
               {...listeners}
             />
             {/* Color stripe for non-task events */}
@@ -87,9 +87,9 @@ const EventItem = ({
               />
             )}
 
-            {/* iOS-style resize handles - only visible on hover */}
+            {/* iOS-style resize handles - positioned above drag area with higher z-index */}
             <div
-              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-10"
+              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20"
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -100,7 +100,7 @@ const EventItem = ({
               <div className="w-8 h-0.5 bg-gray-400/40 dark:bg-gray-500/40 rounded-full opacity-0 group-hover:opacity-100 group-active:opacity-100 group-hover:bg-gray-500/60 dark:group-hover:bg-gray-400/60 group-active:bg-gray-600/80 dark:group-active:bg-gray-300/80 group-active:h-1 transition-all duration-150" />
             </div>
             <div
-              className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-10"
+              className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20"
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -111,8 +111,8 @@ const EventItem = ({
               <div className="w-8 h-0.5 bg-gray-400/40 dark:bg-gray-500/40 rounded-full opacity-0 group-hover:opacity-100 group-active:opacity-100 group-hover:bg-gray-500/60 dark:group-hover:bg-gray-400/60 group-active:bg-gray-600/80 dark:group-active:bg-gray-300/80 group-active:h-1 transition-all duration-150" />
             </div>
 
-            {/* Event content */}
-            <div className="px-2 py-1 relative">
+            {/* Event content - positioned above drag area but below resize handles */}
+            <div className="px-2 py-1 relative z-10 pointer-events-none">
               <div className="font-medium text-xs">{event.title || 'New Event'}</div>
               <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                 {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
@@ -121,7 +121,7 @@ const EventItem = ({
 
             {/* Recurring icon - absolutely positioned in bottom right of entire event */}
             {isRepeatEvent && (
-              <div className="absolute bottom-1 right-1 z-20">
+              <div className="absolute bottom-1 right-1 z-30">
                 <Repeat className="w-3 h-3" />
               </div>
             )}
