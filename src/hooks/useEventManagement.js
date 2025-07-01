@@ -250,12 +250,15 @@ export function useEventManagement(commandBarRef) {
         
         console.log(`[handleUpdateEvent] About to call setEvents for ID: ${cleanEvent.id}. Events array length: ${newEventsState.length}`);
         const eventCheckBeforeSet = newEventsState.find(e => e.id === cleanEvent.id);
-        console.log(`[handleUpdateEvent] Event ${cleanEvent.id} in array BEFORE setEvents:`, eventCheckBeforeSet ? {start: eventCheckBeforeSet.start, end: eventCheckBeforeSet.end} : 'NOT FOUND');
+        console.log(`🔥🔥🔥 [BEFORE setEvents] Event ${cleanEvent.id} in new state:`, eventCheckBeforeSet ? {
+          start: eventCheckBeforeSet.start.toISOString(), 
+          end: eventCheckBeforeSet.end.toISOString()
+        } : 'NOT FOUND');
 
         setEvents(newEventsState); // Apply the update
 
         // Log immediately after setEvents (though state update is async)
-        console.log(`[handleUpdateEvent] Called setEvents for ID: ${cleanEvent.id}`);
+        console.log(`🔥🔥🔥 [AFTER setEvents] Called setEvents for ID: ${cleanEvent.id} - State update queued`);
 
         return newEventsState;
       }

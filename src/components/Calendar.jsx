@@ -309,6 +309,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   // Combine regular events with task events from localStorage, with smart merging
   const displayEvents = useMemo(() => {
+    // Debug: Check if our manipulated event is in the events array with correct time
+    const manipulatedEvent = events.find(e => e.id === '26d0c53c-b424-492e-a2e6-32196a98f571');
+    if (manipulatedEvent) {
+      console.log('🔥🔥🔥 [DISPLAY EVENTS] Found manipulated event in events array:', {
+        id: manipulatedEvent.id,
+        start: manipulatedEvent.start.toISOString(),
+        end: manipulatedEvent.end.toISOString()
+      });
+    }
+    
     const taskEvents = getTaskEventsForView(selectedDate, viewType, currentDefaultColor);
     
     // Create a map of task IDs to localStorage task events for easy lookup
@@ -389,7 +399,19 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       te.originalTask?.id && !existingTaskIds.has(te.originalTask.id)
     );
     
-    return [...processedEvents, ...newTaskEvents];
+    const finalEvents = [...processedEvents, ...newTaskEvents];
+    
+    // Debug: Check if our manipulated event is in the final displayEvents with correct time
+    const finalManipulatedEvent = finalEvents.find(e => e.id === '26d0c53c-b424-492e-a2e6-32196a98f571');
+    if (finalManipulatedEvent) {
+      console.log('🔥🔥🔥 [FINAL DISPLAY EVENTS] Manipulated event in final displayEvents:', {
+        id: finalManipulatedEvent.id,
+        start: finalManipulatedEvent.start.toISOString(),
+        end: finalManipulatedEvent.end.toISOString()
+      });
+    }
+    
+    return finalEvents;
   }, [events, selectedDate, viewType, currentDefaultColor, getTaskEventsForView, taskUpdateTrigger, dragState.eventId, dragState.isResizing]);
 
   const eventStyleGetter = useCallback((event, start, end, isSelected) => {
