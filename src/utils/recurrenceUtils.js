@@ -777,65 +777,32 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         updatedEventEnd: updatedEvent.end.toISOString()
       });
 
-      // PRODUCTION DEBUGGING: Check if we can find the manipulated event
-      const foundManipulatedEvent = seriesEvents.find(e => e.id === manipulatedId);
-      console.log('🔥 [PRODUCTION DEBUG] Manipulated event search:', {
-        manipulatedId,
-        foundEvent: foundManipulatedEvent ? {
-          id: foundManipulatedEvent.id,
-          start: foundManipulatedEvent.start.toISOString()
-        } : null,
-        allEventIds: seriesEvents.map(e => e.id),
-        updatedEventId: updatedEvent.id
-      });
+
 
       seriesEvents.forEach(event => {
         let eventToPush;
         const isManipulatedEvent = event.id === manipulatedId;
         
-        // ALTERNATIVE: Also check if this event has the same original time as the updated event
-        // This is a fallback in case ID matching fails in production
-        const hasMatchingOriginalTime = Math.abs(event.start.getTime() - updatedEvent.start.getTime()) < 1000; // within 1 second
-        const shouldTreatAsManipulated = isManipulatedEvent || (!foundManipulatedEvent && hasMatchingOriginalTime);
-        
-        // PRODUCTION DEBUG: Log every event being processed
-        console.log(`[CASE ALL - Processing Event ${event.id}]`, {
-          eventId: event.id,
-          manipulatedId,
-          isManipulatedEvent,
-          hasMatchingOriginalTime,
-          shouldTreatAsManipulated,
-          originalEventStart: event.start.toISOString(),
-          originalEventEnd: event.end.toISOString(),
-          updatedEventStart: updatedEvent.start.toISOString(),
-          updatedEventEnd: updatedEvent.end.toISOString()
-        });
 
-        if (shouldTreatAsManipulated) {
-          // CRITICAL: For the manipulated event, use EXACT dragged position
-          console.log('🔥 [MANIPULATED EVENT] Using exact dragged position');
-          
+        
+
+
+        if (isManipulatedEvent) {
+          // For the manipulated event, use the exact dragged position
           eventToPush = {
             ...event,
             title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-            start: new Date(updatedEvent.start.getTime()), // EXACT dragged position
-            end: new Date(updatedEvent.end.getTime()),     // EXACT dragged position
+            start: new Date(updatedEvent.start.getTime()),
+            end: new Date(updatedEvent.end.getTime()),
             seriesId: event.seriesId,
             isRepeat: true,
             repeat: event.repeat,
             rrule: originalBaseEvent.rrule,
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
-          
-          // PRODUCTION DEBUG: Verify the result
-          console.log('🔥 [MANIPULATED EVENT RESULT]', {
-            originalStart: event.start.toISOString(),
-            newStart: eventToPush.start.toISOString(),
-            timesMatch: eventToPush.start.getTime() === updatedEvent.start.getTime()
-          });
         } else {
           // For other events, apply the SAME TIME as the manipulated event
           // Keep the original date but use the new time
@@ -880,41 +847,7 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         updatedSeriesEvents.push(eventToPush);
       });
 
-      // PRODUCTION SAFETY: Ensure the manipulated event is definitely in the result with correct position
-      const manipulatedEventInResult = updatedSeriesEvents.find(e => e.id === manipulatedId);
-      if (!manipulatedEventInResult || 
-          manipulatedEventInResult.start.getTime() !== updatedEvent.start.getTime()) {
-        
-        console.log('🔥 [PRODUCTION SAFETY] Manipulated event missing or incorrect - forcing it in:', {
-          manipulatedEventFound: !!manipulatedEventInResult,
-          manipulatedEventStart: manipulatedEventInResult?.start.toISOString(),
-          expectedStart: updatedEvent.start.toISOString(),
-          timesMatch: manipulatedEventInResult?.start.getTime() === updatedEvent.start.getTime()
-        });
-        
-        // Remove any existing version of the manipulated event
-        const updatedSeriesEventsFiltered = updatedSeriesEvents.filter(e => e.id !== manipulatedId);
-        
-        // Add the correctly positioned manipulated event
-        const forcedManipulatedEvent = {
-          ...updatedEvent,
-          seriesId: updatedEvent.seriesId,
-          isRepeat: true,
-          repeat: originalBaseEvent.repeat,
-          rrule: originalBaseEvent.rrule,
-          rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-        };
-        
-        updatedSeriesEventsFiltered.push(forcedManipulatedEvent);
-        console.log('🔥 [PRODUCTION SAFETY] Forced manipulated event added');
-        
-        // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
-        console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (after safety fix):',
-          updatedSeriesEventsFiltered.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
-        );
 
-        return [...eventsWithoutSeries, ...updatedSeriesEventsFiltered];
-      }
 
       // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
       console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):',

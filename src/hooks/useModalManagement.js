@@ -100,18 +100,22 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         // Get the correct start and end times based on scope
         let startTime, endTime;
         
-        if (draggedEvent && (isDragOrResize || isSingleEventEdit)) {
-          // For drag/resize operations or single event edits, always use the dragged event's exact position
+        if (draggedEvent && (isDragOrResize || isSingleEventEdit || scope === 'all' || scope === 'future')) {
+          // For drag/resize operations, single event edits, OR series updates, always use the dragged event's exact position
           startTime = draggedEvent.start.getTime();
           endTime = draggedEvent.end.getTime();
-          console.log('ModalManagement - Using dragged position for scope:', scope, {
+          console.log('🔥 [PRODUCTION FIX] ModalManagement - Using dragged position for scope:', scope, {
             start: new Date(startTime).toISOString(),
-            end: new Date(endTime).toISOString()
+            end: new Date(endTime).toISOString(),
+            isDragOrResize,
+            isSingleEventEdit,
+            isAllScope: scope === 'all'
           });
         } else {
           // For other cases, use the event position from the modal
           startTime = event.start.getTime();
           endTime = event.end.getTime();
+          console.log('🔥 [PRODUCTION FIX] ModalManagement - Using modal event position for scope:', scope);
         }
 
         // Create a clean event object with the necessary metadata and fresh Date objects
