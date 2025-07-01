@@ -1,19 +1,21 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 
-export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents) {
-  const [deleteModalState, setDeleteModalState] = useState({
-    isOpen: false,
-    event: null,
-  });
+const initialDragState = {
+  isDragging: false,
+  eventId: null,
+  dropPreview: null,
+  initialOffset: { x: 0, y: 0 },
+  originalEvent: null,
+  currentColumn: null,
+  isEventCreationOpen: false,
+  isResizing: false,
+  startTime: null,
+  initialHeight: null,
+  initialWidth: null,
+  edge: null,
+};
 
-  const [repeatEditModalState, setRepeatEditModalState] = useState({
-    isOpen: false,
-    event: null,
-    draggedEvent: null,
-    originalEvent: null,
-    isEditOperation: false,
-  });
-
+export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState) {
   const confirmationHasBeenHandled = useRef(false);
 
   const [isGoToDateOpen, setIsGoToDateOpen] = useState(false);
@@ -52,7 +54,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         event: null,
       });
     },
-    [deleteModalState, setEvents, handleDeleteSeriesEvents]
+    [deleteModalState, setEvents, handleDeleteSeriesEvents, setDeleteModalState]
   );
 
   const handleDeleteModalClose = useCallback(() => {
@@ -60,7 +62,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
       isOpen: false,
       event: null,
     });
-  }, []);
+  }, [setDeleteModalState]);
 
   const handleRepeatEditConfirm = useCallback(
     ({ scope, event }) => {
@@ -152,7 +154,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           _currentDate: new Date()
         };
 
-        console.log('🔵 [MODAL-MANAGEMENT] Received from RepeatEditModal:', {
+        console.log('�� [MODAL-MANAGEMENT] Received from RepeatEditModal:', {
           eventId: event.id,
           scope,
           eventStart: event.start.toISOString(),
@@ -209,8 +211,12 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         originalEvent: null,
         isEditOperation: false,
       });
+
+      if (setDragState) {
+        setDragState(initialDragState);
+      }
     },
-    [commandBarRef, handleUpdateEvent, repeatEditModalState]
+    [commandBarRef, handleUpdateEvent, repeatEditModalState, setRepeatEditModalState, setDragState]
   );
 
   const handleRepeatEditDiscard = useCallback(() => {
@@ -251,7 +257,11 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
       originalEvent: null,
       isEditOperation: false,
     });
-  }, [repeatEditModalState, setEvents]);
+
+    if (setDragState) {
+      setDragState(initialDragState);
+    }
+  }, [repeatEditModalState, setEvents, setRepeatEditModalState, setDragState]);
 
   // Click outside handler for view dropdown
   useEffect(() => {
@@ -275,10 +285,6 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
   }, [isViewDropdownOpen]);
 
   return {
-    deleteModalState,
-    setDeleteModalState,
-    repeatEditModalState,
-    setRepeatEditModalState,
     isGoToDateOpen,
     setIsGoToDateOpen,
     isViewDropdownOpen,

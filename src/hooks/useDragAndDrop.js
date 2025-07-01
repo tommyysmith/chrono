@@ -5,6 +5,21 @@ import {
 } from "../utils/positionUtils";
 import { ViewType } from "../constants/views";
 
+const initialDragState = {
+  isDragging: false,
+  eventId: null,
+  dropPreview: null,
+  initialOffset: { x: 0, y: 0 },
+  originalEvent: null,
+  currentColumn: null,
+  isEventCreationOpen: false,
+  isResizing: false,
+  startTime: null,
+  initialHeight: null,
+  initialWidth: null,
+  edge: null,
+};
+
 export function useDragAndDrop({
   events,
   setEvents,
@@ -17,20 +32,7 @@ export function useDragAndDrop({
   colors,
   handleUpdateEvent,
 }) {
-  const [dragState, setDragState] = useState({
-    isDragging: false,
-    eventId: null,
-    dropPreview: null,
-    initialOffset: { x: 0, y: 0 },
-    originalEvent: null,
-    currentColumn: null,
-    isEventCreationOpen: false,
-    isResizing: false,
-    startTime: null,
-    initialHeight: null,
-    initialWidth: null,
-    edge: null,
-  });
+  const [dragState, setDragState] = useState(initialDragState);
 
   // Track current default event color
   const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
@@ -256,8 +258,7 @@ export function useDragAndDrop({
               },
               isEditOperation: false,
             });
-            // *** THE FIX ***
-            // Return here to prevent the code below from running and reverting the state
+            // Stop execution here to prevent drag state from being cleared
             window.removeEventListener("mousemove", handleMove);
             window.removeEventListener("mouseup", handleUp);
             return;
@@ -698,8 +699,7 @@ export function useDragAndDrop({
                 },
                 isEditOperation: false,
               });
-              // *** THE FIX ***
-              // Return here to prevent the code below from running and reverting the state
+              // Stop execution here to prevent drag state from being cleared
               window.removeEventListener("pointermove", handleMove);
               window.removeEventListener("pointerup", handleUp);
               return;

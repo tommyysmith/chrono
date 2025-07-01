@@ -238,21 +238,18 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, []);
 
-  const {
-    deleteModalState,
-    setDeleteModalState,
-    repeatEditModalState,
-    setRepeatEditModalState,
-    isGoToDateOpen,
-    setIsGoToDateOpen,
-    isViewDropdownOpen,
-    setIsViewDropdownOpen,
-    viewDropdownRef,
-    handleDeleteConfirm,
-    handleDeleteModalClose,
-    handleRepeatEditConfirm,
-    handleRepeatEditDiscard,
-  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents);
+  const [repeatEditModalState, setRepeatEditModalState] = useState({
+    isOpen: false,
+    event: null,
+    draggedEvent: null,
+    originalEvent: null,
+    isEditOperation: false,
+  });
+
+  const [deleteModalState, setDeleteModalState] = useState({
+    isOpen: false,
+    event: null,
+  });
 
   // Task modal state management
   const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
@@ -269,24 +266,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleEventClick,
     handleCommandBarClose,
   } = useCalendarInteractions(commandBarRef, setRepeatEditModalState);
-
-  const {
-    contextMenu,
-    setContextMenu,
-    contextMenuRef,
-    handleEventContextMenu,
-    handleColorSelect,
-    handleEventDelete,
-    handleEventDuplicate,
-    handleEventEdit,
-  } = useContextMenu(
-    events,
-    setEvents,
-    handleDeleteEvent,
-    setDeleteModalState,
-    commandBarRef,
-    setRepeatEditModalState
-  );
 
   const {
     dragState,
@@ -306,6 +285,43 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     colors,
     handleUpdateEvent,
   });
+
+  const {
+    contextMenu,
+    setContextMenu,
+    contextMenuRef,
+    handleEventContextMenu,
+    handleColorSelect,
+    handleEventDelete,
+    handleEventDuplicate,
+    handleEventEdit,
+  } = useContextMenu(
+    events,
+    setEvents,
+    handleDeleteEvent,
+    setDeleteModalState,
+    commandBarRef,
+    setRepeatEditModalState
+  );
+
+  // Get the event filtering hook
+  const {
+    isGoToDateOpen,
+    setIsGoToDateOpen,
+    isViewDropdownOpen,
+    setIsViewDropdownOpen,
+    viewDropdownRef,
+    handleDeleteConfirm,
+    handleDeleteModalClose,
+    handleRepeatEditConfirm,
+    handleRepeatEditDiscard,
+  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState);
+
+  const {
+    handleCreateTask,
+    handleUpdateTask,
+    handleToggleTaskCompletion,
+  } = useTaskManagement();
 
   // Combine regular events with task events from localStorage, with smart merging
   const displayEvents = useMemo(() => {
@@ -433,8 +449,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       style
     };
   }, [currentDefaultColor]);
-
-  const { handleCreateTask, handleUpdateTask, handleToggleTaskCompletion } = useTaskManagement();
 
   // Handler for task editing that checks for recurring tasks
   const handleTaskEdit = useCallback((task) => {
@@ -679,8 +693,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       task: activeTaskRef.current || activeTaskEvent || activeEvent
     });
   };
-
-
 
   // @dnd-kit drag handlers for tasks, task events, and regular events
   const handleTaskDragStart = useCallback((event) => {
