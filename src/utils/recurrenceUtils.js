@@ -811,6 +811,16 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             rrule: originalBaseEvent.rrule,
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
+          
+          console.log('🔥🔥🔥 [MANIPULATED EVENT PROCESSED]', {
+            eventId: eventToPush.id,
+            originalStart: event.start.toISOString(),
+            originalEnd: event.end.toISOString(),
+            newStart: eventToPush.start.toISOString(),
+            newEnd: eventToPush.end.toISOString(),
+            updatedEventStart: updatedEvent.start.toISOString(),
+            timesMatch: eventToPush.start.getTime() === updatedEvent.start.getTime()
+          });
         } else {
           // For other events, apply the SAME TIME as the manipulated event
           // Keep the original date but use the new time
@@ -863,8 +873,8 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
       );
 
       // Add all updated series events to the final result
+      console.log(`🔥🔥🔥 [CASE ALL] Returning ${updatedSeriesEvents.length} updated series events`);
       return [...eventsWithoutSeries, ...updatedSeriesEvents];
-      console.log(`[CASE ALL] Added ${updatedSeriesEvents.length} updated series events to result`);
       break;
     }
 
