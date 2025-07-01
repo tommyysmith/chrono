@@ -171,16 +171,33 @@ export function useEventManagement(commandBarRef) {
     setEvents(prevEvents => {
       // For recurring events
       if (cleanEvent.seriesId) {
+        console.log('🔵🔵🔵 [SERIES EVENT PATH] Event has seriesId:', cleanEvent.seriesId);
+        
         // Find the existing event and the base event
         const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
         const seriesEvents = prevEvents.filter(e => e.seriesId === cleanEvent.seriesId);
         const baseEvent = seriesEvents.sort((a, b) => new Date(a.start) - new Date(b.start))[0]; // Find earliest
+        
+        console.log('🔵🔵🔵 [SERIES EVENT DEBUG]:', {
+          existingEventFound: !!existingEvent,
+          seriesEventsCount: seriesEvents.length,
+          baseEventId: baseEvent?.id,
+          editScope
+        });
         
         // Check if the repeat pattern (preset OR custom rrule) has changed
         const presetRepeatChanged = existingEvent && existingEvent.repeat !== cleanEvent.repeat && cleanEvent.repeat && cleanEvent.repeat !== 'none';
         const customRuleChanged = existingEvent && 
                                   cleanEvent.repeat === 'custom' && 
                                   JSON.stringify(existingEvent.rruleOptions) !== JSON.stringify(cleanEvent.rruleOptions);
+
+        console.log('🔵🔵🔵 [REPEAT PATTERN CHECK]:', {
+          presetRepeatChanged,
+          customRuleChanged,
+          existingRepeat: existingEvent?.repeat,
+          newRepeat: cleanEvent.repeat,
+          willRegeneratePattern: presetRepeatChanged || customRuleChanged
+        });
 
         if (presetRepeatChanged || customRuleChanged) {          
           console.log('Recurring pattern changed (preset or custom) for event:', {
@@ -210,10 +227,13 @@ export function useEventManagement(commandBarRef) {
             .concat(recurringEvents);                        // Add the new recurring series
         }
         
-        console.log('Updating series event without pattern change:', {
+        console.log('🔵🔵🔵 [CALLING updateSeriesEvents] - Updating series event without pattern change:', {
           seriesId: cleanEvent.seriesId,
           baseEventId: baseEvent.id,
-          eventsInSeries: seriesEvents.length
+          eventsInSeries: seriesEvents.length,
+          editScope,
+          cleanEventStart: cleanEvent.start.toISOString(),
+          cleanEventEnd: cleanEvent.end.toISOString()
         });
         
         // Use recurrence utils to update series events
@@ -225,6 +245,8 @@ export function useEventManagement(commandBarRef) {
           isDragging,
           isResizing
         });
+        
+        console.log('🔵🔵🔵 [AFTER updateSeriesEvents] - Returned event state length:', newEventsState.length);
         
         console.log(`[handleUpdateEvent] About to call setEvents for ID: ${cleanEvent.id}. Events array length: ${newEventsState.length}`);
         const eventCheckBeforeSet = newEventsState.find(e => e.id === cleanEvent.id);

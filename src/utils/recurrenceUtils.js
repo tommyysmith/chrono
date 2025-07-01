@@ -698,6 +698,14 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
     }
 
     case 'all': {
+      console.log('🔥🔥🔥 [CASE ALL] updateSeriesEvents called with "all events" scope! 🔥🔥🔥', {
+        manipulatedId: updatedEvent.id,
+        updatedEventStart: updatedEvent.start.toISOString(),
+        updatedEventEnd: updatedEvent.end.toISOString(),
+        allEventsCount: allEvents.length,
+        options
+      });
+      
       // Find the event that was being manipulated
       const manipulatedEvent = allEvents.find(e => e.id === updatedEvent.id);
       // --- DEBUG LOGGING: Log the original manipulated event found ---
