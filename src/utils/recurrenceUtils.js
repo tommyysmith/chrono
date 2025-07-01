@@ -761,17 +761,44 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
       };
 
+      // Calculate time difference ONCE at the beginning
+      const originalManipulatedEvent = seriesEvents.find(e => e.id === manipulatedId);
+      const startTimeDiff = originalManipulatedEvent ? 
+        updatedEvent.start.getTime() - originalManipulatedEvent.start.getTime() : 0;
+      const endTimeDiff = originalManipulatedEvent ? 
+        updatedEvent.end.getTime() - originalManipulatedEvent.end.getTime() : 0;
+
+      console.log('[CASE ALL] Calculated time differences:', {
+        manipulatedId,
+        originalManipulatedFound: !!originalManipulatedEvent,
+        startTimeDiffMinutes: startTimeDiff / (1000 * 60),
+        endTimeDiffMinutes: endTimeDiff / (1000 * 60),
+        updatedEventStart: updatedEvent.start.toISOString(),
+        updatedEventEnd: updatedEvent.end.toISOString()
+      });
+
+      // Production debugging: Add alert for the first few events to see what's happening
+      if (typeof window !== 'undefined' && window.location?.hostname !== 'localhost') {
+        console.log('🔥 PRODUCTION DEBUG - Event details:', {
+          manipulatedId,
+          updatedEventId: updatedEvent.id,
+          updatedEventStart: updatedEvent.start.toISOString(),
+          originalManipulatedEvent: originalManipulatedEvent ? {
+            id: originalManipulatedEvent.id,
+            start: originalManipulatedEvent.start.toISOString()
+          } : null,
+          startTimeDiffMinutes: startTimeDiff / (1000 * 60)
+        });
+      }
+
       seriesEvents.forEach(event => {
         let eventToPush;
         if (event.id === manipulatedId) {
-          // For the manipulated event, always use the dragged position from updatedEvent
-          // This is the event the user actually moved, so it should be at the new position
-          console.log('[CASE ALL - MANIPULATED EVENT] Using dragged position for manipulated event:', {
+          // For the manipulated event, ALWAYS use the exact dragged position
+          console.log('[CASE ALL - MANIPULATED EVENT] Using exact dragged position:', {
             eventId: event.id,
-            originalStart: event.start,
-            originalEnd: event.end,
-            newStart: updatedEvent.start,
-            newEnd: updatedEvent.end
+            updatedEventStart: updatedEvent.start.toISOString(),
+            updatedEventEnd: updatedEvent.end.toISOString()
           });
 
           eventToPush = {
@@ -780,8 +807,8 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
             color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
             isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-            start: new Date(updatedEvent.start.getTime()), // Use the dragged position
-            end: new Date(updatedEvent.end.getTime()),     // Use the dragged position
+            start: new Date(updatedEvent.start.getTime()), // Direct from updatedEvent
+            end: new Date(updatedEvent.end.getTime()),     // Direct from updatedEvent
             seriesId: event.seriesId,
             isRepeat: true,
             repeat: event.repeat,
@@ -789,27 +816,20 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
         } else {
-          // For other events, apply the TIME DIFFERENCE (not absolute time) to preserve their original schedule
-          // Find the original position of the manipulated event within the series
-          const originalManipulatedEvent = seriesEvents.find(e => e.id === manipulatedId);
+          // For other events, apply the pre-calculated time difference
           if (!originalManipulatedEvent) {
-            console.error('[CASE ALL] Could not find original manipulated event in series for comparison');
-            eventToPush = event; // Keep original event unchanged if we can't calculate difference
+            console.error('[CASE ALL] No original manipulated event found - keeping event unchanged');
+            eventToPush = event; // Keep original event unchanged
           } else {
-            const startTimeDiff = updatedEvent.start.getTime() - originalManipulatedEvent.start.getTime();
-            const endTimeDiff = updatedEvent.end.getTime() - originalManipulatedEvent.end.getTime();
-
             // Apply the time difference to this event's original times
             const newEventStart = new Date(event.start.getTime() + startTimeDiff);
             const newEventEnd = new Date(event.end.getTime() + endTimeDiff);
 
-            console.log(`[CASE ALL - Other Event ${event.id}] Applying time difference:`, {
-              originalStart: event.start,
-              originalEnd: event.end,
-              startTimeDiff: startTimeDiff / (1000 * 60), // in minutes for readability
-              endTimeDiff: endTimeDiff / (1000 * 60), // in minutes for readability
-              newStart: newEventStart,
-              newEnd: newEventEnd,
+            console.log(`[CASE ALL - Other Event ${event.id}] Applying pre-calculated time difference:`, {
+              originalStart: event.start.toISOString(),
+              originalEnd: event.end.toISOString(),
+              newStart: newEventStart.toISOString(),
+              newEnd: newEventEnd.toISOString(),
             });
 
             eventToPush = {
@@ -824,7 +844,6 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
               isRepeat: true,
               repeat: originalBaseEvent.repeat,
               rrule: originalBaseEvent.rrule,
-              // Preserve rruleOptions from original base event or from options if available
               rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
             };
           }
