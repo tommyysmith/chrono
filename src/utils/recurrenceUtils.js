@@ -761,35 +761,21 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
       };
 
-      // Calculate time difference ONCE at the beginning
-      const originalManipulatedEvent = seriesEvents.find(e => e.id === manipulatedId);
-      const startTimeDiff = originalManipulatedEvent ? 
-        updatedEvent.start.getTime() - originalManipulatedEvent.start.getTime() : 0;
-      const endTimeDiff = originalManipulatedEvent ? 
-        updatedEvent.end.getTime() - originalManipulatedEvent.end.getTime() : 0;
+      // Get the target time components from the manipulated event
+      const targetStartHours = updatedEvent.start.getHours();
+      const targetStartMinutes = updatedEvent.start.getMinutes();
+      const targetStartSeconds = updatedEvent.start.getSeconds();
+      const targetEndHours = updatedEvent.end.getHours();
+      const targetEndMinutes = updatedEvent.end.getMinutes();
+      const targetEndSeconds = updatedEvent.end.getSeconds();
 
-      console.log('[CASE ALL] Calculated time differences:', {
+      console.log('[CASE ALL] Applying same time to all events:', {
         manipulatedId,
-        originalManipulatedFound: !!originalManipulatedEvent,
-        startTimeDiffMinutes: startTimeDiff / (1000 * 60),
-        endTimeDiffMinutes: endTimeDiff / (1000 * 60),
+        targetStartTime: `${targetStartHours}:${targetStartMinutes}:${targetStartSeconds}`,
+        targetEndTime: `${targetEndHours}:${targetEndMinutes}:${targetEndSeconds}`,
         updatedEventStart: updatedEvent.start.toISOString(),
         updatedEventEnd: updatedEvent.end.toISOString()
       });
-
-      // Production debugging: Add alert for the first few events to see what's happening
-      if (typeof window !== 'undefined' && window.location?.hostname !== 'localhost') {
-        console.log('🔥 PRODUCTION DEBUG - Event details:', {
-          manipulatedId,
-          updatedEventId: updatedEvent.id,
-          updatedEventStart: updatedEvent.start.toISOString(),
-          originalManipulatedEvent: originalManipulatedEvent ? {
-            id: originalManipulatedEvent.id,
-            start: originalManipulatedEvent.start.toISOString()
-          } : null,
-          startTimeDiffMinutes: startTimeDiff / (1000 * 60)
-        });
-      }
 
       seriesEvents.forEach(event => {
         let eventToPush;
@@ -816,37 +802,45 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
         } else {
-          // For other events, apply the pre-calculated time difference
-          if (!originalManipulatedEvent) {
-            console.error('[CASE ALL] No original manipulated event found - keeping event unchanged');
-            eventToPush = event; // Keep original event unchanged
-          } else {
-            // Apply the time difference to this event's original times
-            const newEventStart = new Date(event.start.getTime() + startTimeDiff);
-            const newEventEnd = new Date(event.end.getTime() + endTimeDiff);
+          // For other events, apply the SAME TIME as the manipulated event
+          // Keep the original date but use the new time
+          const originalEventDate = new Date(event.start);
 
-            console.log(`[CASE ALL - Other Event ${event.id}] Applying pre-calculated time difference:`, {
-              originalStart: event.start.toISOString(),
-              originalEnd: event.end.toISOString(),
-              newStart: newEventStart.toISOString(),
-              newEnd: newEventEnd.toISOString(),
-            });
+          // Construct the new start date/time using the target time
+          const newEventStart = new Date(originalEventDate);
+          newEventStart.setHours(targetStartHours, targetStartMinutes, targetStartSeconds, 0);
 
-            eventToPush = {
-              ...event,
-              title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
-              description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
-              color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
-              isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
-              start: newEventStart, // Apply time difference to original start
-              end: newEventEnd,     // Apply time difference to original end
-              seriesId: event.seriesId,
-              isRepeat: true,
-              repeat: originalBaseEvent.repeat,
-              rrule: originalBaseEvent.rrule,
-              rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
-            };
+          // Construct the new end date/time using the target time
+          const newEventEnd = new Date(originalEventDate);
+          newEventEnd.setHours(targetEndHours, targetEndMinutes, targetEndSeconds, 0);
+
+          // Handle cases where the event might cross midnight
+          if (newEventEnd <= newEventStart) {
+            newEventEnd.setDate(newEventEnd.getDate() + 1);
           }
+
+          console.log(`[CASE ALL - Other Event ${event.id}] Applying same time as manipulated event:`, {
+            originalStart: event.start.toISOString(),
+            originalEnd: event.end.toISOString(),
+            newStart: newEventStart.toISOString(),
+            newEnd: newEventEnd.toISOString(),
+            targetTime: `${targetStartHours}:${targetStartMinutes}-${targetEndHours}:${targetEndMinutes}`
+          });
+
+          eventToPush = {
+            ...event,
+            title: updatedEvent.title !== undefined ? updatedEvent.title : event.title,
+            description: updatedEvent.description !== undefined ? updatedEvent.description : event.description,
+            color: updatedEvent.color !== undefined ? updatedEvent.color : event.color,
+            isAllDay: updatedEvent.isAllDay !== undefined ? updatedEvent.isAllDay : event.isAllDay,
+            start: newEventStart, // Apply same time to this event's date
+            end: newEventEnd,     // Apply same time to this event's date
+            seriesId: event.seriesId,
+            isRepeat: true,
+            repeat: originalBaseEvent.repeat,
+            rrule: originalBaseEvent.rrule,
+            rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
+          };
         }
         updatedSeriesEvents.push(eventToPush);
       });
