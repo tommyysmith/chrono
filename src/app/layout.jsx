@@ -29,7 +29,6 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-light-bg-light dark:bg-dark-bg`}
       >
-        <SpeedInsights />
         <Analytics />
         <ThemeProvider
           attribute="class"
@@ -39,6 +38,8 @@ export default function RootLayout({ children }) {
         >
           <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
             {children}
+        <SpeedInsights />
+
           </div>
         </ThemeProvider>
       </body>
