@@ -14,6 +14,8 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
     isEditOperation: false,
   });
 
+  const confirmationHasBeenHandled = useRef(false);
+
   const [isGoToDateOpen, setIsGoToDateOpen] = useState(false);
   const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false);
   const viewDropdownRef = useRef(null);
@@ -62,6 +64,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
 
   const handleRepeatEditConfirm = useCallback(
     ({ scope, event }) => {
+      confirmationHasBeenHandled.current = true;
       if (!event) {
         setRepeatEditModalState({
           isOpen: false,
@@ -211,6 +214,18 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
   );
 
   const handleRepeatEditDiscard = useCallback(() => {
+    if (confirmationHasBeenHandled.current) {
+      confirmationHasBeenHandled.current = false; // Reset for next interaction
+      setRepeatEditModalState({
+        isOpen: false,
+        event: null,
+        draggedEvent: null,
+        originalEvent: null,
+        isEditOperation: false,
+      });
+      return;
+    }
+
     // If we have an event and original event, revert the changes
     if (repeatEditModalState.event && repeatEditModalState.originalEvent) {
       setEvents((prevEvents) =>

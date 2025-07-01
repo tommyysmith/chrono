@@ -590,23 +590,23 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
          repeat: singleEvent.repeat
        });
 
-      // --- MORE DEBUGGING ---
-      const otherSeriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id);
-      console.log('[CASE SINGLE] Other events in series being kept:', otherSeriesEvents.map(e => ({id: e.id, start: e.start})));
-      // Corrected log statement - simply log the object
-       console.log('[CASE SINGLE] Detached event being added:', singleEvent);
-       // --- END MORE DEBUGGING ---
+       // --- MORE DEBUGGING ---
+       const otherSeriesEvents = allEvents.filter(e => e.seriesId === updatedEvent.seriesId && e.id !== updatedEvent.id);
+       console.log('[CASE SINGLE] Other events in series being kept:', otherSeriesEvents.map(e => ({id: e.id, start: e.start})));
+       // Corrected log statement - simply log the object
+        console.log('[CASE SINGLE] Detached event being added:', singleEvent);
+        // --- END MORE DEBUGGING ---
 
-       // --- FIX FOR DUPLICATE KEY (v4) ---
-       // 1. Filter out the original event instance using its ID from the *original* allEvents array.
-       const finalArray = allEvents.filter(e => e.id !== updatedEvent.id);
-       // 2. Add the newly created detached single event.
-       finalArray.push(singleEvent);
-       console.log(`[CASE SINGLE] Final array constructed. Length: ${finalArray.length}. Includes detached event ${singleEvent.id}.`);
-       return finalArray;
-       // --- END FIX ---
-       // No break needed after return
-     }
+        // --- FIX FOR DUPLICATE KEY (v4) ---
+        // 1. Filter out the original event instance using its ID from the *original* allEvents array.
+        const finalArray = allEvents.filter(e => e.id !== updatedEvent.id);
+        // 2. Add the newly created detached single event.
+        finalArray.push(singleEvent);
+        console.log(`[CASE SINGLE] Final array constructed. Length: ${finalArray.length}. Includes detached event ${singleEvent.id}.`);
+        return finalArray;
+        // --- END FIX ---
+        // No break needed after return
+      }
 
     case 'future': {
       // Find the edited event's index in chronological order
@@ -785,16 +785,10 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         updatedEventEnd: updatedEvent.end.toISOString()
       });
 
-
-
       seriesEvents.forEach(event => {
         let eventToPush;
         const isManipulatedEvent = event.id === manipulatedId;
         
-
-        
-
-
         if (isManipulatedEvent) {
           // For the manipulated event, use the exact dragged position
           eventToPush = {
@@ -811,16 +805,6 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
             rrule: originalBaseEvent.rrule,
             rruleOptions: updatedEvent.rruleOptions || originalBaseEvent.rruleOptions || options.rruleOptions
           };
-          
-          console.log('🔥🔥🔥 [MANIPULATED EVENT PROCESSED]', {
-            eventId: eventToPush.id,
-            originalStart: event.start.toISOString(),
-            originalEnd: event.end.toISOString(),
-            newStart: eventToPush.start.toISOString(),
-            newEnd: eventToPush.end.toISOString(),
-            updatedEventStart: updatedEvent.start.toISOString(),
-            timesMatch: eventToPush.start.getTime() === updatedEvent.start.getTime()
-          });
         } else {
           // For other events, apply the SAME TIME as the manipulated event
           // Keep the original date but use the new time
@@ -865,15 +849,7 @@ export const updateSeriesEvents = (allEvents, updatedEvent, options = {}) => {
         updatedSeriesEvents.push(eventToPush);
       });
 
-
-
-      // --- DEBUG LOGGING: Log the complete updated series before adding to main array ---
-      console.log('[CASE ALL - DEBUG] Final updatedSeriesEvents array (before push):',
-        updatedSeriesEvents.map(e => ({ id: e.id, start: e.start, end: e.end, title: e.title }))
-      );
-
       // Add all updated series events to the final result
-      console.log(`🔥🔥🔥 [CASE ALL] Returning ${updatedSeriesEvents.length} updated series events`);
       return [...eventsWithoutSeries, ...updatedSeriesEvents];
       break;
     }

@@ -5,7 +5,7 @@ import { generateRecurringEvents, updateSeriesEvents, getEventsInSeries } from "
 export function useEventManagement(commandBarRef) {
   const [events, setEvents] = useState([]);
   const [editingEventId, setEditingEventId] = useState(null);
-
+  
   // Load events from localStorage when component mounts
   useEffect(() => {
     const savedEvents = localStorage.getItem("calendarEvents");
@@ -105,85 +105,40 @@ export function useEventManagement(commandBarRef) {
   );
 
   const handleUpdateEvent = useCallback((updatedEvent) => {
-    // --- NEW LOGGING ---
-    console.log('🔵🔵🔵 [START] handleUpdateEvent 🔵🔵🔵 - Received from modal/dragdrop:', {
-      id: updatedEvent?.id,
-      start: updatedEvent?.start,
-      end: updatedEvent?.end,
-      seriesId: updatedEvent?.seriesId,
-      _editScope: updatedEvent?._editScope,
-      _isDragging: updatedEvent?._isDragging,
-      _isResizing: updatedEvent?._isResizing,
-      _exactPosition: updatedEvent?._exactPosition,
-      _preserveExactPosition: updatedEvent?._preserveExactPosition,
-      _detachedEvent: updatedEvent?._detachedEvent,
-    });
-    // --- END NEW LOGGING ---
-
-    console.log('handleUpdateEvent called with:', {
-      eventId: updatedEvent.id,
-      updatedEvent,
-      editScope: updatedEvent._editScope,
-      manipulatedId: updatedEvent.id,
-      timeChange: updatedEvent._timeChange,
-      isDragging: updatedEvent._isDragging,
-      isResizing: updatedEvent._isResizing
-    });
-
-    // Create a copy of the event without the internal properties
-    const cleanEvent = { ...updatedEvent };
-    
-    // Extract and remove internal properties used for tracking
-    const editScope = cleanEvent._editScope || 'single';
-    delete cleanEvent._editScope;
-    
-    const timeChange = cleanEvent._timeChange || null;
-    delete cleanEvent._timeChange;
-    
-    const isDragging = !!cleanEvent._isDragging;
-    delete cleanEvent._isDragging;
-    
-    const isResizing = !!cleanEvent._isResizing;
-    delete cleanEvent._isResizing;
-    
-    const shouldDelete = !!cleanEvent._shouldDelete;
-    delete cleanEvent._shouldDelete;
-    
-    // Handle event deletion
-    if (shouldDelete) {
-      setEvents(prevEvents => prevEvents.filter(e => e.id !== cleanEvent.id));
-      return;
-    }
-    
-    // Extract rruleOptions if present, but DON'T delete it
-    // We need to keep rruleOptions attached to the event object for proper handling
-    const rruleOptions = cleanEvent.rruleOptions || null;
-    // Note: We are NOT deleting rruleOptions from cleanEvent as we need it for RRule functionality
-
-    console.log('Processing update with options:', {
-      editScope,
-      timeChange,
-      rruleOptions,
-      isDragging,
-      isResizing
-    });
-
     setEvents(prevEvents => {
+      // Create a copy of the event without the internal properties
+      const cleanEvent = { ...updatedEvent };
+      
+      // Extract and remove internal properties used for tracking
+      const editScope = cleanEvent._editScope || 'single';
+      delete cleanEvent._editScope;
+      
+      const timeChange = cleanEvent._timeChange || null;
+      delete cleanEvent._timeChange;
+      
+      const isDragging = !!cleanEvent._isDragging;
+      delete cleanEvent._isDragging;
+      
+      const isResizing = !!cleanEvent._isResizing;
+      delete cleanEvent._isResizing;
+      
+      const shouldDelete = !!cleanEvent._shouldDelete;
+      delete cleanEvent._shouldDelete;
+      
+      // Handle event deletion
+      if (shouldDelete) {
+        return prevEvents.filter(e => e.id !== cleanEvent.id);
+      }
+      
+      // Extract rruleOptions if present, but DON'T delete it
+      const rruleOptions = cleanEvent.rruleOptions || null;
+
       // For recurring events
       if (cleanEvent.seriesId) {
-        console.log('🔵🔵🔵 [SERIES EVENT PATH] Event has seriesId:', cleanEvent.seriesId);
-        
         // Find the existing event and the base event
         const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
         const seriesEvents = prevEvents.filter(e => e.seriesId === cleanEvent.seriesId);
         const baseEvent = seriesEvents.sort((a, b) => new Date(a.start) - new Date(b.start))[0]; // Find earliest
-        
-        console.log('🔵🔵🔵 [SERIES EVENT DEBUG]:', {
-          existingEventFound: !!existingEvent,
-          seriesEventsCount: seriesEvents.length,
-          baseEventId: baseEvent?.id,
-          editScope
-        });
         
         // Check if the repeat pattern (preset OR custom rrule) has changed
         const presetRepeatChanged = existingEvent && existingEvent.repeat !== cleanEvent.repeat && cleanEvent.repeat && cleanEvent.repeat !== 'none';
@@ -191,35 +146,19 @@ export function useEventManagement(commandBarRef) {
                                   cleanEvent.repeat === 'custom' && 
                                   JSON.stringify(existingEvent.rruleOptions) !== JSON.stringify(cleanEvent.rruleOptions);
 
-        console.log('🔵🔵🔵 [REPEAT PATTERN CHECK]:', {
-          presetRepeatChanged,
-          customRuleChanged,
-          existingRepeat: existingEvent?.repeat,
-          newRepeat: cleanEvent.repeat,
-          willRegeneratePattern: presetRepeatChanged || customRuleChanged
-        });
-
         if (presetRepeatChanged || customRuleChanged) {          
-          console.log('Recurring pattern changed (preset or custom) for event:', {
-            eventId: cleanEvent.id,
-            oldRepeat: existingEvent?.repeat,
-            newRepeat: cleanEvent.repeat,
-            oldRRule: JSON.stringify(existingEvent?.rruleOptions),
-            newRRule: JSON.stringify(cleanEvent.rruleOptions)
-          });
-          
           // Keep the same series ID for consistency
           const seriesId = cleanEvent.seriesId;
           
           // Update the event with the new recurring properties
-          const updatedEvent = {
+          const updatedEventWithSeries = {
             ...cleanEvent,
             seriesId,
             isRepeat: true
           };
           
           // Generate the new recurring series with the updated pattern
-          const recurringEvents = generateRecurringEvents(updatedEvent);
+          const recurringEvents = generateRecurringEvents(updatedEventWithSeries);
           
           // Replace the original series with the new recurring series
           return prevEvents
@@ -227,17 +166,8 @@ export function useEventManagement(commandBarRef) {
             .concat(recurringEvents);                        // Add the new recurring series
         }
         
-        console.log('🔵🔵🔵 [CALLING updateSeriesEvents] - Updating series event without pattern change:', {
-          seriesId: cleanEvent.seriesId,
-          baseEventId: baseEvent.id,
-          eventsInSeries: seriesEvents.length,
-          editScope,
-          cleanEventStart: cleanEvent.start.toISOString(),
-          cleanEventEnd: cleanEvent.end.toISOString()
-        });
-        
         // Use recurrence utils to update series events
-        const newEventsState = updateSeriesEvents(prevEvents, cleanEvent, {
+        return updateSeriesEvents(prevEvents, cleanEvent, {
           editScope,
           timeChange,
           rruleOptions,
@@ -245,26 +175,9 @@ export function useEventManagement(commandBarRef) {
           isDragging,
           isResizing
         });
-        
-        console.log('🔵🔵🔵 [AFTER updateSeriesEvents] - Returned event state length:', newEventsState.length);
-        
-        console.log(`[handleUpdateEvent] About to call setEvents for ID: ${cleanEvent.id}. Events array length: ${newEventsState.length}`);
-        const eventCheckBeforeSet = newEventsState.find(e => e.id === cleanEvent.id);
-        console.log(`🔥🔥🔥 [BEFORE setEvents] Event ${cleanEvent.id} in new state:`, eventCheckBeforeSet ? {
-          start: eventCheckBeforeSet.start.toISOString(), 
-          end: eventCheckBeforeSet.end.toISOString()
-        } : 'NOT FOUND');
-
-        setEvents(newEventsState); // Apply the update
-
-        // Log immediately after setEvents (though state update is async)
-        console.log(`🔥🔥🔥 [AFTER setEvents] Called setEvents for ID: ${cleanEvent.id} - State update queued`);
-
-        return newEventsState;
       }
       
       // For non-recurring events that are being updated
-      // Check if this is a non-recurring event being changed to recurring
       const existingEvent = prevEvents.find(e => e.id === cleanEvent.id);
       
       // Ensure both allDay and isAllDay properties are consistent
@@ -279,23 +192,18 @@ export function useEventManagement(commandBarRef) {
           cleanEvent.repeat && 
           cleanEvent.repeat !== 'none') {
         
-        console.log('Converting non-recurring event to recurring:', {
-          eventId: cleanEvent.id,
-          newRepeatRule: cleanEvent.repeat
-        });
-        
         // Generate a series ID for the new recurring event
         const seriesId = generateEventId();
         
         // Update the event with recurring properties
-        const updatedEvent = {
+        const updatedEventWithSeries = {
           ...cleanEvent,
           seriesId,
           isRepeat: true
         };
         
         // Generate the recurring series
-        const recurringEvents = generateRecurringEvents(updatedEvent);
+        const recurringEvents = generateRecurringEvents(updatedEventWithSeries);
         
         // Replace the original event with the recurring series
         return prevEvents
@@ -311,17 +219,6 @@ export function useEventManagement(commandBarRef) {
   }, [setEvents]);
 
   const handleDeleteEvent = useCallback((event, setDeleteModalState) => {
-    // --- NEW LOGGING ---
-    console.log(' [handleDeleteEvent] Received event:', {
-      id: event?.id,
-      title: event?.title,
-      start: event?.start,
-      seriesId: event?.seriesId,
-      repeat: event?.repeat,
-      rruleOptions: event?.rruleOptions, // Log rruleOptions too, just in case
-      isRepeat: event?.isRepeat
-    });
-    // --- END NEW LOGGING ---
     const isRepeatedEvent = event.repeat && event.repeat !== "none" && event.seriesId;
 
     if (isRepeatedEvent) {

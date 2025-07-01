@@ -256,6 +256,11 @@ export function useDragAndDrop({
               },
               isEditOperation: false,
             });
+            // *** THE FIX ***
+            // Return here to prevent the code below from running and reverting the state
+            window.removeEventListener("mousemove", handleMove);
+            window.removeEventListener("mouseup", handleUp);
+            return;
           } else if (finalDraggedEvent) {
             // For non-repeated events, update directly with exact position information
             console.log('[useDragAndDrop] Calling handleUpdateEvent for non-repeated DRAG');
@@ -693,6 +698,11 @@ export function useDragAndDrop({
                 },
                 isEditOperation: false,
               });
+              // *** THE FIX ***
+              // Return here to prevent the code below from running and reverting the state
+              window.removeEventListener("pointermove", handleMove);
+              window.removeEventListener("pointerup", handleUp);
+              return;
             } else {
                               // Check if this is a task block and update the original task
                 if (resizedEvent.isTaskBlock && resizedEvent.originalTask) {
