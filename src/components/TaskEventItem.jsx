@@ -83,7 +83,7 @@ const TaskEventItem = ({
         <TooltipTrigger asChild>
           <motion.div
             ref={setNodeRef}
-            className={`${getTaskEventClasses()} ${repeatClass} ${isDragging ? 'opacity-30' : ''}`}
+            className={`${getTaskEventClasses()} ${repeatClass} ${isDragging ? 'opacity-0' : ''}`}
             style={{ ...eventStyle, ...dragStyle }}
             onDoubleClick={(e) => {
               e.stopPropagation();
@@ -231,7 +231,7 @@ const TaskEventItem = ({
 };
 
 // TaskEventDragPreview component for DragOverlay
-export const TaskEventDragPreview = ({ event }) => {
+export const TaskEventDragPreview = ({ event, dimensions, livePreview, getFreshTagData }) => {
   if (!event) return null;
 
   const taskIsRecurring = event.originalTask?.repeat && event.originalTask.repeat !== 'none';
@@ -240,45 +240,51 @@ export const TaskEventDragPreview = ({ event }) => {
                      (event.originalTask?.priority && event.originalTask.priority !== 'None');
 
   return (
-    <div className="bg-light-bg-light dark:bg-dark-bg-lighter border border-dashed border-light-border dark:border-dark-border rounded-[5px] p-2 shadow-lg max-w-[200px] pointer-events-none">
+    <div className="bg-light-bg-light dark:bg-dark-bg-lighter border border-dashed border-light-border dark:border-dark-border rounded-[5px] p-2 shadow-lg w-[240px] pointer-events-none">
       <div className="flex items-start gap-2">
         {/* Checkbox placeholder */}
         <div className="w-4 h-4 mt-0.5 rounded border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light"></div>
         
         <div className="flex flex-col flex-grow gap-1 min-w-0">
-          <span className="text-sm font-medium text-light-text dark:text-dark-text break-words">
-            {event.title || event.originalTask?.title}
-          </span>
+          {/* Title row with tags and recurring icon */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-sm font-medium text-light-text dark:text-dark-text break-words flex-grow">
+              {event.title || event.originalTask?.title}
+            </span>
+            {hasAnyTags && (
+              <div className="flex items-center flex-wrap gap-1 flex-shrink-0">
+                {event.originalTask?.tag && (
+                  <div 
+                    className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px]"
+                    style={{ color: event.originalTask.tag.color }}
+                  >
+                    <Tag className="h-2.5 w-2.5" style={{ color: event.originalTask.tag.color }} />
+                    <span className="px-0.5">{getFreshTagData ? getFreshTagData(event.originalTask.tag.id)?.label || event.originalTask.tag.label : event.originalTask.tag.label}</span>
+                  </div>
+                )}
+                
+                {taskIsRecurring && (
+                  <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
+                    <Repeat className="h-2.5 w-2.5" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           
-          {/* Time range */}
+          {/* Live updating time range */}
           <div className="text-xs text-light-text/50 dark:text-dark-text/50">
             {(() => {
+              // Use live preview times if available, otherwise fall back to original times
+              if (livePreview && livePreview.start && livePreview.end) {
+                return `${format(livePreview.start, "h:mm a")} - ${format(livePreview.end, "h:mm a")}`;
+              }
               if (event.start && event.end) {
                 return `${format(event.start, "h:mm a")} - ${format(event.end, "h:mm a")}`;
               }
               return "Time not set";
             })()}
           </div>
-          
-          {hasAnyTags && (
-            <div className="flex items-center flex-wrap gap-1">
-              {event.originalTask?.tag && (
-                <div 
-                  className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px]"
-                  style={{ color: event.originalTask.tag.color }}
-                >
-                  <Tag className="h-2.5 w-2.5" style={{ color: event.originalTask.tag.color }} />
-                  <span className="px-0.5">{event.originalTask.tag.label}</span>
-                </div>
-              )}
-              
-              {taskIsRecurring && (
-                <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
-                  <Repeat className="h-2.5 w-2.5" />
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

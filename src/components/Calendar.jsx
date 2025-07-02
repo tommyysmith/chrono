@@ -100,6 +100,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [taskDropPreview, setTaskDropPreview] = useState(null);
   const [isDraggingTask, setIsDraggingTask] = useState(false);
   const [lastDropWasSuccessful, setLastDropWasSuccessful] = useState(false);
+  const [draggedItemDimensions, setDraggedItemDimensions] = useState({ width: 0, height: 0 });
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [currentMousePosition, setCurrentMousePosition] = useState({ x: 0, y: 0 });
   
   // Refs for mouse move handler
   const isDraggingTaskRef = useRef(false);
@@ -604,7 +607,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const handleMouseMoveRef = useRef();
   
   handleMouseMoveRef.current = (e) => {
-    if (!isDraggingTaskRef.current || (!activeTaskRef.current && !activeTaskEvent && !activeEvent) || !timeGridRef.current) {
+    if (!isDraggingTaskRef.current || (!activeTaskRef.current && !activeTaskEvent && !activeEvent)) {
+      return;
+    }
+
+    // Update current mouse position for drag overlay
+    setCurrentMousePosition({ x: e.clientX, y: e.clientY });
+
+    // Continue with drop preview logic only if timeGridRef is available
+    if (!timeGridRef.current) {
       return;
     }
 
@@ -697,6 +708,25 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   // @dnd-kit drag handlers for tasks, task events, and regular events
   const handleTaskDragStart = useCallback((event) => {
     const { active } = event;
+    
+    // Capture dimensions and mouse offset for better positioning
+    const domNode = active.node?.current;
+    if (domNode && event.activatorEvent) {
+      const rect = domNode.getBoundingClientRect();
+      setDraggedItemDimensions({ 
+        width: rect.width, 
+        height: rect.height 
+      });
+      
+      // Calculate offset from top-left corner of element to mouse position
+      const offsetX = event.activatorEvent.clientX - rect.left;
+      const offsetY = event.activatorEvent.clientY - rect.top;
+      setDragOffset({ x: offsetX, y: offsetY });
+      
+      // Set initial mouse position
+      setCurrentMousePosition({ x: event.activatorEvent.clientX, y: event.activatorEvent.clientY });
+    }
+    
     if (active.data.current?.type === 'task') {
       setActiveTask(active.data.current.task);
       setIsDraggingTask(true);
@@ -739,6 +769,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       handleMouseMoveRef.currentHandler = null;
     }
     setIsDraggingTask(false);
+    setDraggedItemDimensions({ width: 0, height: 0 });
+    setDragOffset({ x: 0, y: 0 });
+    setCurrentMousePosition({ x: 0, y: 0 });
     
     // Clear the drop preview
     const preview = taskDropPreview;
@@ -1649,7 +1682,23 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       </AnimatePresence>
       </div>
       
-      {/* DragOverlay for task dragging - hidden to show only opacity version */}
+      {/* Custom positioned drag overlay with live updates */}
+      {isDraggingTask && (activeTask || activeTaskEvent || activeEvent) && currentMousePosition.x > 0 && (
+        <div 
+          className="fixed pointer-events-none z-[10000]"
+          style={{ 
+            left: currentMousePosition.x - dragOffset.x,
+            top: currentMousePosition.y - dragOffset.y,
+            opacity: 0.8
+          }}
+        >
+          {activeTask && <TaskDragPreview task={activeTask} livePreview={taskDropPreview} />}
+          {activeTaskEvent && <TaskEventDragPreview event={activeTaskEvent} livePreview={taskDropPreview} />}
+          {activeEvent && <EventDragPreview event={activeEvent} livePreview={taskDropPreview} />}
+        </div>
+      )}
+      
+      {/* Fallback DragOverlay for non-dragging states */}
       <DragOverlay
         dropAnimation={lastDropWasSuccessful ? {
           duration: 0, // Immediate disappear on successful drop
@@ -1659,10 +1708,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           easing: 'ease-out',
         }}
       >
-        {/* Hide drag previews to show only the opacity version of the original item */}
-        {/* {activeTask && <TaskDragPreview task={activeTask} />} */}
-        {/* {activeTaskEvent && <TaskEventDragPreview event={activeTaskEvent} />} */}
-        {/* {activeEvent && <EventDragPreview event={activeEvent} />} */}
+        {/* Only show when not using custom positioning */}
+        {!isDraggingTask && activeTask && <TaskDragPreview task={activeTask} />}
+        {!isDraggingTask && activeTaskEvent && <TaskEventDragPreview event={activeTaskEvent} />}
+        {!isDraggingTask && activeEvent && <EventDragPreview event={activeEvent} />}
       </DragOverlay>
     </motion.div>
     </DndContext>

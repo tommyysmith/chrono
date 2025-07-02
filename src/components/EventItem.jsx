@@ -65,7 +65,8 @@ const EventItem = ({
         <TooltipTrigger asChild>
           <motion.div
             ref={setNodeRef}
-            className={`${getEventClasses()} ${repeatClass} ${isDragging ? 'opacity-30' : ''}`}
+            className={`${getEventClasses()} ${repeatClass} ${isDragging ? '!opacity-0' : ''}`}
+            data-is-dragging={isDragging}
             style={{ ...eventStyle, ...dragTransform }}
             onDoubleClick={(e) => {
               e.stopPropagation();
@@ -136,44 +137,46 @@ const EventItem = ({
 };
 
 // EventDragPreview component for DragOverlay
-export const EventDragPreview = ({ event }) => {
+export const EventDragPreview = ({ event, dimensions, livePreview }) => {
   if (!event) return null;
 
   const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
 
   return (
-    <div className="bg-light-bg-light dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-[9px] p-2 shadow-lg max-w-[200px] pointer-events-none">
+    <div 
+      className="backdrop-blur-md rounded-[5px] shadow-lg w-[200px] pointer-events-none text-white p-2"
+      style={{ backgroundColor: event.color || '#808080' }}
+    >
       <div className="flex items-start gap-2">
         {/* Color stripe */}
-        {event.color && (
-          <div
-            className="w-1 h-full rounded-full flex-shrink-0"
-            style={{ backgroundColor: event.color }}
-          />
-        )}
+        
         
         <div className="flex flex-col flex-grow gap-1 min-w-0">
-          <span className="text-sm font-medium text-light-text dark:text-dark-text break-words">
-            {event.title || 'New Event'}
-          </span>
+          {/* Title row with recurring icon */}
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-sm font-medium text-white break-words flex-grow">
+              {event.title || 'New Event'}
+            </span>
+            {isRepeatEvent && (
+              <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-white/20 text-[10px] rounded-[4px] bg-white/10 text-white flex-shrink-0">
+                <Repeat className="h-2.5 w-2.5" />
+              </div>
+            )}
+          </div>
           
-          {/* Time range */}
-          <div className="text-xs text-light-text/50 dark:text-dark-text/50">
+          {/* Live updating time range */}
+          <div className="text-xs text-white/70">
             {(() => {
+              // Use live preview times if available, otherwise fall back to original times
+              if (livePreview && livePreview.start && livePreview.end) {
+                return `${format(livePreview.start, "h:mm a")} - ${format(livePreview.end, "h:mm a")}`;
+              }
               if (event.start && event.end) {
                 return `${format(event.start, "h:mm a")} - ${format(event.end, "h:mm a")}`;
               }
               return "Time not set";
             })()}
           </div>
-          
-          {isRepeatEvent && (
-            <div className="flex items-center">
-              <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
-                <Repeat className="h-2.5 w-2.5" />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>
