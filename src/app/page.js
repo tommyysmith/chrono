@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import Calendar from '../components/Calendar';
+import MigrationHelper from '../components/MigrationHelper';
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -12,6 +13,7 @@ export default function Home() {
 
   return (
     <main className="w-full h-screen overflow-hidden flex">
+      <MigrationHelper />
       
       <div className="flex-1 overflow-auto">
         <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />

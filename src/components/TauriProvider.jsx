@@ -1,53 +1,23 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { isTauri } from '../utils/platform';
+import React, { createContext, useContext } from 'react';
 
-// Create a context to provide Tauri-specific functionality
+// Create a context to provide platform functionality
 const TauriContext = createContext({
   isTauri: false,
-  isLoaded: false,
+  isLoaded: true,
 });
 
 /**
- * Provider component that makes Tauri functionality available to the app
- * only when running in a desktop environment
+ * Provider component for platform functionality
+ * Since we've removed Tauri, this is now a web-only stub
  */
 export function TauriProvider({ children }) {
-  const [tauriState, setTauriState] = useState({
+  // Always return web-only state since we've removed Tauri
+  const tauriState = {
     isTauri: false,
-    isLoaded: false,
-  });
-
-  useEffect(() => {
-    // Check if we're in a Tauri environment
-    const tauriEnabled = isTauri();
-    
-    // If we're in Tauri, dynamically import Tauri APIs
-    if (tauriEnabled) {
-      // This will only load in desktop environments
-      import('@tauri-apps/api').then((tauriApi) => {
-        setTauriState({
-          isTauri: true,
-          isLoaded: true,
-          api: tauriApi,
-        });
-      }).catch(error => {
-        console.error('Failed to load Tauri API:', error);
-        setTauriState({
-          isTauri: true,
-          isLoaded: false,
-          error,
-        });
-      });
-    } else {
-      // In browser environments, mark as loaded but not Tauri
-      setTauriState({
-        isTauri: false,
-        isLoaded: true,
-      });
-    }
-  }, []);
+    isLoaded: true,
+  };
 
   return (
     <TauriContext.Provider value={tauriState}>
@@ -57,8 +27,8 @@ export function TauriProvider({ children }) {
 }
 
 /**
- * Hook to access Tauri functionality
- * Will only provide actual Tauri API in desktop environments
+ * Hook to access platform functionality
+ * Will always return web-only state
  */
 export function useTauri() {
   return useContext(TauriContext);

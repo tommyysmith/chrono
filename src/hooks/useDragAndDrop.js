@@ -232,6 +232,16 @@ export function useDragAndDrop({
           } : 'null');
 
           if (isRepeatedEvent && finalDraggedEvent) {
+            // Validate events before opening modal
+            if (!event || !finalDraggedEvent || !dragStartOriginalEvent) {
+              console.error('[useDragAndDrop] Missing event data for RepeatEditModal (drag):', {
+                event: !!event,
+                finalDraggedEvent: !!finalDraggedEvent,
+                dragStartOriginalEvent: !!dragStartOriginalEvent
+              });
+              return;
+            }
+            
             // For repeated events, show the RepeatEditModal
             setRepeatEditModalState({
               isOpen: true,
@@ -252,6 +262,8 @@ export function useDragAndDrop({
                 ...dragStartOriginalEvent,
                 start: new Date(dragStartOriginalEvent.start.getTime()),
                 end: new Date(dragStartOriginalEvent.end.getTime()),
+                // Ensure seriesId is passed through
+                seriesId: event.seriesId,
                 // Also add flags to original event
                 _isDragging: true,
                 _isResizing: false,
@@ -288,7 +300,9 @@ export function useDragAndDrop({
               e.id === finalDraggedEvent.id ? eventWithTimestamp : e
             ));
             
-            handleUpdateEvent(eventWithTimestamp);
+            handleUpdateEvent(eventWithTimestamp.id, eventWithTimestamp);
+          } else {
+            console.warn('[useDragAndDrop] No finalDraggedEvent found, skipping handleUpdateEvent call');
           }
         }
 
@@ -681,6 +695,15 @@ export function useDragAndDrop({
             const isRepeatedEvent = resizedEvent.seriesId || (resizedEvent.repeat && resizedEvent.repeat !== "none");
 
             if (isRepeatedEvent) {
+              // Validate events before opening modal
+              if (!originalEvent || !resizedEvent) {
+                console.error('[useDragAndDrop] Missing event data for RepeatEditModal:', {
+                  originalEvent: !!originalEvent,
+                  resizedEvent: !!resizedEvent
+                });
+                return;
+              }
+              
               // For repeated events, show the RepeatEditModal
               setRepeatEditModalState({
                 isOpen: true,
@@ -751,35 +774,39 @@ export function useDragAndDrop({
                 }
               
               // For non-repeated events, update directly
-              const eventWithTimestamp = {
-                ...resizedEvent,
-                lastDragTime: Date.now(), // Add timestamp for recent resize tracking
-                _exactPosition: {
-                  start: new Date(resizedEvent.start.getTime()),
-                  end: new Date(resizedEvent.end.getTime())
-                },
-                // Add time change information
-                _timeChange: {
-                  startDiff: resizedEvent.start.getTime() - originalEvent.start.getTime(),
-                  endDiff: resizedEvent.end.getTime() - originalEvent.end.getTime()
-                },
-                // Store the original event data for proper comparison
-                _originalEvent: originalEvent,
-                // Update all events in the series
-                _updateSeries: true,
-                // Flag for the type of operation
-                _isDragging: false,
-                _isResizing: false, // Resize is complete
-                // Add the preserveRepeat flag to fix error
-                _preserveRepeat: true
-              };
-              
-              // Update the event in state first
-              setEvents(prev => prev.map(e => 
-                e.id === resizedEvent.id ? eventWithTimestamp : e
-              ));
-              
-              handleUpdateEvent(eventWithTimestamp);
+              if (resizedEvent) {
+                const eventWithTimestamp = {
+                  ...resizedEvent,
+                  lastDragTime: Date.now(), // Add timestamp for recent resize tracking
+                  _exactPosition: {
+                    start: new Date(resizedEvent.start.getTime()),
+                    end: new Date(resizedEvent.end.getTime())
+                  },
+                  // Add time change information
+                  _timeChange: {
+                    startDiff: resizedEvent.start.getTime() - originalEvent.start.getTime(),
+                    endDiff: resizedEvent.end.getTime() - originalEvent.end.getTime()
+                  },
+                  // Store the original event data for proper comparison
+                  _originalEvent: originalEvent,
+                  // Update all events in the series
+                  _updateSeries: true,
+                  // Flag for the type of operation
+                  _isDragging: false,
+                  _isResizing: false, // Resize is complete
+                  // Add the preserveRepeat flag to fix error
+                  _preserveRepeat: true
+                };
+                
+                // Update the event in state first
+                setEvents(prev => prev.map(e => 
+                  e.id === resizedEvent.id ? eventWithTimestamp : e
+                ));
+                
+                handleUpdateEvent(eventWithTimestamp.id, eventWithTimestamp);
+              } else {
+                console.warn('[useDragAndDrop] No resizedEvent found, skipping handleUpdateEvent call');
+              }
             }
           }
         }

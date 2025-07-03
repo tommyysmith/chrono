@@ -64,6 +64,16 @@ const RepeatEditModal = ({
     if (hasSubmitted.current) return;
     hasSubmitted.current = true;
 
+    // Early validation to prevent null/undefined errors
+    if (!draggedEvent || !originalEvent) {
+      console.error('[RepeatEditModal] Missing required event data:', {
+        draggedEvent: !!draggedEvent,
+        originalEvent: !!originalEvent
+      });
+      onClose();
+      return;
+    }
+
     // Create a clean event object with just the essential properties
     const updatedEvent = {
       ...draggedEvent,
@@ -131,10 +141,16 @@ const RepeatEditModal = ({
     });
 
     // Always update through onEditConfirm to ensure consistent handling
-    onEditConfirm({
-      scope: editScope,
-      event: updatedEvent
-    });
+    if (updatedEvent) {
+      onEditConfirm({
+        scope: editScope,
+        event: updatedEvent
+      });
+    } else {
+      console.error('[RepeatEditModal] updatedEvent is null/undefined, cannot proceed with edit');
+      onClose();
+      return;
+    }
 
     // For double-click edits, also open command bar
     if (isEditOperation && commandBarRef?.current) {

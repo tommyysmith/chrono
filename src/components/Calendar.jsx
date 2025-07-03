@@ -41,6 +41,7 @@ import { useEventRendering } from "@/hooks/useEventRendering.js";
 import { useModalManagement } from "@/hooks/useModalManagement.js";
 import { useTaskManagement } from "@/hooks/useTaskManagement.js";
 import { useEventFiltering } from "@/hooks/useEventFiltering.js";
+import { useCalendar } from "./CalendarDataProvider";
 import {
   Popover,
   PopoverContent,
@@ -209,14 +210,297 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, []);
 
+  // Use Convex calendar data instead of localStorage
   const {
-    events,
-    setEvents,
-    handleCreateEvent,
-    handleUpdateEvent,
-    handleDeleteEvent,
-    handleDeleteSeriesEvents,
-  } = useEventManagement(commandBarRef);
+    allEvents: events,
+    addEvent: addEventToConvex,
+    updateEvent: updateEventInConvex,
+    deleteEvent: handleDeleteEvent,
+    deleteEventSeries: handleDeleteEventSeries,
+    views,
+    isLoading,
+    addView,
+  } = useCalendar();
+
+  // Emergency fallback to create a view if none exist (not needed with new approach)
+  const ensureViewExists = useCallback(async () => {
+    // This function is no longer needed since we use a default viewId
+    // Keeping for compatibility but it won't be called
+  }, []);
+
+  // Removed excessive debug logging that was slowing down the app
+
+  // Local state for draft events (not stored in Convex until saved)
+  const [draftEvents, setDraftEvents] = useState([]);
+
+  // Clean event data for Convex (only include schema fields)
+  const cleanEventForConvex = useCallback(async (eventData) => {
+    // For single calendar setup, use a hardcoded default viewId
+    // We can make this dynamic later when adding multiple calendar support
+    const DEFAULT_VIEW_ID = "default-calendar-view";
+    
+    // Try to get a real viewId from the loaded views, but fall back to default
+    const defaultView = views?.find(v => v.isDefault);
+    const fallbackView = views?.length > 0 ? views[0] : null;
+    let viewId = eventData.viewId || defaultView?._id || fallbackView?._id || DEFAULT_VIEW_ID;
+
+    // Convert dates to ISO strings and only include schema fields
+    const cleanedEvent = {
+      title: eventData.title || '',
+      start: eventData.start instanceof Date ? eventData.start.toISOString() : eventData.start,
+      allDay: eventData.allDay || false,
+      viewId,
+      userId: undefined, // Will be set by Convex based on auth
+      // Note: createdAt and updatedAt are set by the Convex mutation itself
+    };
+
+    // Only include optional fields if they have valid values (not null/undefined)
+    if (eventData.end) {
+      cleanedEvent.end = eventData.end instanceof Date ? eventData.end.toISOString() : eventData.end;
+    }
+    if (eventData.repeat && eventData.repeat !== 'none') {
+      cleanedEvent.repeat = eventData.repeat;
+    }
+    if (eventData.rruleOptions) {
+      cleanedEvent.rruleOptions = eventData.rruleOptions;
+    }
+    if (eventData.seriesId) {
+      cleanedEvent.seriesId = eventData.seriesId;
+    }
+    if (eventData.isRepeat) {
+      cleanedEvent.isRepeat = eventData.isRepeat;
+    }
+    if (eventData.color) {
+      cleanedEvent.color = eventData.color;
+    }
+    if (eventData.description) {
+      cleanedEvent.description = eventData.description;
+    }
+    if (eventData.location) {
+      cleanedEvent.location = eventData.location;
+    }
+    if (eventData.isDraft) {
+      cleanedEvent.isDraft = eventData.isDraft;
+    }
+
+    return cleanedEvent;
+  }, [views, ensureViewExists]);
+
+  // Wrapped handlers that clean data before sending to Convex
+  const handleCreateEvent = useCallback(async (eventData) => {
+    try {
+      // No need to wait for views to load since we have a default fallback
+
+      if (eventData.isDraft) {
+        // Creating/updating a draft event - store locally
+        setDraftEvents(current => {
+          const existingIndex = current.findIndex(draft => draft.id === eventData.id);
+          if (existingIndex !== -1) {
+            // Update existing draft
+            const updated = [...current];
+            updated[existingIndex] = { ...current[existingIndex], ...eventData };
+            return updated;
+          } else {
+            // Add new draft
+            return [...current, eventData];
+          }
+        });
+        return eventData;
+      } else {
+        // Creating a real event - save to Convex and remove any corresponding draft
+        const cleanedEvent = await cleanEventForConvex(eventData);
+        const result = await addEventToConvex(cleanedEvent);
+        
+        // If this was converted from a draft, remove the draft
+        if (eventData.id) {
+          setDraftEvents(current => current.filter(draft => draft.id !== eventData.id));
+        }
+        
+        return result;
+      }
+    } catch (error) {
+      console.error('❌ [ERROR] Failed to create event:', error);
+      alert('Failed to create event: ' + error.message);
+      return null;
+    }
+  }, [addEventToConvex, cleanEventForConvex, setDraftEvents, isLoading]);
+
+  const handleUpdateEvent = useCallback(async (eventId, eventData) => {
+    try {
+      // Early return if eventData is null or undefined
+      if (!eventData) {
+        console.error('handleUpdateEvent called with null/undefined eventData');
+        return false;
+      }
+
+      // Handle draft event deletion
+      if (eventData._shouldDelete) {
+        if (eventData.isDraft) {
+          // Remove from draft events
+          setDraftEvents(current => current.filter(draft => draft.id !== eventData.id));
+          return true;
+        } else {
+          // Delete from Convex
+          return await handleDeleteEvent(eventId);
+        }
+      }
+
+      // Handle single event updates (detach from recurring series)
+      if (eventData._editScope === 'single' && eventData.seriesId) {
+        console.log('🎯 Handling single event update - detaching from series:', eventData.seriesId);
+        
+        // For single event edits, we need to detach from the series
+        const updatedEventData = {
+          ...eventData,
+          // Remove recurring properties to detach from series
+          repeat: 'none',
+          seriesId: null,
+          rruleOptions: null,
+          isRepeat: false,
+          // Remove internal flags
+          _editScope: undefined,
+          _timeChange: undefined,
+          _isDragging: undefined,
+          _isResizing: undefined,
+          _seriesUpdate: undefined,
+          _futureUpdate: undefined,
+          _detachedEvent: undefined,
+          _preserveExactPosition: undefined,
+          _currentDate: undefined
+        };
+        
+        // Clean the event data and update in Convex
+        const cleanedEvent = await cleanEventForConvex(updatedEventData);
+        delete cleanedEvent.id; // Remove ID from the update data
+        
+        const result = await updateEventInConvex(eventId, cleanedEvent);
+        console.log('✅ Successfully detached and updated single event');
+        return result;
+      }
+
+      // Handle recurring event series updates
+      if (eventData._editScope === 'all' && eventData.seriesId) {
+        // For 'all' scope, we delete the entire series and create a new one.
+        // This avoids issues with only having partial series data locally.
+        const seriesId = eventData.seriesId;
+        const originalBaseEvent = eventData._originalEvent;
+        const timeChange = eventData._timeChange || { startDiff: 0, endDiff: 0 };
+
+        if (!originalBaseEvent) {
+          console.error('Cannot update series without original event data.');
+          return false;
+        }
+
+        await handleDeleteEventSeries(seriesId);
+
+        // Create a new base event from the original, applying the changes.
+        const newBaseEvent = {
+          ...originalBaseEvent,
+          start: new Date(originalBaseEvent.start.getTime() + timeChange.startDiff),
+          end: new Date(originalBaseEvent.end.getTime() + timeChange.endDiff),
+          // Apply any other modifications from the edit
+          title: eventData.title || originalBaseEvent.title,
+          color: eventData.color || originalBaseEvent.color,
+          description: eventData.description || originalBaseEvent.description,
+          location: eventData.location || originalBaseEvent.location,
+          // IMPORTANT: Preserve the original seriesId and rruleOptions
+          seriesId: originalBaseEvent.seriesId,
+          repeat: originalBaseEvent.repeat,
+          rruleOptions: originalBaseEvent.rruleOptions,
+          isRepeat: true,
+          id: generateEventId(), // Generate a new ID for the new base event
+        };
+
+        // Create the new event series
+        const result = await handleCreateEvent(newBaseEvent);
+
+        // Clean up any local draft events related to the old series
+        setDraftEvents(current =>
+          current.filter(draft => draft.seriesId !== seriesId)
+        );
+
+        // Trigger a full calendar refresh to ensure a clean state
+        window.dispatchEvent(new CustomEvent('calendar-refresh-needed'));
+
+        return result;
+      }
+
+      // Handle regular updates
+      if (eventData.isDraft) {
+        // If still a draft, update in local state
+        setDraftEvents(current => 
+          current.map(draft => 
+            draft.id === eventId ? { ...draft, ...eventData } : draft
+          )
+        );
+        return true;
+      } else {
+        // Check if this is a UUID (draft event being converted) or Convex ID
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId);
+        
+        if (isUUID) {
+          // This is a draft event being converted to a real event
+          // Create a new event instead of updating
+          const cleanedEvent = await cleanEventForConvex(eventData);
+          const result = await addEventToConvex(cleanedEvent);
+          
+          // Remove the draft event
+          setDraftEvents(current => current.filter(draft => draft.id !== eventId));
+          
+          return result;
+        } else {
+          // Update existing Convex event
+          const cleanedEvent = await cleanEventForConvex(eventData);
+          // We don't need to pass the ID from cleanedEvent, as it's already the first arg
+          delete cleanedEvent.id;
+          return await updateEventInConvex(eventId, cleanedEvent);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to update event:', error);
+      alert('Failed to update event: ' + error.message);
+      return false;
+    }
+  }, [updateEventInConvex, addEventToConvex, cleanEventForConvex, handleDeleteEvent, handleDeleteEventSeries, setDraftEvents, events]);
+
+  // Use refs to hold the latest callbacks
+  const handleCreateEventRef = useRef(handleCreateEvent);
+  const handleUpdateEventRef = useRef(handleUpdateEvent);
+
+  useEffect(() => {
+    handleCreateEventRef.current = handleCreateEvent;
+    handleUpdateEventRef.current = handleUpdateEvent;
+  }, [handleCreateEvent, handleUpdateEvent]);
+
+  // Create stable callbacks to pass to CommandBar
+  const onCreateEventStable = useCallback((...args) => {
+    return handleCreateEventRef.current(...args);
+  }, []);
+
+  const onUpdateEventStable = useCallback((...args) => {
+    return handleUpdateEventRef.current(...args);
+  }, []);
+
+  // For compatibility, create a state setter that works with draft events
+  const setEvents = useCallback((updaterFn) => {
+    if (typeof updaterFn === 'function') {
+      setDraftEvents(current => {
+        const currentEvents = [...events, ...current]; // Combine Convex + draft events
+        const updated = updaterFn(currentEvents);
+        // Extract only the draft events from the updated array
+        return updated.filter(event => event.isDraft);
+      });
+    } else {
+      // Direct assignment - filter for drafts only
+      setDraftEvents(updaterFn.filter(event => event.isDraft));
+    }
+  }, [events]);
+
+  // Handle series events deletion (for recurring events)
+  const handleDeleteSeriesEvents = useCallback(async (seriesId) => {
+    // For now, this is a placeholder - we'll implement series deletion in Convex later
+    console.warn("handleDeleteSeriesEvents called - this needs Convex implementation");
+  }, []);
 
   // Get the event filtering hook
   const { getTaskEventsForView } = useEventFiltering();
@@ -224,20 +508,30 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   // Task update trigger for re-rendering when tasks change
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   
-  // Listen for task updates to refresh calendar
+  // Listen for task updates and calendar refresh events
   useEffect(() => {
     const handleTaskUpdate = () => {
       setTaskUpdateTrigger(prev => prev + 1);
     };
 
+    const handleCalendarRefresh = () => {
+      // Clear any draft events that might be causing duplication
+      setDraftEvents([]);
+      // Trigger a re-render
+      setTaskUpdateTrigger(prev => prev + 1);
+      console.log('🔄 Calendar refresh triggered - cleared draft events');
+    };
+
     window.addEventListener('storage', handleTaskUpdate);
     window.addEventListener('tasksUpdated', handleTaskUpdate);
     window.addEventListener('tasks-updated', handleTaskUpdate);
+    window.addEventListener('calendar-refresh-needed', handleCalendarRefresh);
 
     return () => {
       window.removeEventListener('storage', handleTaskUpdate);
       window.removeEventListener('tasksUpdated', handleTaskUpdate);
       window.removeEventListener('tasks-updated', handleTaskUpdate);
+      window.removeEventListener('calendar-refresh-needed', handleCalendarRefresh);
     };
   }, []);
 
@@ -318,7 +612,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDeleteModalClose,
     handleRepeatEditConfirm,
     handleRepeatEditDiscard,
-  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState);
+  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleCreateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState);
 
   const {
     handleCreateTask,
@@ -326,7 +620,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleToggleTaskCompletion,
   } = useTaskManagement();
 
-  // Combine regular events with task events from localStorage, with smart merging
+  // Combine Convex events, draft events, and task events from localStorage
   const displayEvents = useMemo(() => {
     const taskEvents = getTaskEventsForView(selectedDate, viewType, currentDefaultColor);
     
@@ -339,8 +633,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       }
     });
     
-    // Process events from the events state
-    const processedEvents = events.filter(event => {
+    // Combine Convex events with local draft events
+    const allEvents = [...events, ...draftEvents];
+    
+    // Process events from the combined events
+    const processedEvents = allEvents.filter(event => {
       // Keep regular events and drafts as-is
       if (!event.isTaskBlock || event.isDraft) return true;
       
@@ -409,7 +706,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     );
     
     return [...processedEvents, ...newTaskEvents];
-  }, [events, selectedDate, viewType, currentDefaultColor, getTaskEventsForView, taskUpdateTrigger, dragState.eventId, dragState.isResizing]);
+  }, [events, draftEvents, selectedDate, viewType, currentDefaultColor, getTaskEventsForView, taskUpdateTrigger, dragState.eventId, dragState.isResizing]);
 
   const eventStyleGetter = useCallback((event, start, end, isSelected) => {
     // For task blocks, return minimal styles to let Tailwind classes handle the styling
@@ -512,7 +809,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
 
   // Sync with selectedDate prop
   useEffect(() => {
-    console.log('Calendar: selectedDate prop changed to:', selectedDate);
     setCurrentDate(selectedDate);
   }, [selectedDate]);
 
@@ -1421,7 +1717,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   setCurrentDate(date);
                   // Propagate to parent
                   if (onDateSelect) {
-                    console.log('Calendar: Propagating date selection to parent:', date);
                     onDateSelect(date);
                   }
                 }}
@@ -1665,8 +1960,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       </motion.div>
       <CommandBar
         ref={commandBarRef}
-        onCreateEvent={useCallback(handleCreateEvent, [])}
-        onUpdateEvent={useCallback(handleUpdateEvent, [])}
+        onCreateEvent={onCreateEventStable}
+        onUpdateEvent={onUpdateEventStable}
         onPrevious={useCallback(
           () => handlePrevious(viewType, currentDate, onDateSelect),
           [viewType, currentDate, onDateSelect]

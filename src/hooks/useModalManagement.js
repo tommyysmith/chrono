@@ -15,7 +15,7 @@ const initialDragState = {
   edge: null,
 };
 
-export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState) {
+export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleCreateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState) {
   const confirmationHasBeenHandled = useRef(false);
 
   const [isGoToDateOpen, setIsGoToDateOpen] = useState(false);
@@ -183,8 +183,13 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           timeChange: eventToUpdate._timeChange
         });
 
-        // Use the handleUpdateEvent function to ensure consistent state updates
-        handleUpdateEvent(eventToUpdate);
+        // Use the handleUpdateEvent function for all cases
+        // The Calendar.jsx handleUpdateEvent will handle single event detachment properly
+        if (eventToUpdate && eventToUpdate.id) {
+          handleUpdateEvent(eventToUpdate.id, eventToUpdate);
+        } else {
+          console.error('[MODAL-MANAGEMENT] eventToUpdate is invalid:', eventToUpdate);
+        }
       } else {
         // For double-click edits, open the CommandBar
         if (commandBarRef?.current) {
@@ -216,7 +221,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         setDragState(initialDragState);
       }
     },
-    [commandBarRef, handleUpdateEvent, repeatEditModalState, setRepeatEditModalState, setDragState]
+    [commandBarRef, handleUpdateEvent, handleCreateEvent, repeatEditModalState, setRepeatEditModalState, setDragState]
   );
 
   const handleRepeatEditDiscard = useCallback(() => {

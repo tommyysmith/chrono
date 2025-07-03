@@ -646,7 +646,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       setIsMultiSelectMode(newSet.size > 0);
       
       // Notify all registered callbacks
-      console.log('[CommandBar] Notifying', selectionChangeCallbacks.size, 'callbacks of selection change');
       selectionChangeCallbacks.forEach(callback => {
         try {
           callback(Array.from(newSet));
@@ -975,17 +974,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [onClose]);
 
   const openForEdit = useCallback((event) => {
-    // Create a deep copy of the event to avoid reference issues
-    const eventCopy = {
-      ...event,
-      start: new Date(event.start),
-      end: new Date(event.end)
-    };
-
-    // Check both allDay and isAllDay properties to ensure compatibility
+    const eventCopy = { ...event, start: new Date(event.start), end: new Date(event.end) };
     const isAllDayEvent = eventCopy.allDay || eventCopy.isAllDay || false;
 
     const eventData = {
+      id: eventCopy._id || eventCopy.id, // Standardize the ID
       title: eventCopy.title || '',
       description: eventCopy.description || '',
       date: format(eventCopy.start, 'yyyy-MM-dd'),
@@ -999,7 +992,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       seriesId: eventCopy.seriesId || null,
       rruleOptions: eventCopy.rruleOptions || null, // Load rruleOptions
       isRepeat: eventCopy.isRepeat || false,
-      // Preserve all metadata flags from the original event
       _editScope: eventCopy._editScope || 'single',
       _seriesUpdate: eventCopy._seriesUpdate || false,
       _futureUpdate: eventCopy._futureUpdate || false,
@@ -1010,25 +1002,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         start: new Date(eventCopy.start),
         end: new Date(eventCopy.end)
       },
-      // Preserve repeat properties for series updates
       _preserveRepeat: eventCopy._preserveRepeat || false,
-      // Force series update if this is a series edit
       _forceSeriesUpdate: eventCopy._seriesUpdate || false,
-      // Store the current times as preserved times for all-day toggle
       _preservedStartTime: format(eventCopy.start, 'HH:mm'),
       _preservedEndTime: format(eventCopy.end, 'HH:mm')
     };
 
-    // Set both the original state and event state
-    setOriginalEventState(eventCopy);
-    setEventState(eventData);
+    setOriginalEventState(eventCopy); // Keep original with _id
+    setEventState(eventData); // Use standardized id
     setSelectedColor(eventCopy.color || getDefaultEventColor());
     setIsAddingEvent(true);
     setHasChanges(false);
-    setPreviewEvent({
-      ...eventCopy,
-      _isPreview: true
-    });
+    setPreviewEvent({ ...eventCopy, _isPreview: true });
   }, []);
 
   const handleEventChange = useCallback((field, value) => {
@@ -1180,9 +1165,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
   const handleSaveChanges = useCallback(() => {
-
     const eventData = {
-      id: originalEventState?.id,
+      id: originalEventState?._id || originalEventState?.id,
       title: eventState.title.trim(),
       description: eventState.description,
       start: (eventState.isAllDay || eventState.isMultiDay) 
@@ -1200,9 +1184,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       rruleOptions: eventState.rruleOptions,
       seriesId: eventState.seriesId,
       color: eventState.color,
-      // Ensure we keep the original repeat properties if this is a series update
       isRepeat: originalEventState?.isRepeat || false,
-      // Preserve all edit scope flags from the original event
       _editScope: originalEventState?._editScope || 'single',
       _seriesUpdate: originalEventState?._seriesUpdate || false,
       _futureUpdate: originalEventState?._futureUpdate || false,
@@ -1219,21 +1201,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             ? createLocalDate(eventState.date, 23, 59)
             : createLocalDateTime(eventState.date, eventState.endTime))
       },
-      // Preserve repeat properties for series updates
       _preserveRepeat: originalEventState?._preserveRepeat || false,
-      // Force series update if this is a series edit
       _forceSeriesUpdate: originalEventState?._seriesUpdate || false,
-      // Remove draft flag when saving
       isDraft: false
     };
 
     if (originalEventState?.isDraft) {
-      // For draft events, create a new event and remove the draft
       onCreateEvent(eventData);
-      // Remove the draft event
-      onUpdateEvent({ ...originalEventState, _shouldDelete: true });
-    } else if (originalEventState?.id) {
-      onUpdateEvent(eventData);
+      if (originalEventState) {
+        onUpdateEvent({ ...originalEventState, _shouldDelete: true });
+      }
+    } else if (originalEventState?._id || originalEventState?.id) {
+      onUpdateEvent(originalEventState._id || originalEventState.id, eventData);
     } else {
       onCreateEvent(eventData);
     }
@@ -1242,8 +1221,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, eventState, onUpdateEvent, onCreateEvent, handleClose, createLocalDateTime, createLocalDate]);
 
   const handleDiscardDraft = useCallback(() => {
-    if (originalEventState?.isDraft) {
-      // Remove the draft event
+    if (originalEventState?.isDraft && originalEventState) {
       onUpdateEvent({ ...originalEventState, _shouldDelete: true });
     }
     handleClose({ skipDelete: true });
@@ -1487,18 +1465,14 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     isMultiSelectMode: () => isMultiSelectMode,
     // Selection change callback management
     onSelectionChange: (callback) => {
-      console.log('[CommandBar] Registering new selection callback');
       setSelectionChangeCallbacks(prev => {
         const newSet = new Set([...prev, callback]);
-        console.log('[CommandBar] Total callbacks after registration:', newSet.size);
         return newSet;
       });
       return () => {
-        console.log('[CommandBar] Unregistering selection callback');
         setSelectionChangeCallbacks(prev => {
           const newSet = new Set(prev);
           newSet.delete(callback);
-          console.log('[CommandBar] Total callbacks after unregistration:', newSet.size);
           return newSet;
         });
       };
@@ -1896,13 +1870,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [taskTitle, taskNotes, selectedTag, pendingNewTag, scheduledDate, taskRepeatOption, taskRepeatSeriesId, taskRruleOptions, taskPriority, tags, editingTaskId, taskToEdit, onCreateTask, onUpdateTask, handleClose, dispatchTagsUpdated]);
 
   const handleKeyDown = useCallback((e) => {
-    console.log('[CommandBar] Keyboard event received:', e.key, {
-      target: e.target.tagName,
-      isAddingEvent,
-      isAddingTask,
-      isOpen,
-      selectedTasksSize: selectedTasks.size
-    });
+    // Debug keyboard events only when needed
+    // console.log('[CommandBar] Keyboard event received:', e.key);
 
     // Check if user is typing in an input field
     const isTypingInInput = e.target.tagName === 'INPUT' || 
@@ -1916,7 +1885,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     // Don't trigger shortcuts if user is typing in an input field OUTSIDE the CommandBar
     // ESC and Enter will be handled by their specific logic above
     if (isTypingInInput && !isCommandBarInput && e.key !== 'Escape' && e.key !== 'Enter') {
-      console.log('[CommandBar] Ignoring keyboard event - user is typing in input field outside CommandBar');
       return;
     }
 
@@ -1924,21 +1892,18 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     if (e.key === 'T' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('[CommandBar] Handling Shift+T');
       setIsAddingTask(true);
       setIsOpen(true);
       return;
     } else if (e.key === 'E' && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('[CommandBar] Handling Shift+E');
       handleAddEventClick();
       setIsOpen(true);
       return;
     } else if ((e.key === '.' || e.key === '>') && e.shiftKey && !isAddingEvent && !isAddingTask && !isGoToDateMode) {
       e.preventDefault();
       e.stopPropagation();
-      console.log('[CommandBar] Handling Shift+. (Settings)');
       if (onOpenSettings) {
         onOpenSettings();
       }
@@ -1960,7 +1925,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
       if (isSettingsOpen) {
         // Let Settings handle ESC first
-        console.log('[CommandBar] Settings is open, letting it handle ESC');
         return;
       }
 
@@ -1974,7 +1938,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       if (shouldHandleEsc) {
         e.preventDefault();
         e.stopPropagation();
-        console.log('[CommandBar] Handling ESC key');
         
         // Handle escape key - close open dropdowns first, then other actions
         if (isRepeatDropdownOpen) {
@@ -1998,7 +1961,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         } else if (originalEventState?.isDraft) {
           handleDiscardDraft();
         } else if (isAddingEvent || isAddingTask) {
-          console.log('[CommandBar] Closing from creation mode');
           handleClose();
         } else {
           handleClose();
@@ -2006,7 +1968,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         return;
       } else {
         // Let ESC bubble up to other components
-        console.log('[CommandBar] Letting ESC bubble up to other components');
         return;
       }
     }
@@ -2016,20 +1977,16 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       if (isAddingEvent || isAddingTask) {
         e.preventDefault();
         e.stopPropagation(); // Only stop propagation when CommandBar should handle it
-        console.log('[CommandBar] Handling ENTER key');
         
         // Handle enter key - use the same flow as clicking save
         if (isAddingEvent) {
-          console.log('[CommandBar] Saving event');
           handleSaveChanges();
         } else if (isAddingTask) {
-          console.log('[CommandBar] Saving task');
           handleSaveTask();
         }
         return;
       } else {
         // Let Enter bubble up to other components when not actively using CommandBar
-        console.log('[CommandBar] Letting ENTER bubble up to other components');
         return;
       }
     }
@@ -3737,23 +3694,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       onOpenChange={setIsRecurrenceModalOpen}
       initialValue={isAddingEvent ? eventState.rruleOptions : taskRruleOptions}
       onSave={handleSaveRecurrenceRule}
-      startDate={(() => {
-        const startDate = isAddingEvent ? 
+      startDate={useMemo(() => {
+        return isAddingEvent ? 
           (eventState.isAllDay || eventState.isMultiDay) ? 
             createLocalDateTime(eventState.date, '00:00') : 
             createLocalDateTime(eventState.date, eventState.startTime)
           : scheduledDate || new Date();
-        
-        console.log('🔵 CommandBar calculating startDate:', {
-          eventStateDate: eventState.date,
-          eventStateStartTime: eventState.startTime,
-          isAllDay: eventState.isAllDay,
-          isMultiDay: eventState.isMultiDay,
-          calculatedStartDate: startDate.toISOString()
-        });
-        
-        return startDate;
-      })()}
+      }, [isAddingEvent, eventState.isAllDay, eventState.isMultiDay, eventState.date, eventState.startTime, scheduledDate, createLocalDateTime])}
     />
 
     {/* RepeatTaskEditModal for Multi-select */}

@@ -222,20 +222,23 @@ const EnhancedTaskContextMenu = ({
     
     let { x, y } = pos;
     
-    // Adjust horizontal position if menu would go off-screen
-    if (x + menuWidth > window.innerWidth) {
-      x = window.innerWidth - menuWidth - padding;
-    }
-    if (x < padding) {
-      x = padding;
-    }
-    
-    // Adjust vertical position if menu would go off-screen
-    if (y + menuHeight > window.innerHeight) {
-      y = window.innerHeight - menuHeight - padding;
-    }
-    if (y < padding) {
-      y = padding;
+    // Only adjust position if we're in the browser (not SSR)
+    if (typeof window !== 'undefined') {
+      // Adjust horizontal position if menu would go off-screen
+      if (x + menuWidth > window.innerWidth) {
+        x = window.innerWidth - menuWidth - padding;
+      }
+      if (x < padding) {
+        x = padding;
+      }
+      
+      // Adjust vertical position if menu would go off-screen
+      if (y + menuHeight > window.innerHeight) {
+        y = window.innerHeight - menuHeight - padding;
+      }
+      if (y < padding) {
+        y = padding;
+      }
     }
     
     return { x, y };

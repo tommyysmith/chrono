@@ -145,8 +145,11 @@ export function useEventManagement(commandBarRef) {
         const customRuleChanged = existingEvent && 
                                   cleanEvent.repeat === 'custom' && 
                                   JSON.stringify(existingEvent.rruleOptions) !== JSON.stringify(cleanEvent.rruleOptions);
+        
+        // Check if this is an 'all' scope edit with time changes (drag/resize operation)
+        const isAllScopeTimeChange = editScope === 'all' && timeChange && (isDragging || isResizing);
 
-        if (presetRepeatChanged || customRuleChanged) {          
+        if (presetRepeatChanged || customRuleChanged || isAllScopeTimeChange) {          
           // Keep the same series ID for consistency
           const seriesId = cleanEvent.seriesId;
           
@@ -157,7 +160,7 @@ export function useEventManagement(commandBarRef) {
             isRepeat: true
           };
           
-          // Generate the new recurring series with the updated pattern
+          // Generate the new recurring series with the updated pattern/time
           const recurringEvents = generateRecurringEvents(updatedEventWithSeries);
           
           // Replace the original series with the new recurring series

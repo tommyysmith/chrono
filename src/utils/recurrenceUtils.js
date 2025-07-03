@@ -259,7 +259,7 @@ export function generateRecurringEvents(baseEvent, endDate, maxInstances = 52) {
     result.push({
       ...baseEvent,
       id: generateEventId(),
-      seriesId: baseEvent.id, // Always use the base event's ID as the seriesId for consistency
+      seriesId: baseEvent.seriesId || baseEvent.id, // Preserve existing seriesId or use base event's ID
       start: new Date(start),
       end: new Date(end),
       isRepeat: true,

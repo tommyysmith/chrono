@@ -9,6 +9,29 @@ import AllDayEventItem from "@/components/AllDayEventItem";
 import EnhancedTaskContextMenu from "@/components/EnhancedTaskContextMenu";
 import { useEventFiltering } from "./useEventFiltering";
 
+// Safe localStorage access helper
+const safeLocalStorage = {
+  getItem: (key, defaultValue = null) => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        return localStorage.getItem(key) || defaultValue;
+      } catch (error) {
+        console.warn('localStorage access failed:', error);
+        return defaultValue;
+      }
+    }
+    return defaultValue;
+  },
+  setItem: (key, value) => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        localStorage.setItem(key, value);
+      } catch (error) {
+        console.warn('localStorage write failed:', error);
+      }
+    }
+  }
+};
 
 export const useEventRendering = (
   events,
@@ -28,12 +51,19 @@ export const useEventRendering = (
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   const [tagUpdateKey, setTagUpdateKey] = useState(0);
   const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
-  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => localStorage.getItem('defaultEventColor') || '#F59E0B');
+  const [currentDefaultColor, setCurrentDefaultColor] = useState('#F59E0B');
+
+  // Set up the default color from localStorage after component mounts
+  useEffect(() => {
+    const storedColor = safeLocalStorage.getItem('defaultEventColor', '#F59E0B');
+    setCurrentDefaultColor(storedColor);
+  }, []);
 
   // Listen for default event color updates
   useEffect(() => {
     const handleDefaultColorUpdate = () => {
-      setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
+      const storedColor = safeLocalStorage.getItem('defaultEventColor', '#F59E0B');
+      setCurrentDefaultColor(storedColor);
     };
 
     window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
@@ -42,10 +72,10 @@ export const useEventRendering = (
 
   // Helper function to get fresh tag data from localStorage
   const getFreshTagData = useCallback((tagId) => {
-    const tags = JSON.parse(localStorage.getItem('tags') || '{}');
+    const tagsJson = safeLocalStorage.getItem('tags', '{}');
+    const tags = JSON.parse(tagsJson);
     return tags[tagId] || null;
   }, [tagUpdateKey]); // Include tagUpdateKey to force re-computation when tags update
-
 
   // Task context menu handlers
   const handleTaskContextMenu = useCallback((e, task) => {
@@ -70,7 +100,7 @@ export const useEventRendering = (
 
   const handleTaskDeleteInternal = useCallback((task) => {
     // Get current tasks from localStorage
-    const savedTasks = localStorage.getItem('tasks');
+    const savedTasks = safeLocalStorage.getItem('tasks');
     if (!savedTasks) {
       setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
       return;
@@ -103,7 +133,7 @@ export const useEventRendering = (
           }
         });
         
-        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        safeLocalStorage.setItem('tasks', JSON.stringify(updatedTasks));
         const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
         window.dispatchEvent(event);
         // Task update handled by parent component
@@ -115,7 +145,7 @@ export const useEventRendering = (
           }
         });
         
-        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        safeLocalStorage.setItem('tasks', JSON.stringify(updatedTasks));
         const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
         window.dispatchEvent(event);
         // Task update handled by parent component
@@ -128,7 +158,7 @@ export const useEventRendering = (
         }
       });
       
-      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+      safeLocalStorage.setItem('tasks', JSON.stringify(updatedTasks));
       const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
       window.dispatchEvent(event);
       // Task update handled by parent component
@@ -139,7 +169,7 @@ export const useEventRendering = (
 
   const handleRemoveFromCalendar = useCallback((task) => {
     // Get current tasks from localStorage
-    const savedTasks = localStorage.getItem('tasks');
+    const savedTasks = safeLocalStorage.getItem('tasks');
     if (!savedTasks) {
       setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
       return;
@@ -166,7 +196,7 @@ export const useEventRendering = (
     });
     
     // Save to localStorage
-    localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    safeLocalStorage.setItem('tasks', JSON.stringify(updatedTasks));
     
     // Dispatch events for UI updates
     const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
@@ -178,7 +208,7 @@ export const useEventRendering = (
 
   const handleTaskUpdate = useCallback((updatedTask) => {
     // Get current tasks from localStorage
-    const savedTasks = localStorage.getItem('tasks');
+    const savedTasks = safeLocalStorage.getItem('tasks');
     if (!savedTasks) return;
 
     const tasks = JSON.parse(savedTasks);
@@ -193,7 +223,7 @@ export const useEventRendering = (
     });
     
     // Save to localStorage
-    localStorage.setItem('tasks', JSON.stringify(tasks));
+    safeLocalStorage.setItem('tasks', JSON.stringify(tasks));
     
     // Dispatch events for UI updates
     const event = new CustomEvent('tasks-updated', { detail: tasks });
@@ -306,8 +336,6 @@ export const useEventRendering = (
     getFreshTagData,
     filterEventsForView,
   ]);
-
-
 
   const renderAllDayEvents = useMemo(() => () => {
     // Only include regular events, NOT tasks in all-day section

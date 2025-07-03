@@ -1,6 +1,8 @@
+"use client";
+
 // /Users/tommysmith/Documents/chrono/src/components/CalendarDataProvider.jsx
 import React, { createContext, useContext } from 'react';
-import { useCalendarData } from '../hooks/useCalendarData';
+import { useConvexCalendarData } from '../hooks/useConvexCalendarData';
 
 const CalendarDataContext = createContext(null);
 
@@ -13,7 +15,7 @@ export const useCalendar = () => {
 };
 
 export const CalendarDataProvider = ({ children }) => {
-  const calendarData = useCalendarData();
+  const calendarData = useConvexCalendarData();
 
   return (
     <CalendarDataContext.Provider value={calendarData}>

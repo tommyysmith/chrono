@@ -211,7 +211,7 @@ export default function Day({
                   title: '',
                   start: new Date(startTime.getTime()),
                   end: new Date(endTime.getTime()),
-                  color: localStorage.getItem('defaultEventColor') || '#F59E0B',
+                  color: (typeof window !== 'undefined' ? localStorage.getItem('defaultEventColor') : null) || '#F59E0B',
                   repeat: 'none',
                   isDraft: true
                 };

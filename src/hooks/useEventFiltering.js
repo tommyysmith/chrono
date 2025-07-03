@@ -9,72 +9,60 @@ export const useEventFiltering = () => {
 
     events.forEach(event => {
       // Direct pass-through for non-recurring events
-      if (!event.rruleOptions && !event.seriesId) {
-        expandedEvents.push(event);
-        return;
-      }
-
-      try {
-        // Handle both types of recurring events: pre-defined (seriesId) and custom (rruleOptions)
-
-        // CASE 1: Events with seriesId that were already generated
-        // These should be passed through directly
-        if (event.seriesId) {
-          // Check if this event falls within our date range
+      if (!event.rruleOptions) {
+        // Also check if it's just an instance of a series without its own rule
+        if (event.seriesId && !event.rruleOptions) {
           const eventStart = new Date(event.start);
           if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
             expandedEvents.push(event);
           }
-          return;
+        } else {
+          expandedEvents.push(event);
         }
+        return;
+      }
 
-        // CASE 2: Root events with rruleOptions that need to be expanded
-        // These are the template events that define the recurrence pattern
-        if (event.rruleOptions) {
-          const rule = new RRule({
-            ...event.rruleOptions,
-            dtstart: new Date(event.start)
+      try {
+        // CASE: Root events with rruleOptions that need to be expanded
+        const ruleOptions = {
+          ...event.rruleOptions,
+          // RRule requires a dtstart property. Use the one from the options if it exists,
+          // otherwise fall back to the event's start time.
+          dtstart: event.rruleOptions.dtstart || new Date(event.start),
+        };
+        const rule = new RRule(ruleOptions);
+
+        // Generate occurrences within the date range
+        const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
+
+        // For each occurrence, create an event instance
+        occurrences.forEach((occurrenceDate, index) => {
+          const startDate = new Date(event.start);
+          const endDate = new Date(event.end);
+
+          // Calculate duration to maintain it across occurrences
+          const duration = endDate.getTime() - startDate.getTime();
+
+          const occurrenceStart = new Date(occurrenceDate);
+          const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
+
+          // The original event is the first instance.
+          const isFirstInstance = occurrenceStart.getTime() === new Date(event.start).getTime();
+
+          expandedEvents.push({
+            ...event,
+            // Use original ID for the very first instance, generate for others
+            id: isFirstInstance ? event.id : `${event.id}_${index}`,
+            start: occurrenceStart,
+            end: occurrenceEnd,
+            isRecurring: true,
+            // The base event's ID becomes the seriesId for all instances
+            seriesId: event.id
           });
+        });
 
-          // Generate occurrences within the date range
-          const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
-
-          // If no occurrences found but this is within our range, include it anyway
-          if (occurrences.length === 0) {
-            const eventStart = new Date(event.start);
-            if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
-              expandedEvents.push(event);
-            }
-            return;
-          }
-
-          // For each occurrence, create an event instance
-          occurrences.forEach((occurrenceDate, index) => {
-            const startDate = new Date(event.start);
-            const endDate = new Date(event.end);
-
-            // Calculate duration to maintain it across occurrences
-            const duration = endDate - startDate;
-
-            const occurrenceStart = occurrenceDate;
-            const occurrenceEnd = new Date(occurrenceStart.getTime() + duration);
-
-            // CRITICAL: For the *first real occurrence* (index 0), use the original ID
-            // This ensures the base event can be manipulated
-            const isFirstOccurrence = index === 0;
-
-            expandedEvents.push({
-              ...event,
-              id: isFirstOccurrence ? event.id : `${event.id}_${index}`,
-              start: occurrenceStart,
-              end: occurrenceEnd,
-              isRecurring: true,
-              seriesId: event.id // The base event itself becomes the series ID
-            });
-          });
-        }
       } catch (error) {
-        console.error('Error expanding recurring event:', error);
+        console.error('Error expanding recurring event:', error, event);
         expandedEvents.push(event); // Fallback to original event
       }
     });
