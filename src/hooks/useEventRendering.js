@@ -6,7 +6,7 @@ import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
 import EventItem from "@/components/EventItem";
 import TaskEventItem from "@/components/TaskEventItem";
 import AllDayEventItem from "@/components/AllDayEventItem";
-import TaskContextMenu from "@/components/TaskContextMenu";
+import EnhancedTaskContextMenu from "@/components/EnhancedTaskContextMenu";
 import { useEventFiltering } from "./useEventFiltering";
 
 
@@ -69,85 +69,44 @@ export const useEventRendering = (
   }, [handleTaskEdit, commandBarRef]);
 
   const handleTaskDeleteInternal = useCallback((task) => {
-    // If a custom task delete handler is provided, try it first
-    if (handleTaskDelete) {
-      const handled = handleTaskDelete(task);
-      if (handled) {
-        return; // Custom handler took care of it
-      }
-      // If custom handler returned false, continue with internal logic
+    // Get current tasks from localStorage
+    const savedTasks = localStorage.getItem('tasks');
+    if (!savedTasks) {
+      setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+      return;
     }
+
+    const updatedTasks = JSON.parse(savedTasks);
     
-    // For calendar view, always delete the specific instance (single scope behavior)
-    // Get tasks from localStorage
-    const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
-    
-    const updatedTasks = { ...tasks };
-    const taskId = task.id;
-    const taskSeriesId = task.seriesId;
-    const taskScheduledDate = task.scheduledDate;
-    
-    // Strengthen instance detection logic
-    const isRecurringInstance = task.isRepeat === true || 
-                               (taskSeriesId && task.originalBaseId) ||
-                               (taskSeriesId && task.id && task.id.includes('_repeat_'));
-    
-    // Additional check: if task has seriesId but no explicit isRepeat, it's likely an instance
-    const isLikelyInstance = taskSeriesId && !task.repeat && task.id !== taskSeriesId;
-    
-    // For recurring tasks (both instances and base tasks), implement single instance deletion behavior
-    if (taskSeriesId && (isRecurringInstance || isLikelyInstance || (task.repeat && task.repeat !== 'none'))) {
-      // Find the base task definition
-      const allTasks = Object.values(updatedTasks).flat();
-      const candidateTasks = allTasks.filter(t => t.seriesId === taskSeriesId);
-      let baseTaskDefinition = candidateTasks.find(t => t.isRepeat === false || typeof t.isRepeat === 'undefined');
+    // Check if this is a recurring task instance
+    if (task.isRepeat === true && task.originalBaseId) {
+      // For recurring task instances, handle based on series
+      const baseTask = Object.values(updatedTasks).flat().find(t => t.id === task.originalBaseId);
       
-      // If we're deleting the base task itself, use it as the base definition
-      if (!baseTaskDefinition && task.repeat && task.repeat !== 'none') {
-        baseTaskDefinition = task;
-      }
-      
-      if (baseTaskDefinition) {
-        // For single instance deletion, update the base task's scheduledDate to the next occurrence
-        setTimeout(() => {
-          import('../utils/recurrenceUtils').then(({ generateNextDisplayableTaskInstance }) => {
-            const nextInstance = generateNextDisplayableTaskInstance(baseTaskDefinition, new Date(taskScheduledDate));
-            
-            if (nextInstance) {
-              // Update the base task with the next occurrence date
-              Object.keys(updatedTasks).forEach((group) => {
-                if (Array.isArray(updatedTasks[group])) {
-                  updatedTasks[group] = updatedTasks[group].map((t) => {
-                    if (t.id === baseTaskDefinition.id) {
-                      return {
-                        ...t,
-                        scheduledDate: nextInstance.scheduledDate
-                      };
-                    }
-                    return t;
-                  });
-                }
-              });
-            } else {
-              // No more instances, remove the base task
-              Object.keys(updatedTasks).forEach((group) => {
-                if (Array.isArray(updatedTasks[group])) {
-                  updatedTasks[group] = updatedTasks[group].filter(
-                    (t) => t.id !== baseTaskDefinition.id
-                  );
-                }
-              });
-            }
-            
-            // Save to localStorage and dispatch events
-            localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-            const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
-            window.dispatchEvent(event);
-            // Task update handled by parent component
-          }).catch(error => {
-            console.error('Error importing generateNextDisplayableTaskInstance:', error);
-          });
-        }, 0);
+      if (baseTask) {
+        // Create an exclusion for this specific instance
+        if (!baseTask.excludedDates) {
+          baseTask.excludedDates = [];
+        }
+        
+        // Add the scheduled date as an exclusion
+        if (task.scheduledDate && !baseTask.excludedDates.includes(task.scheduledDate)) {
+          baseTask.excludedDates.push(task.scheduledDate);
+        }
+        
+        // Update the base task in localStorage
+        Object.keys(updatedTasks).forEach(key => {
+          if (Array.isArray(updatedTasks[key])) {
+            updatedTasks[key] = updatedTasks[key].map(t => 
+              t.id === baseTask.id ? baseTask : t
+            );
+          }
+        });
+        
+        localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+        const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+        window.dispatchEvent(event);
+        // Task update handled by parent component
       } else {
         // No base task found, just remove the instance
         Object.keys(updatedTasks).forEach(key => {
@@ -176,6 +135,70 @@ export const useEventRendering = (
     }
     
     setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, []);
+
+  const handleRemoveFromCalendar = useCallback((task) => {
+    // Get current tasks from localStorage
+    const savedTasks = localStorage.getItem('tasks');
+    if (!savedTasks) {
+      setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+      return;
+    }
+
+    const updatedTasks = JSON.parse(savedTasks);
+    
+    // Update the task to remove calendar information
+    const updatedTask = {
+      ...task,
+      addToCalendar: false,
+      scheduledDate: null,
+      duration: null,
+      updatedAt: new Date().toISOString()
+    };
+    
+    // Update the task in all collections
+    Object.keys(updatedTasks).forEach(key => {
+      if (Array.isArray(updatedTasks[key])) {
+        updatedTasks[key] = updatedTasks[key].map(t => 
+          t.id === task.id ? updatedTask : t
+        );
+      }
+    });
+    
+    // Save to localStorage
+    localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    
+    // Dispatch events for UI updates
+    const event = new CustomEvent('tasks-updated', { detail: updatedTasks });
+    window.dispatchEvent(event);
+    window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: { tasks: updatedTasks } }));
+    
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, []);
+
+  const handleTaskUpdate = useCallback((updatedTask) => {
+    // Get current tasks from localStorage
+    const savedTasks = localStorage.getItem('tasks');
+    if (!savedTasks) return;
+
+    const tasks = JSON.parse(savedTasks);
+    
+    // Update the task in all collections
+    Object.keys(tasks).forEach(key => {
+      if (Array.isArray(tasks[key])) {
+        tasks[key] = tasks[key].map(t => 
+          t.id === updatedTask.id ? updatedTask : t
+        );
+      }
+    });
+    
+    // Save to localStorage
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+    
+    // Dispatch events for UI updates
+    const event = new CustomEvent('tasks-updated', { detail: tasks });
+    window.dispatchEvent(event);
+    window.dispatchEvent(new CustomEvent('tasksUpdated', { detail: { tasks } }));
   }, []);
 
   const { filterEventsForView, getTaskEventsForView, isEventPast: isEventPastUtil } = useEventFiltering();
@@ -503,17 +526,113 @@ export const useEventRendering = (
     );
   }, [handleToggleTaskCompletion, getFreshTagData, isEventPastUtil]);
 
+  // Enhanced context menu handlers
+  const handleMarkAsDone = useCallback((task) => {
+    if (handleToggleTaskCompletion) {
+      handleToggleTaskCompletion(task, 'single');
+    }
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, [handleToggleTaskCompletion]);
+
+  const handlePriorityChange = useCallback((task, priority) => {
+    if (handleTaskUpdate) {
+      const updatedTask = {
+        ...task,
+        priority: priority,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      handleTaskUpdate(updatedTask);
+    }
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, [handleTaskUpdate]);
+
+  const handleTagChange = useCallback((task, tag) => {
+    if (handleTaskUpdate) {
+      const updatedTask = {
+        ...task,
+        tag: tag, // Store the full tag object, not just the ID
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      handleTaskUpdate(updatedTask);
+    }
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, [handleTaskUpdate]);
+
+  const handleScheduleChange = useCallback((task, dateOrOption) => {
+    if (handleTaskUpdate) {
+      let scheduledDate = null;
+      
+      if (dateOrOption === 'custom') {
+        // For now, just open the edit dialog - could enhance with date picker later
+        if (handleTaskEdit) {
+          handleTaskEdit(task);
+        } else if (commandBarRef?.current?.openForTaskEdit) {
+          commandBarRef.current.openForTaskEdit(task);
+        }
+        setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+        return;
+      } else if (dateOrOption instanceof Date) {
+        // Set the time to 9 AM by default
+        const date = new Date(dateOrOption);
+        date.setHours(9, 0, 0, 0);
+        scheduledDate = date.toISOString();
+      }
+      
+      const updatedTask = {
+        ...task,
+        scheduledDate: scheduledDate,
+        addToCalendar: true,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      handleTaskUpdate(updatedTask);
+    }
+    setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+  }, [handleTaskUpdate, handleTaskEdit, commandBarRef]);
+
   // Task Context Menu Popover Component
   const TaskContextMenuPopover = () => {
     return (
-      <TaskContextMenu
+      <EnhancedTaskContextMenu
         isOpen={taskContextMenu.isOpen}
-        position={taskContextMenu.position}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
+          }
+        }}
         task={taskContextMenu.task}
+        position={taskContextMenu.position}
         onEdit={handleTaskEditFromMenu}
         onDelete={handleTaskDeleteInternal}
-        onClose={() => setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } })}
-      />
+        onRemoveFromCalendar={handleRemoveFromCalendar}
+        onMarkAsDone={handleMarkAsDone}
+        onPriorityChange={handlePriorityChange}
+        onTagChange={handleTagChange}
+        onScheduleChange={handleScheduleChange}
+      >
+        {/* Invisible trigger positioned at click coordinates */}
+        <div className="fixed w-0 h-0 overflow-hidden" style={{ 
+          top: `${taskContextMenu.position.y}px`, 
+          left: `${taskContextMenu.position.x}px` 
+        }} />
+      </EnhancedTaskContextMenu>
     );
   };
 

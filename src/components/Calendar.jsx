@@ -822,11 +822,34 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       // Update the task in localStorage for bi-directional synchronization
       handleUpdateTask(updatedTask);
       
-      // Create visual task block for immediate feedback during drag operations
-      const taskBlock = createTaskBlock(updatedTask, dropPosition);
+      // Check if a task block already exists for this task
+      const existingTaskBlockIndex = events.findIndex(e => 
+        e.isTaskBlock && e.originalTask?.id === task.id
+      );
       
-      // Add to events state for immediate visual feedback
-      setEvents(prev => [...prev, taskBlock]);
+      if (existingTaskBlockIndex !== -1) {
+        // Update the existing task block instead of creating a new one
+        setEvents(prev => prev.map((e, index) => {
+          if (index === existingTaskBlockIndex) {
+            return {
+              ...e,
+              start: dropPosition.start,
+              end: dropPosition.end,
+              title: updatedTask.title,
+              originalTask: updatedTask,
+              lastDragTime: Date.now(),
+              _isDragging: true,
+            };
+          }
+          return e;
+        }));
+      } else {
+        // Create visual task block for immediate feedback during drag operations
+        const taskBlock = createTaskBlock(updatedTask, dropPosition);
+        
+        // Add to events state for immediate visual feedback
+        setEvents(prev => [...prev, taskBlock]);
+      }
       
       // Ensure sidebar updates are triggered
       setTimeout(() => {
@@ -1497,7 +1520,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </PopoverTrigger>
                   <PopoverContent 
           ref={contextMenuRef}
-          className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border w-[280px] p-0 focus:outline-none focus-visible:outline-none"
+          className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[280px] p-0 focus:outline-none focus-visible:outline-none"
           sideOffset={5}
           align="start"
           side="bottom"
@@ -1526,9 +1549,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               })}
             </div>
             <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-            <div className="p-1">
+            <div className="p-1 space-y-0.5">
               <button
-                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all focus:outline-none focus-visible:outline-none"
+                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all focus:outline-none focus-visible:outline-none"
                 onClick={(e) => handleEventDuplicate(e)}
                 onMouseDown={(e) => e.stopPropagation()}
               >
@@ -1537,7 +1560,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               </button>
 
               <button
-                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-dark-border-2 transition-all focus:outline-none focus-visible:outline-none"
+                className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all focus:outline-none focus-visible:outline-none"
                 onClick={(e) => handleEventEdit(e)}
                 onMouseDown={(e) => e.stopPropagation()}
               >
@@ -1546,7 +1569,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               </button>
 
               <button
-                className="w-full group text-left px-2 py-2 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white focus:outline-none focus-visible:outline-none"
+                className="w-full group text-left px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs text-[#EC0F0F] hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white focus:outline-none focus-visible:outline-none"
                 onClick={(e) => handleEventDelete(e)}
                 onMouseDown={(e) => e.stopPropagation()}
               >

@@ -18,6 +18,7 @@ import { High } from '../assets/icons/High';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { RRule, Weekday } from 'rrule'; // ✅ Fix: Move RRule import to top level
+import EnhancedTaskContextMenu from './EnhancedTaskContextMenu';
 
 
 // Helper function to get the appropriate priority icon
@@ -63,31 +64,54 @@ export const TaskDragPreview = ({ task }) => {
   if (!task) return null;
 
   const taskIsRecurring = task.repeat && task.repeat !== 'none';
+  
+  // Calculate if this is a 15-minute task
+  const is15MinTask = (task.duration === 15) || 
+    (task.start && task.end && (new Date(task.end).getTime() - new Date(task.start).getTime()) === 15 * 60 * 1000);
+  
   const hasAnyTags = taskIsRecurring || 
                      task.scheduledDate || 
                      task.tag || 
                      (task.priority && task.priority !== 'None');
 
   return (
-    <div className="bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[11px] p-2 shadow-lg max-w-[240px] pointer-events-none">
+    <div className={`bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[11px] ${is15MinTask ? 'p-1' : 'p-2'} shadow-lg max-w-[240px] pointer-events-none opacity-100`}>
       <div className="flex items-start gap-2">
         {/* Checkbox placeholder */}
-        <div className="w-4 h-4 mt-0.5 rounded border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light"></div>
+        <div className="w-4 h-4 mt-0.5 rounded border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light opacity-100"></div>
         
-        <div className="flex flex-col flex-grow gap-1 min-w-0">
-          <span className="text-sm font-medium text-light-text dark:text-dark-text break-words">
-            {task.title}
-          </span>
+        <div className={`flex flex-col ${is15MinTask ? 'justify-center items-center' : ''} flex-grow gap-1 min-w-0`}>
+          <div className={`text-sm font-medium text-light-text dark:text-dark-text break-words ${is15MinTask ? 'flex items-center gap-1' : ''} opacity-100`}>
+            <span>{task.title}</span>
+            {is15MinTask && task.scheduledDate && (() => {
+              const scheduledDate = new Date(task.scheduledDate);
+              const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+              
+              if (hasSpecificTime) {
+                return (
+                  <span className="text-light-text/30 dark:text-dark-text/30 opacity-100">
+                    {format(scheduledDate, 'h:mm a')}
+                  </span>
+                );
+              }
+              return null;
+            })()}
+          </div>
           
-          {hasAnyTags && (
-            <div className="flex items-center flex-wrap gap-1">
+          {hasAnyTags && !is15MinTask && (
+            <div className="flex items-center flex-wrap gap-1 opacity-100">
               {task.scheduledDate && (
-                <div className="inline-flex items-center px-1 h-[16px] text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-primary">
-                  <Calendar className="h-2.5 w-2.5" />
-                  <span className="px-0.5">
+                <div className="inline-flex items-center px-1 h-[16px] text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-primary opacity-100">
+                  <Calendar className="h-2.5 w-2.5 opacity-100" />
+                  <span className="px-0.5 opacity-100">
                     {(() => {
                       const scheduledDate = new Date(task.scheduledDate);
                       const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+                      
+                      // For 15-minute tasks, only show date (since time is shown inline with title)
+                      if (is15MinTask && hasSpecificTime) {
+                        return format(scheduledDate, 'd MMM');
+                      }
                       
                       if (hasSpecificTime) {
                         // Show time for drag preview (more concise)
@@ -103,17 +127,17 @@ export const TaskDragPreview = ({ task }) => {
               
               {task.tag && (
                 <div 
-                  className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px]"
+                  className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] opacity-100"
                   style={{ color: task.tag.color }}
                 >
-                  <Tag className="h-2.5 w-2.5" style={{ color: task.tag.color }} />
-                  <span className="px-0.5">{task.tag.label}</span>
+                  <Tag className="h-2.5 w-2.5 opacity-100" style={{ color: task.tag.color }} />
+                  <span className="px-0.5 opacity-100">{task.tag.label}</span>
                 </div>
               )}
               
               {taskIsRecurring && (
-                <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
-                  <Repeat className="h-2.5 w-2.5" />
+                <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500 opacity-100">
+                  <Repeat className="h-2.5 w-2.5 opacity-100" />
                 </div>
               )}
               
@@ -121,8 +145,8 @@ export const TaskDragPreview = ({ task }) => {
                 const IconComponent = getPriorityIcon(task.priority);
                 const priorityColor = getPriorityColor(task.priority);
                 return (
-                  <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light">
-                    <IconComponent className="h-2.5 w-2.5" style={{ color: priorityColor }} />
+                  <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light opacity-100">
+                    <IconComponent className="h-2.5 w-2.5 opacity-100" style={{ color: priorityColor }} />
                   </div>
                 );
               })()}
@@ -132,18 +156,18 @@ export const TaskDragPreview = ({ task }) => {
       </div>
       
       {/* Drag hint */}
-      <div className="mt-2 text-xs text-light-text/50 dark:text-dark-text/50 text-center">
+      <div className="mt-2 text-xs text-light-text/50 dark:text-dark-text/50 text-center opacity-100">
         Drag to calendar to create time block
       </div>
     </div>
   );
 };
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked, isSelected = false, onSelect }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked, isSelected = false, onSelect, onUpdateTask }) {
   // If isRecurring is not explicitly passed, check the task properties
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
-  const [isPopoverOpen, setIsPopoverOpen] = useState(false);
+  const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
 
   // Draggable setup
   const {
@@ -173,6 +197,111 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
   const [isMultiLine, setIsMultiLine] = useState(false);
   const textSpanRef = useRef(null);
+
+  // Enhanced context menu handlers
+  const handleMarkAsDone = useCallback((task) => {
+    onComplete(task.id);
+  }, [onComplete]);
+
+  const handlePriorityChange = useCallback((task, priority) => {
+    if (onUpdateTask) {
+      const updatedTask = {
+        ...task,
+        priority: priority,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      onUpdateTask(updatedTask);
+    }
+    setIsContextMenuOpen(false);
+  }, [onUpdateTask]);
+
+  const handleTagChange = useCallback((task, tag) => {
+    if (onUpdateTask) {
+      const updatedTask = {
+        ...task,
+        tag: tag, // Store the full tag object, not just the ID
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      onUpdateTask(updatedTask);
+    }
+    setIsContextMenuOpen(false);
+  }, [onUpdateTask]);
+
+  const handleScheduleChange = useCallback((task, dateOrOption) => {
+    if (onUpdateTask) {
+      let scheduledDate = null;
+      
+      if (dateOrOption === 'custom') {
+        // For now, just open the edit dialog - could enhance with date picker later
+        onDoubleClickEdit(task);
+        setIsContextMenuOpen(false);
+        return;
+      } else if (dateOrOption instanceof Date) {
+        // Set the time to 9 AM by default
+        const date = new Date(dateOrOption);
+        date.setHours(9, 0, 0, 0);
+        scheduledDate = date.toISOString();
+      }
+      
+      const updatedTask = {
+        ...task,
+        scheduledDate: scheduledDate,
+        addToCalendar: true,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // For recurring task instances, flag for single instance update
+      if (task.isRepeat === true && task.seriesId) {
+        updatedTask._editScope = 'single';
+      }
+      
+      onUpdateTask(updatedTask);
+    }
+    setIsContextMenuOpen(false);
+  }, [onUpdateTask, onDoubleClickEdit]);
+
+  const handleRemoveFromCalendar = useCallback((task) => {
+    if (onUpdateTask) {
+      const updatedTask = {
+        ...task,
+        addToCalendar: false,
+        scheduledDate: null,
+        duration: null,
+        updatedAt: new Date().toISOString()
+      };
+      
+      onUpdateTask(updatedTask);
+    }
+    setIsContextMenuOpen(false);
+  }, [onUpdateTask]);
+
+  const handleEdit = useCallback((task) => {
+    onDoubleClickEdit(task);
+    setIsContextMenuOpen(false);
+  }, [onDoubleClickEdit]);
+
+  const handleDelete = useCallback((task) => {
+    onDelete(task.id);
+    setIsContextMenuOpen(false);
+  }, [onDelete]);
+
+  // Create separate refs to combine functionality
+  const combinedRef = useCallback((node) => {
+    taskItemRef.current = node;
+    setNodeRef(node);
+  }, [setNodeRef]);
 
   // Directional hover effect functions
   const calculateDirection = useCallback((e) => {
@@ -308,26 +437,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     onClick?.(e);
   };
 
-  const handleContextMenu = (e) => {
-    e.preventDefault();
-    setIsPopoverOpen(true);
-  };
 
-  const handleEdit = () => {
-    onDoubleClickEdit(task);
-    setIsPopoverOpen(false);
-  };
-
-  const handleDelete = () => {
-    onDelete(task.id);
-    setIsPopoverOpen(false);
-  };
-
-  // Create separate refs to combine functionality
-  const combinedRef = useCallback((node) => {
-    taskItemRef.current = node;
-    setNodeRef(node);
-  }, [setNodeRef]);
 
   // Determine if the item should be top-aligned
   // Check for any tags: recurring, scheduled date, tag, or priority
@@ -338,6 +448,10 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   
   const shouldAlignTop = isMultiLine || hasAnyTags;
   const alignmentClass = shouldAlignTop ? 'items-start' : 'items-center';
+
+  // Calculate if this is a 15-minute task (either from duration or start/end times)
+  const is15MinTask = (task.duration === 15) || 
+    (task.start && task.end && (new Date(task.end).getTime() - new Date(task.start).getTime()) === 15 * 60 * 1000);
 
   return (
     <div className="relative" style={dragStyle}>
@@ -351,13 +465,12 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         animate={isShiftSelecting ? { opacity: 1, x: 0, y: 0, scale: 1 } : getBackgroundAnimation()}
       />
       
-      <div 
-        ref={combinedRef}
-        data-task-item
-        className={`select-none min-h-[40px] cursor-pointer flex ${alignmentClass} gap-2 p-2 rounded-[11px] relative overflow-hidden hover:bg-transparent focus:outline-none focus-visible:outline-none ${
+              <div 
+         ref={combinedRef}
+         data-task-item
+        className={`select-none min-h-[40px] cursor-pointer flex ${alignmentClass} gap-2 ${is15MinTask ? 'p-1' : 'p-2'} rounded-[11px] relative overflow-hidden hover:bg-transparent focus:outline-none focus-visible:outline-none ${
           isDragging ? 'cursor-grabbing' : task.completed ? 'cursor-default' : 'cursor-grab'
         }`}
-        onContextMenu={handleContextMenu}
         onClick={handleClick}
         onDoubleClick={() => onDoubleClickEdit(task)}
         onMouseEnter={(e) => {
@@ -366,7 +479,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         }}
         onMouseLeave={(e) => {
           setIsHovering(false);
-          setIsPopoverOpen(false);
+          setIsContextMenuOpen(false);
           handleDirectionalMouseLeave(e);
         }}
         tabIndex={-1}
@@ -384,13 +497,26 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           onChange={() => onComplete(task.id)}
         />
       </div>
-      <div className="flex flex-col justify-center flex-grow gap-1 min-w-0">
-        <span 
-          ref={textSpanRef}
-          className={`text-sm ${hasAnyTags ? 'mt-0 leading-4' : 'mt-[2px]'} ${task.completed ? 'line-through opacity-50' : ''} break-words`}
-        >
-          {task.title}
-        </span>
+      <div className={`flex flex-col ${is15MinTask ? 'justify-center items-center flex-grow h-full' : 'justify-center flex-grow'} gap-1 min-w-0`}>
+        <div className={`text-sm ${hasAnyTags && !is15MinTask ? 'mt-0 leading-4' : is15MinTask ? '' : 'mt-[2px]'} ${task.completed ? 'line-through opacity-50' : ''} break-words ${is15MinTask ? 'flex items-center gap-1' : ''}`}>
+          <span ref={textSpanRef}>
+            {task.title}
+          </span>
+          {is15MinTask && task.scheduledDate && (() => {
+            const scheduledDate = new Date(task.scheduledDate);
+            const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+            
+            if (hasSpecificTime) {
+              return (
+                <span className="text-light-text/30 dark:text-dark-text/30">
+                  {format(scheduledDate, 'h:mm a')}
+                </span>
+              );
+            }
+            return null;
+          })()}
+        </div>
+        {!is15MinTask && (
         <div className="flex items-center flex-wrap flex-row gap-1">
         {/* Always show scheduled date if available, regardless of tags */}
         {!hideScheduledDate && task.scheduledDate && (
@@ -400,6 +526,11 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             {(() => {
               const scheduledDate = new Date(task.scheduledDate);
               const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+              
+              // For 15-minute tasks, only show date (since time is shown inline with title)
+              if (is15MinTask && hasSpecificTime) {
+                return format(scheduledDate, 'd MMM');
+              }
               
               if (hasSpecificTime) {
                 // Show both date and time for tasks scheduled via calendar
@@ -512,42 +643,34 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
 
         
         </div>
+        )}
       </div>
 
-      {/* More icon shown on hover - but hidden during drag */}
+      {/* Enhanced context menu shown on hover - but hidden during drag */}
       <AnimatePresence mode="wait">
         {isHovering && !isDragging && (
-          <Popover open={isPopoverOpen} onOpenChange={setIsPopoverOpen}>
-            <PopoverTrigger asChild>
-              <motion.button
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.05, ease: "easeOut" }}
-                className={`flex items-center justify-center group absolute ${hasAnyTags ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
-              >
-                <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
-              </motion.button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-auto p-1 min-w-[120px] bg-dark-bg-lighter dark:bg-dark-bg rounded-[9px] shadow-md border border-light-border dark:border-dark-border">
-              <div className="flex flex-col gap-1">
-                <button
-                  onClick={handleEdit}
-                  className="w-full px-2 py-1 text-xs text-dark-text dark:text-dark-text rounded-[5px] flex items-center gap-2 hover:bg-white/15 dark:hover:bg-white/5"
-                >
-                  <Pencil className="w-3 h-3 text-dark-text dark:text-dark-text" />
-                  Edit
-                </button>
-                <button
-                  onClick={handleDelete}
-                  className="group w-full px-2 py-1 text-xs rounded-[5px] flex items-center gap-2 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white text-[#EC0F0F]"
-                >
-                  <Trash className="w-3 h-3" />
-                  Delete
-                </button>
-              </div>
-            </PopoverContent>
-          </Popover>
+          <EnhancedTaskContextMenu
+            isOpen={isContextMenuOpen}
+            onOpenChange={setIsContextMenuOpen}
+            task={task}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onRemoveFromCalendar={handleRemoveFromCalendar}
+            onMarkAsDone={handleMarkAsDone}
+            onPriorityChange={handlePriorityChange}
+            onTagChange={handleTagChange}
+            onScheduleChange={handleScheduleChange}
+          >
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.05, ease: "easeOut" }}
+              className={`flex items-center justify-center group absolute ${(hasAnyTags && !is15MinTask) ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
+            >
+              <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+            </motion.button>
+          </EnhancedTaskContextMenu>
         )}
       </AnimatePresence>
 

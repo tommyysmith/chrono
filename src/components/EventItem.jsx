@@ -18,6 +18,10 @@ const EventItem = ({
   const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
   const repeatClass = isRepeatEvent ? "repeat-event" : "";
 
+  // Calculate if this is a 15-minute event
+  const is15MinEvent = event.start && event.end && 
+    (new Date(event.end).getTime() - new Date(event.start).getTime()) === 15 * 60 * 1000;
+
   // Setup @dnd-kit draggable for EventItems
   const {
     attributes,
@@ -90,7 +94,7 @@ const EventItem = ({
 
             {/* iOS-style resize handles - positioned above drag area with higher z-index */}
             <div
-              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20"
+              className={`absolute top-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20 ${is15MinEvent ? 'left-[15%] right-[15%]' : 'left-0 right-0'}`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -101,7 +105,7 @@ const EventItem = ({
               <div className="w-8 h-0.5 bg-gray-400/40 dark:bg-gray-500/40 rounded-full opacity-0 group-hover:opacity-100 group-active:opacity-100 group-hover:bg-gray-500/60 dark:group-hover:bg-gray-400/60 group-active:bg-gray-600/80 dark:group-active:bg-gray-300/80 group-active:h-1 transition-all duration-150" />
             </div>
             <div
-              className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20"
+              className={`absolute bottom-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20 ${is15MinEvent ? 'left-[15%] right-[15%]' : 'left-0 right-0'}`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -113,11 +117,20 @@ const EventItem = ({
             </div>
 
             {/* Event content - positioned above drag area but below resize handles */}
-            <div className="px-2 py-1 relative z-10 pointer-events-none">
-              <div className="font-medium text-xs">{event.title || 'New Event'}</div>
-              <div className="text-xs text-light-text/30 dark:text-dark-text/30">
-                {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
+            <div className={`relative z-10 pointer-events-none ${is15MinEvent ? 'px-1 py-0.5 flex items-center h-full' : 'px-2 py-1'}`}>
+              <div className={`font-medium text-xs ${is15MinEvent ? 'flex items-center gap-1 px-1' : ''}`}>
+                <span>{event.title || 'New Event'}</span>
+                {is15MinEvent && (
+                  <span className="text-light-text/30 px-1 dark:text-dark-text/30">
+                    {format(event.start, "h:mm a")}
+                  </span>
+                )}
               </div>
+              {!is15MinEvent && (
+                <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                  {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
+                </div>
+              )}
             </div>
 
             {/* Recurring icon - absolutely positioned in bottom right of entire event */}
@@ -144,7 +157,7 @@ export const EventDragPreview = ({ event, dimensions, livePreview }) => {
 
   return (
     <div 
-      className="backdrop-blur-md rounded-[5px] shadow-lg w-[200px] pointer-events-none text-white p-2"
+      className="backdrop-blur-md rounded-[5px] shadow-lg w-[200px] pointer-events-none text-white px-3 py-2 opacity-100"
       style={{ backgroundColor: event.color || '#808080' }}
     >
       <div className="flex items-start gap-2">
@@ -154,18 +167,18 @@ export const EventDragPreview = ({ event, dimensions, livePreview }) => {
         <div className="flex flex-col flex-grow gap-1 min-w-0">
           {/* Title row with recurring icon */}
           <div className="flex items-start justify-between gap-2">
-            <span className="text-sm font-medium text-white break-words flex-grow">
+            <span className="text-sm font-medium text-white break-words flex-grow opacity-100">
               {event.title || 'New Event'}
             </span>
             {isRepeatEvent && (
-              <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-white/20 text-[10px] rounded-[4px] bg-white/10 text-white flex-shrink-0">
-                <Repeat className="h-2.5 w-2.5" />
+              <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-white/20 text-[10px] rounded-[4px] bg-white/10 text-white flex-shrink-0 opacity-100">
+                <Repeat className="h-2.5 w-2.5 opacity-100" />
               </div>
             )}
           </div>
           
           {/* Live updating time range */}
-          <div className="text-xs text-white/70">
+          <div className="text-xs text-white/70 opacity-100">
             {(() => {
               // Use live preview times if available, otherwise fall back to original times
               if (livePreview && livePreview.start && livePreview.end) {

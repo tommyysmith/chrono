@@ -544,6 +544,11 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                          }
                        }}
                       isRecurring={task.repeat && task.repeat !== 'none' || task.isRepeat}
+                      onUpdateTask={(updatedTask) => {
+                        // Handle task updates in AgendaView by forcing a refresh
+                        // The actual update is handled by localStorage and storage events
+                        forceRefresh();
+                      }}
                     />
                   );
                 })}

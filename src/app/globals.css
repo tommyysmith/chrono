@@ -99,3 +99,12 @@ input[type="checkbox"] {
   @apply rounded border-light-border dark:border-dark-border bg-light-bg dark:bg-dark-bg;
   @apply focus:border-light-border focus:border-2 dark:focus:border-dark-border dark:focus:border-2 focus:ring-0;
 }
+
+.no-animation-popover,
+.no-animation-popover[data-state="open"],
+.no-animation-popover[data-state="closed"] {
+  animation: none !important;
+  transition: none !important;
+  opacity: 1 !important;
+  transform: none !important;
+}

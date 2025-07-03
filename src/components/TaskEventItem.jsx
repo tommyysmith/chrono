@@ -18,8 +18,23 @@ const TaskEventItem = ({
   onToggleTaskCompletion,
   getFreshTagData,
 }) => {
+
+
   const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
   const repeatClass = isRepeatEvent ? "repeat-event" : "";
+
+  // Calculate if this is a 15-minute task event - use live dimensions during resize
+  const is15MinTaskEvent = (() => {
+    // Check current event times (these should update during resize)
+    if (event.start && event.end) {
+      const currentDuration = new Date(event.end).getTime() - new Date(event.start).getTime();
+      const durationInMinutes = currentDuration / (60 * 1000);
+      return Math.abs(durationInMinutes - 15) < 1; // 1 minute tolerance
+    }
+    
+    // Fallback to original task duration
+    return event.originalTask?.duration === 15;
+  })();
 
   // Setup @dnd-kit draggable for TaskEventItems
   const {
@@ -77,6 +92,8 @@ const TaskEventItem = ({
             (event.originalTask?.seriesId && event.originalTask?.originalBaseId));
   };
 
+
+
   return (
     <TooltipProvider delayDuration={2000}>
       <Tooltip>
@@ -94,12 +111,12 @@ const TaskEventItem = ({
           >
             {/* Draggable area - excludes resize handles */}
             <div 
-              className="absolute inset-0 top-3 bottom-3 cursor-pointer"
+              className="absolute inset-0 cursor-pointer z-0"
               {...listeners}
             />
             {/* iOS-style resize handles - only visible on hover */}
             <div
-              className="absolute top-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-10"
+              className={`absolute top-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20 ${is15MinTaskEvent ? 'left-[15%] right-[15%]' : 'left-0 right-0'}`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -110,7 +127,7 @@ const TaskEventItem = ({
               <div className="w-8 h-0.5 bg-gray-400/40 dark:bg-gray-500/40 rounded-full opacity-0 group-hover:opacity-100 group-active:opacity-100 group-hover:bg-gray-500/60 dark:group-hover:bg-gray-400/60 group-active:bg-gray-600/80 dark:group-active:bg-gray-300/80 group-active:h-1 transition-all duration-150" />
             </div>
             <div
-              className="absolute bottom-0 left-0 right-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-10"
+              className={`absolute bottom-0 h-3 cursor-ns-resize resize-handle flex items-center justify-center group z-20 ${is15MinTaskEvent ? 'left-[15%] right-[15%]' : 'left-0 right-0'}`}
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -122,20 +139,42 @@ const TaskEventItem = ({
             </div>
 
             {/* Task content */}
-            <div className="px-1 py-1">
+            <div className={`relative z-10 pointer-events-none ${is15MinTaskEvent ? 'px-1 py-0.5 flex items-center h-full' : 'px-1 py-1'}`}>
               {event.isTaskBlock ? (
-                <div className="flex flex-col gap-1">
-                  <div className="font-medium text-xs flex items-center gap-2">
-                    <Checkbox 
-                      checked={event.originalTask?.completed || false}
-                      onChange={() => {
-                        if (onToggleTaskCompletion && event.originalTask) {
-                          onToggleTaskCompletion(event.originalTask, 'single');
-                        }
-                      }}
-                    />
-                    {event.title}
+                <div className={`flex flex-col gap-1 ${is15MinTaskEvent ? 'items-center' : ''}`}>
+                  <div className={`font-medium text-xs flex items-center gap-2 ${is15MinTaskEvent ? 'gap-1' : ''}`}>
+                    <div className="pointer-events-auto">
+                      <Checkbox 
+                        checked={event.originalTask?.completed || false}
+                        onChange={() => {
+                          if (onToggleTaskCompletion && event.originalTask) {
+                            onToggleTaskCompletion(event.originalTask, 'single');
+                          }
+                        }}
+                      />
+                    </div>
+                    <span>{event.title}</span>
+                    {is15MinTaskEvent && (() => {
+                      // Calculate time display for 15-minute events  
+                      if (event.start && event.end) {
+                        return (
+                          <span className="text-light-text/30 dark:text-dark-text/30">
+                            {format(event.start, "h:mm a")}
+                          </span>
+                        );
+                      }
+                      if (event.originalTask?.scheduledDate) {
+                        const startDate = new Date(event.originalTask.scheduledDate);
+                        return (
+                          <span className="text-light-text/30 dark:text-dark-text/30">
+                            {format(startDate, "h:mm a")}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
+                  {!is15MinTaskEvent && (
                   <div className="text-xs text-light-text/50 dark:text-dark-text/50 ml-5">
                     {(() => {
                       // If event has proper start/end times, use them
@@ -157,10 +196,33 @@ const TaskEventItem = ({
                       return "Time not set";
                     })()}
                   </div>
+                  )}
                 </div>
               ) : (
-                <>
-                  <div className="font-medium text-xs">{event.title}</div>
+                <div className={`${is15MinTaskEvent ? 'flex items-center gap-1' : ''}`}>
+                  <div className="font-medium text-xs">
+                    <span>{event.title}</span>
+                    {is15MinTaskEvent && (() => {
+                      // Calculate time display for 15-minute events  
+                      if (event.start && event.end) {
+                        return (
+                          <span className="text-light-text/30 dark:text-dark-text/30 ml-1">
+                            {format(event.start, "h:mm a")}
+                          </span>
+                        );
+                      }
+                      if (event.originalTask?.scheduledDate) {
+                        const startDate = new Date(event.originalTask.scheduledDate);
+                        return (
+                          <span className="text-light-text/30 dark:text-dark-text/30 ml-1">
+                            {format(startDate, "h:mm a")}
+                          </span>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                  {!is15MinTaskEvent && (
                   <div className="text-xs text-light-text/30 dark:text-dark-text/30">
                     {(() => {
                       // If event has proper start/end times, use them
@@ -182,7 +244,8 @@ const TaskEventItem = ({
                       return "Time not set";
                     })()}
                   </div>
-                </>
+                  )}
+                </div>
               )}
             </div>
 
@@ -222,6 +285,8 @@ const TaskEventItem = ({
                 )}
               </div>
             )}
+
+
           </motion.div>
         </TooltipTrigger>
         {/* No tooltip for task events */}
@@ -240,32 +305,32 @@ export const TaskEventDragPreview = ({ event, dimensions, livePreview, getFreshT
                      (event.originalTask?.priority && event.originalTask.priority !== 'None');
 
   return (
-    <div className="bg-light-bg-light dark:bg-dark-bg-lighter border border-dashed border-light-border dark:border-dark-border rounded-[5px] p-2 shadow-lg w-[240px] pointer-events-none">
+    <div className="bg-light-bg-light dark:bg-dark-bg-lighter border border-dashed border-light-border dark:border-dark-border rounded-[5px] p-2 shadow-lg w-[240px] pointer-events-none opacity-100">
       <div className="flex items-start gap-2">
         {/* Checkbox placeholder */}
-        <div className="w-4 h-4 mt-0.5 rounded border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light"></div>
+        <div className="w-4 h-4 mt-0.5 rounded border border-light-border dark:border-dark-border bg-light-bg-light dark:bg-dark-bg-light opacity-100"></div>
         
         <div className="flex flex-col flex-grow gap-1 min-w-0">
           {/* Title row with tags and recurring icon */}
           <div className="flex items-start justify-between gap-2">
-            <span className="text-sm font-medium text-light-text dark:text-dark-text break-words flex-grow">
+            <span className="text-sm font-medium text-light-text dark:text-dark-text break-words flex-grow opacity-100">
               {event.title || event.originalTask?.title}
             </span>
             {hasAnyTags && (
-              <div className="flex items-center flex-wrap gap-1 flex-shrink-0">
+              <div className="flex items-center flex-wrap gap-1 flex-shrink-0 opacity-100">
                 {event.originalTask?.tag && (
                   <div 
-                    className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px]"
+                    className="inline-flex items-center px-1 h-[16px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] opacity-100"
                     style={{ color: event.originalTask.tag.color }}
                   >
-                    <Tag className="h-2.5 w-2.5" style={{ color: event.originalTask.tag.color }} />
-                    <span className="px-0.5">{getFreshTagData ? getFreshTagData(event.originalTask.tag.id)?.label || event.originalTask.tag.label : event.originalTask.tag.label}</span>
+                    <Tag className="h-2.5 w-2.5 opacity-100" style={{ color: event.originalTask.tag.color }} />
+                    <span className="px-0.5 opacity-100">{getFreshTagData ? getFreshTagData(event.originalTask.tag.id)?.label || event.originalTask.tag.label : event.originalTask.tag.label}</span>
                   </div>
                 )}
                 
                 {taskIsRecurring && (
-                  <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500">
-                    <Repeat className="h-2.5 w-2.5" />
+                  <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light text-blue-500 opacity-100">
+                    <Repeat className="h-2.5 w-2.5 opacity-100" />
                   </div>
                 )}
               </div>
@@ -273,7 +338,7 @@ export const TaskEventDragPreview = ({ event, dimensions, livePreview, getFreshT
           </div>
           
           {/* Live updating time range */}
-          <div className="text-xs text-light-text/50 dark:text-dark-text/50">
+          <div className="text-xs text-light-text/50 dark:text-dark-text/50 opacity-100">
             {(() => {
               // Use live preview times if available, otherwise fall back to original times
               if (livePreview && livePreview.start && livePreview.end) {

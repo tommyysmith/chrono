@@ -496,6 +496,32 @@ export default function Sidebar({
     setEditingTaskId(null);
   };
 
+  const handleTaskUpdate = (updatedTask) => {
+    console.log('📝 [UPDATE] handleTaskUpdate called with:', updatedTask);
+    
+    setTasks((prevTasks) => {
+      const newTasks = { ...prevTasks };
+      
+      // Update task in all collections
+      Object.keys(newTasks).forEach(collection => {
+        if (Array.isArray(newTasks[collection])) {
+          const taskIndex = newTasks[collection].findIndex(t => t.id === updatedTask.id);
+          if (taskIndex !== -1) {
+            newTasks[collection][taskIndex] = updatedTask;
+          }
+        }
+      });
+
+      // Save updated tasks to localStorage
+      localStorage.setItem('tasks', JSON.stringify(newTasks));
+      
+      // Dispatch tasks updated event to update the CommandBar and other components
+      window.dispatchEvent(new CustomEvent('tasks-updated', { detail: newTasks }));
+      
+      return newTasks;
+    });
+  };
+
   // Function to open delete modal for recurring tasks
   const handleOpenDeleteModal = (task) => {
     setTaskToDelete(task);
@@ -1900,6 +1926,7 @@ export default function Sidebar({
                                           }}
                                         hideTag={["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id) ? false : true}
                                         isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
+                                        onUpdateTask={handleTaskUpdate}
                                       />
                                     ))}
                                   </div>
@@ -1942,6 +1969,7 @@ export default function Sidebar({
                                   hideTag={false}
                                   checked={true}
                                   isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')} // Force checked state for completed tasks
+                                  onUpdateTask={handleTaskUpdate}
                                 />
                               ))
                             ) : (
@@ -1981,6 +2009,7 @@ export default function Sidebar({
                                     }
                                   }}
                                   hideTag={false}
+                                  onUpdateTask={handleTaskUpdate}
                                 />
                               ))
                             ) : (
