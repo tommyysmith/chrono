@@ -806,7 +806,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       const durationMinutes = Math.round((dropPosition.end.getTime() - dropPosition.start.getTime()) / (1000 * 60));
       
       // Update the original task in localStorage with scheduling information
-      const updatedTask = {
+      let updatedTask = {
         ...task,
         scheduledDate: dropPosition.start.toISOString(),
         duration: durationMinutes,
@@ -814,17 +814,44 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         updatedAt: new Date().toISOString()
       };
       
-      // Handle recurring tasks by updating the specific instance
+      // Handle recurring tasks by detaching them from the series
       if (task.isRepeat === true && task.seriesId) {
-        updatedTask._editScope = 'single';
+        // Create a detached copy of the recurring task instance
+        const detachedTask = {
+          ...updatedTask,
+          id: `detached_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+          seriesId: undefined,
+          originalBaseId: undefined,
+          isRepeat: false,
+          repeat: 'none',
+          rruleOptions: undefined,
+          createdAt: new Date().toISOString()
+        };
+        
+        // Mark the original instance for deletion (series will auto-advance)
+        const deleteAndAdvanceTask = {
+          ...task,
+          _deleteScope: 'single'
+        };
+        
+        // First, handle the deletion and series advancement
+        handleUpdateTask(deleteAndAdvanceTask);
+        
+        // Create the new detached task and wait for it to be created
+        handleCreateTask(detachedTask);
+        
+        // Update the task reference for the task block to use the detached version
+        // This ensures the task block shows the correct (non-recurring) properties
+        updatedTask = detachedTask;
+      } else {
+        // Update non-recurring tasks normally
+        handleUpdateTask(updatedTask);
       }
       
-      // Update the task in localStorage for bi-directional synchronization
-      handleUpdateTask(updatedTask);
-      
       // Check if a task block already exists for this task
+      // For recurring tasks that are being detached, we won't find an existing block (which is correct)
       const existingTaskBlockIndex = events.findIndex(e => 
-        e.isTaskBlock && e.originalTask?.id === task.id
+        e.isTaskBlock && e.originalTask?.id === updatedTask.id
       );
       
       if (existingTaskBlockIndex !== -1) {
@@ -849,6 +876,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         
         // Add to events state for immediate visual feedback
         setEvents(prev => [...prev, taskBlock]);
+        
+        // For detached recurring tasks, trigger a refresh to ensure correct display
+        if (task.isRepeat === true && task.seriesId) {
+          setTimeout(() => {
+            setTaskUpdateTrigger(prev => prev + 1);
+          }, 200);
+        }
       }
       
       // Ensure sidebar updates are triggered

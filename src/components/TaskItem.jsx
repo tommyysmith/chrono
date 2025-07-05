@@ -86,8 +86,9 @@ export const TaskDragPreview = ({ task }) => {
             {is15MinTask && task.scheduledDate && (() => {
               const scheduledDate = new Date(task.scheduledDate);
               const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+              const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
               
-              if (hasSpecificTime) {
+              if (hasSpecificTime && isOnCalendar) {
                 return (
                   <span className="text-light-text/30 dark:text-dark-text/30 opacity-100">
                     {format(scheduledDate, 'h:mm a')}
@@ -107,17 +108,18 @@ export const TaskDragPreview = ({ task }) => {
                     {(() => {
                       const scheduledDate = new Date(task.scheduledDate);
                       const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+                      const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
                       
                       // For 15-minute tasks, only show date (since time is shown inline with title)
-                      if (is15MinTask && hasSpecificTime) {
+                      if (is15MinTask && hasSpecificTime && isOnCalendar) {
                         return format(scheduledDate, 'd MMM');
                       }
                       
-                      if (hasSpecificTime) {
+                      if (hasSpecificTime && isOnCalendar) {
                         // Show time for drag preview (more concise)
                         return format(scheduledDate, 'h:mm a');
                       } else {
-                        // Show date for tasks without specific time
+                        // Show date for tasks without specific time or not on calendar
                         return format(scheduledDate, 'd MMM');
                       }
                     })()}
@@ -168,6 +170,8 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [menuTriggerType, setMenuTriggerType] = useState('hover'); // 'hover' or 'rightclick'
 
   // Draggable setup
   const {
@@ -437,6 +441,41 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     onClick?.(e);
   };
 
+  const handleContextMenu = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Don't show context menu when dragging or when task is selected
+    if (isDragging || isSelected) {
+      return;
+    }
+
+    // Calculate position for context menu
+    setContextMenuPosition({
+      x: e.clientX,
+      y: e.clientY
+    });
+    
+    setMenuTriggerType('rightclick');
+    setIsContextMenuOpen(true);
+  }, [isDragging, isSelected]);
+
+  // Clear context menu position when menu is closed
+  const handleContextMenuChange = useCallback((open) => {
+    setIsContextMenuOpen(open);
+    if (!open) {
+      setContextMenuPosition({ x: 0, y: 0 });
+      setMenuTriggerType('hover');
+    }
+  }, []);
+
+  // Handle More button click
+  const handleMoreButtonClick = useCallback(() => {
+    setMenuTriggerType('hover');
+    setContextMenuPosition({ x: 0, y: 0 });
+    setIsContextMenuOpen(true);
+  }, []);
+
 
 
   // Determine if the item should be top-aligned
@@ -473,13 +512,17 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         }`}
         onClick={handleClick}
         onDoubleClick={() => onDoubleClickEdit(task)}
+        onContextMenu={handleContextMenu}
         onMouseEnter={(e) => {
           setIsHovering(true);
           handleDirectionalMouseEnter(e);
         }}
         onMouseLeave={(e) => {
           setIsHovering(false);
-          setIsContextMenuOpen(false);
+          // Close context menu only if it was opened via hover (More button), not right-click
+          if (menuTriggerType === 'hover' && isContextMenuOpen) {
+            setIsContextMenuOpen(false);
+          }
           handleDirectionalMouseLeave(e);
         }}
         tabIndex={-1}
@@ -505,8 +548,9 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           {is15MinTask && task.scheduledDate && (() => {
             const scheduledDate = new Date(task.scheduledDate);
             const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+            const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
             
-            if (hasSpecificTime) {
+            if (hasSpecificTime && isOnCalendar) {
               return (
                 <span className="text-light-text/30 dark:text-dark-text/30">
                   {format(scheduledDate, 'h:mm a')}
@@ -526,17 +570,18 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             {(() => {
               const scheduledDate = new Date(task.scheduledDate);
               const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+              const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
               
               // For 15-minute tasks, only show date (since time is shown inline with title)
-              if (is15MinTask && hasSpecificTime) {
+              if (is15MinTask && hasSpecificTime && isOnCalendar) {
                 return format(scheduledDate, 'd MMM');
               }
               
-              if (hasSpecificTime) {
+              if (hasSpecificTime && isOnCalendar) {
                 // Show both date and time for tasks scheduled via calendar
                 return `${format(scheduledDate, 'd MMM')}, ${format(scheduledDate, 'h:mma')}`;
               } else {
-                // Show only date for tasks without specific time
+                // Show only date for tasks without specific time or not on calendar
                 return format(scheduledDate, 'd MMM');
               }
             })()}
@@ -646,33 +691,64 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         )}
       </div>
 
-      {/* Enhanced context menu shown on hover - but hidden during drag */}
+      {/* More button shown on hover - but hidden during drag */}
       <AnimatePresence mode="wait">
         {isHovering && !isDragging && (
-          <EnhancedTaskContextMenu
-            isOpen={isContextMenuOpen}
-            onOpenChange={setIsContextMenuOpen}
-            task={task}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onRemoveFromCalendar={handleRemoveFromCalendar}
-            onMarkAsDone={handleMarkAsDone}
-            onPriorityChange={handlePriorityChange}
-            onTagChange={handleTagChange}
-            onScheduleChange={handleScheduleChange}
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.05, ease: "easeOut" }}
+            className={`flex items-center justify-center group absolute ${(hasAnyTags && !is15MinTask) ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
+            onClick={handleMoreButtonClick}
           >
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.05, ease: "easeOut" }}
-              className={`flex items-center justify-center group absolute ${(hasAnyTags && !is15MinTask) ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
-            >
-              <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
-            </motion.button>
-          </EnhancedTaskContextMenu>
+            <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+          </motion.button>
         )}
       </AnimatePresence>
+
+      {/* Context menu for hover (popover mode) */}
+      {isContextMenuOpen && !isDragging && menuTriggerType === 'hover' && (
+        <EnhancedTaskContextMenu
+          isOpen={isContextMenuOpen}
+          onOpenChange={handleContextMenuChange}
+          task={task}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onRemoveFromCalendar={handleRemoveFromCalendar}
+          onMarkAsDone={handleMarkAsDone}
+          onPriorityChange={handlePriorityChange}
+          onTagChange={handleTagChange}
+          onScheduleChange={handleScheduleChange}
+        >
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.05, ease: "easeOut" }}
+            className={`flex items-center justify-center group absolute ${(hasAnyTags && !is15MinTask) ? 'top-2' : 'top-1/2 -translate-y-1/2'} right-2 h-[20px] w-[20px] rounded-[5px] hover:backdrop-blur-lg hover:bg-white dark:hover:bg-dark-bg hover:outline hover:outline-1 hover:outline-light-border hover-outline-offset-0 dark:hover:outline-dark-border`}
+          >
+            <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+          </motion.button>
+        </EnhancedTaskContextMenu>
+      )}
+
+      {/* Context menu for right-click (fixed position mode) */}
+      {isContextMenuOpen && !isDragging && menuTriggerType === 'rightclick' && (
+        <EnhancedTaskContextMenu
+          isOpen={isContextMenuOpen}
+          onOpenChange={handleContextMenuChange}
+          task={task}
+          position={contextMenuPosition}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+          onRemoveFromCalendar={handleRemoveFromCalendar}
+          onMarkAsDone={handleMarkAsDone}
+          onPriorityChange={handlePriorityChange}
+          onTagChange={handleTagChange}
+          onScheduleChange={handleScheduleChange}
+        />
+      )}
 
 
       </div>
