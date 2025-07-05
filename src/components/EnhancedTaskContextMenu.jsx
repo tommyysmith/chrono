@@ -291,7 +291,7 @@ const EnhancedTaskContextMenu = ({
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.1 }}
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 focus:outline-none focus-visible:outline-none"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-0 focus:outline-none focus-visible:outline-none"
               style={{
                 position: 'fixed',
                 left: `${adjustedPosition.x}px`,
@@ -301,7 +301,7 @@ const EnhancedTaskContextMenu = ({
               data-context-menu
             >
         {/* Quick Actions Section */}
-        <div className="py-1 pt-0">
+        <div className="pt-1 px-1">
           <button 
             onClick={() => {
               onMarkAsDone?.(task);
@@ -317,7 +317,7 @@ const EnhancedTaskContextMenu = ({
         <div className="my-1 h-px bg-dark-border dark:bg-dark-border" />
 
         {/* Submenu Actions Section */}
-        <div className="py-1 space-y-0.5">
+        <div className="py-1 space-y-0.5 px-1">
           {/* Priority Submenu */}
           <Popover open={priorityMenuOpen} onOpenChange={setPriorityMenuOpen}>
             <PopoverTrigger asChild>
@@ -502,7 +502,7 @@ const EnhancedTaskContextMenu = ({
         <div className="my-1 h-px bg-dark-border dark:bg-dark-border" />
 
         {/* Management Actions Section */}
-        <div className="py-1 last:pb-0 last:pt-1 space-y-0.5">
+        <div className="py-1 last:pb-0 last:pt-1 space-y-0.5 px-1">
           {/* Edit */}
           <button onClick={() => {
             onEdit?.(task);
@@ -530,7 +530,7 @@ const EnhancedTaskContextMenu = ({
         
         <div className="my-1 h-px bg-dark-border dark:bg-dark-border" />
         
-        <div className="pt-1 pb-0">
+        <div className="pt-0 pb-1 px-1">
           <button 
             onClick={() => {
               onDelete?.(task);
@@ -557,11 +557,11 @@ const EnhancedTaskContextMenu = ({
       </PopoverTrigger>
       <PopoverContent 
         align="start" 
-        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 focus:outline-none focus-visible:outline-none"
+        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-0 focus:outline-none focus-visible:outline-none"
         data-context-menu
       >
         {/* Quick Actions Section */}
-        <div className="py-1 first:pb-1 first:pt-0">
+        <div className="pt-1 pb-1 px-1">
           <DropdownMenuItem 
             onClick={() => {
               onMarkAsDone?.(task);
@@ -577,7 +577,7 @@ const EnhancedTaskContextMenu = ({
         <DropdownMenuSeparator />
 
         {/* Submenu Actions Section */}
-        <div className="py-1 space-y-0.5">
+        <div className="py-1 space-y-0.5 px-1">
           {/* Priority Submenu */}
           <Popover open={priorityMenuOpen} onOpenChange={setPriorityMenuOpen}>
             <PopoverTrigger asChild>
@@ -762,7 +762,7 @@ const EnhancedTaskContextMenu = ({
         <DropdownMenuSeparator />
 
         {/* Management Actions Section */}
-        <div className="py-1 last:pb-0 last:pt-1 space-y-0.5">
+        <div className="py-1 last:pb-0 last:pt-1 space-y-0.5 px-1">
           {/* Edit */}
           <DropdownMenuItem onClick={() => {
             onEdit?.(task);
@@ -787,7 +787,7 @@ const EnhancedTaskContextMenu = ({
           
         </div>
         <DropdownMenuSeparator />
-        <div className="pt-1 pb-0">
+        <div className="pt-1 pb-1 px-1">
         <DropdownMenuItem 
             onClick={() => {
               onDelete?.(task);

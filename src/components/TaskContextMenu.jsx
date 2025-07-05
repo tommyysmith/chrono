@@ -53,7 +53,7 @@ const TaskContextMenu = ({
               top: position.y,
             }}
           >
-            <div className="p-1 space-y-0.5">
+            <div className="space-y-0.5">
               <button
                 onClick={handleEdit}
                 className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all focus:outline-none focus-visible:outline-none"
