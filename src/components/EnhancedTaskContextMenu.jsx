@@ -73,31 +73,29 @@ const EnhancedTaskContextMenu = ({
 
   // Load tags from localStorage
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedTags = localStorage.getItem('tags');
-      if (savedTags) {
-        try {
-          const parsedTags = JSON.parse(savedTags);
-          // Handle both object and array formats
-          if (Array.isArray(parsedTags)) {
-            setTags(parsedTags);
-          } else if (typeof parsedTags === 'object') {
-            // Convert object to array if it's stored as an object
-            setTags(Object.values(parsedTags));
-          }
-        } catch (e) {
-          console.error('Error parsing tags:', e);
-          setTags([]);
+    const savedTags = localStorage.getItem('tags');
+    if (savedTags) {
+      try {
+        const parsedTags = JSON.parse(savedTags);
+        // Handle both object and array formats
+        if (Array.isArray(parsedTags)) {
+          setTags(parsedTags);
+        } else if (typeof parsedTags === 'object') {
+          // Convert object to array if it's stored as an object
+          setTags(Object.values(parsedTags));
         }
-      } else {
-        // Default tags if none exist
-        setTags([
-          { id: 'work', label: 'Work', color: '#EF4444' },
-          { id: 'family', label: 'Family', color: '#3B82F6' },
-          { id: 'personal', label: 'Personal', color: '#A855F7' },
-          { id: 'travel', label: 'Travel', color: '#22C55E' }
-        ]);
+      } catch (e) {
+        console.error('Error parsing tags:', e);
+        setTags([]);
       }
+    } else {
+      // Default tags if none exist
+      setTags([
+        { id: 'work', label: 'Work', color: '#EF4444' },
+        { id: 'family', label: 'Family', color: '#3B82F6' },
+        { id: 'personal', label: 'Personal', color: '#A855F7' },
+        { id: 'travel', label: 'Travel', color: '#22C55E' }
+      ]);
     }
   }, []);
 
@@ -223,19 +221,23 @@ const EnhancedTaskContextMenu = ({
     let { x, y } = pos;
     
     // Adjust horizontal position if menu would go off-screen
-    if (x + menuWidth > window.innerWidth) {
-      x = window.innerWidth - menuWidth - padding;
-    }
-    if (x < padding) {
-      x = padding;
-    }
-    
-    // Adjust vertical position if menu would go off-screen
-    if (y + menuHeight > window.innerHeight) {
-      y = window.innerHeight - menuHeight - padding;
-    }
-    if (y < padding) {
-      y = padding;
+    try {
+      if (x + menuWidth > window.innerWidth) {
+        x = window.innerWidth - menuWidth - padding;
+      }
+      if (x < padding) {
+        x = padding;
+      }
+
+      // Adjust vertical position if menu would go off-screen
+      if (y + menuHeight > window.innerHeight) {
+        y = window.innerHeight - menuHeight - padding;
+      }
+      if (y < padding) {
+        y = padding;
+      }
+    } catch (e) {
+      // Window not available (SSR), use original position
     }
     
     return { x, y };
@@ -803,4 +805,4 @@ const EnhancedTaskContextMenu = ({
   );
 };
 
-export default EnhancedTaskContextMenu; 
+export default EnhancedTaskContextMenu;

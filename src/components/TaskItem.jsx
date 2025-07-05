@@ -172,6 +172,11 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
   const [isContextMenuOpen, setIsContextMenuOpen] = useState(false);
   const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
   const [menuTriggerType, setMenuTriggerType] = useState('hover'); // 'hover' or 'rightclick'
+  
+  // Intent-aware menu state
+  const [mouseHistory, setMouseHistory] = useState([]);
+  const [intentDelayTimeout, setIntentDelayTimeout] = useState(null);
+  const menuBoundsRef = useRef(null);
 
   // Draggable setup
   const {
@@ -342,6 +347,70 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     setBackgroundState("hidden");
   }, []);
 
+  // Intent-aware menu logic based on Amazon's approach (pointing to LEFT side of menu)
+  const isMovingTowardsMenu = useCallback((currentPos, prevPos, menuBounds) => {
+    if (!menuBounds || !prevPos) return false;
+    
+    // Create triangle between previous mouse position and menu corners (LEFT side)
+    const menuTopLeft = { x: menuBounds.left, y: menuBounds.top };
+    const menuBottomLeft = { x: menuBounds.left, y: menuBounds.bottom };
+    
+    // Calculate slopes from previous position to menu corners
+    const slopeToTop = (menuTopLeft.y - prevPos.y) / (menuTopLeft.x - prevPos.x);
+    const slopeToBottom = (menuBottomLeft.y - prevPos.y) / (menuBottomLeft.x - prevPos.x);
+    
+    // Calculate slope of current mouse movement
+    const movementSlope = (currentPos.y - prevPos.y) / (currentPos.x - prevPos.x);
+    
+    // Check if movement is within the triangle towards the menu
+    if (currentPos.x > prevPos.x) { // Moving right (towards menu)
+      return movementSlope >= Math.min(slopeToTop, slopeToBottom) && 
+             movementSlope <= Math.max(slopeToTop, slopeToBottom);
+    }
+    
+    return false;
+  }, []);
+
+  const handleMouseMove = useCallback((e) => {
+    const currentPos = { x: e.clientX, y: e.clientY };
+    
+    setMouseHistory(prev => {
+      const newHistory = [...prev, currentPos].slice(-3); // Keep last 3 positions
+      
+      // If context menu is open, show cone
+      if (isContextMenuOpen) {
+        const menuElement = document.querySelector('[data-context-menu]');
+        
+        if (menuElement) {
+          const menuBounds = menuElement.getBoundingClientRect();
+          
+          // Use previous position if available, otherwise use current position
+          const prevPos = newHistory.length >= 2 ? newHistory[newHistory.length - 2] : currentPos;
+          const movingTowards = newHistory.length >= 2 ? isMovingTowardsMenu(currentPos, prevPos, menuBounds) : false;
+          
+          
+          // If moving towards menu, clear any pending close timeout
+          if (movingTowards && intentDelayTimeout) {
+            clearTimeout(intentDelayTimeout);
+            setIntentDelayTimeout(null);
+          }
+        }
+      }
+      
+      return newHistory;
+    });
+  }, [isContextMenuOpen, intentDelayTimeout, isMovingTowardsMenu]);
+
+  // Add global mouse move listener when context menu is open
+  useEffect(() => {
+    if (isContextMenuOpen) {
+      document.addEventListener('mousemove', handleMouseMove);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+      };
+    }
+  }, [isContextMenuOpen, handleMouseMove]);
+
   const getBackgroundAnimation = () => {
     switch (backgroundState) {
       case "hidden":
@@ -445,20 +514,16 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     e.preventDefault();
     e.stopPropagation();
     
-    // Don't show context menu when dragging or when task is selected
-    if (isDragging || isSelected) {
+    // Don't show context menu when dragging
+    if (isDragging) {
       return;
     }
 
-    // Calculate position for context menu
-    setContextMenuPosition({
-      x: e.clientX,
-      y: e.clientY
-    });
-    
-    setMenuTriggerType('rightclick');
+    // Use the same logic as More button - no position needed, just use Popover mode
+    setMenuTriggerType('hover');
+    setContextMenuPosition({ x: 0, y: 0 });
     setIsContextMenuOpen(true);
-  }, [isDragging, isSelected]);
+  }, [isDragging]);
 
   // Clear context menu position when menu is closed
   const handleContextMenuChange = useCallback((open) => {
@@ -466,11 +531,28 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
     if (!open) {
       setContextMenuPosition({ x: 0, y: 0 });
       setMenuTriggerType('hover');
+      setMouseHistory([]);
+      
+      // Clear any pending intent timeout
+      if (intentDelayTimeout) {
+        clearTimeout(intentDelayTimeout);
+        setIntentDelayTimeout(null);
+      }
     }
-  }, []);
+  }, [intentDelayTimeout]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (intentDelayTimeout) {
+        clearTimeout(intentDelayTimeout);
+      }
+    };
+  }, [intentDelayTimeout]);
 
   // Handle More button click
-  const handleMoreButtonClick = useCallback(() => {
+  const handleMoreButtonClick = useCallback((e) => {
+    e.stopPropagation();
     setMenuTriggerType('hover');
     setContextMenuPosition({ x: 0, y: 0 });
     setIsContextMenuOpen(true);
@@ -519,10 +601,42 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         }}
         onMouseLeave={(e) => {
           setIsHovering(false);
-          // Close context menu only if it was opened via hover (More button), not right-click
+          
+          // Intent-aware menu closing
           if (menuTriggerType === 'hover' && isContextMenuOpen) {
-            setIsContextMenuOpen(false);
+            const relatedTarget = e.relatedTarget;
+            const isMovingToMenu = relatedTarget?.closest('[data-context-menu]');
+            
+            if (!isMovingToMenu) {
+              // Check if user might be moving towards the menu using intent detection
+              const currentPos = { x: e.clientX, y: e.clientY };
+              const menuElement = document.querySelector('[data-context-menu]');
+              
+              if (menuElement && mouseHistory.length >= 1) {
+                const prevPos = mouseHistory[mouseHistory.length - 1];
+                const menuBounds = menuElement.getBoundingClientRect();
+                const movingTowards = isMovingTowardsMenu(currentPos, prevPos, menuBounds);
+                
+                if (movingTowards) {
+                  // Delay closing to give user time to reach the menu
+                  const timeout = setTimeout(() => {
+                    setIsContextMenuOpen(false);
+                    setIntentDelayTimeout(null);
+                  }, 300); // 300ms delay like Amazon
+                  
+                  setIntentDelayTimeout(timeout);
+                } else {
+                  // Close immediately if not moving towards menu
+                  setIsContextMenuOpen(false);
+                }
+              } else {
+                // Close immediately if no mouse history
+                setIsContextMenuOpen(false);
+              }
+            }
           }
+          
+          
           handleDirectionalMouseLeave(e);
         }}
         tabIndex={-1}
@@ -707,7 +821,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         )}
       </AnimatePresence>
 
-      {/* Context menu for hover (popover mode) */}
+      {/* Context menu for click (popover mode) */}
       {isContextMenuOpen && !isDragging && menuTriggerType === 'hover' && (
         <EnhancedTaskContextMenu
           isOpen={isContextMenuOpen}
@@ -731,23 +845,6 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             <More className="w-4 h-4 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
           </motion.button>
         </EnhancedTaskContextMenu>
-      )}
-
-      {/* Context menu for right-click (fixed position mode) */}
-      {isContextMenuOpen && !isDragging && menuTriggerType === 'rightclick' && (
-        <EnhancedTaskContextMenu
-          isOpen={isContextMenuOpen}
-          onOpenChange={handleContextMenuChange}
-          task={task}
-          position={contextMenuPosition}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onRemoveFromCalendar={handleRemoveFromCalendar}
-          onMarkAsDone={handleMarkAsDone}
-          onPriorityChange={handlePriorityChange}
-          onTagChange={handleTagChange}
-          onScheduleChange={handleScheduleChange}
-        />
       )}
 
 

@@ -42,10 +42,11 @@ import TodaysTasksProgress from './TodaysTasksProgress';
 
 // Helper function to get default event color
 const getDefaultEventColor = () => {
-  if (typeof window !== 'undefined') {
+  try {
     return localStorage.getItem('defaultEventColor') || '#F59E0B';
+  } catch (e) {
+    return '#F59E0B';
   }
-  return '#F59E0B';
 };
 
 export default function Sidebar({
@@ -296,26 +297,22 @@ export default function Sidebar({
 
   // Save tasks to localStorage whenever they change (throttled)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('[Sidebar] Tasks changed, saving to localStorage');
-      const timeoutId = setTimeout(() => {
-        localStorage.setItem("tasks", JSON.stringify(tasks));
-      }, 100); // Throttle localStorage saves
-      
-      return () => clearTimeout(timeoutId);
-    }
+    console.log('[Sidebar] Tasks changed, saving to localStorage');
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+    }, 100); // Throttle localStorage saves
+    
+    return () => clearTimeout(timeoutId);
   }, [tasks]);
 
   // Save tags to localStorage whenever they change (throttled)
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      console.log('[Sidebar] Tags changed, saving to localStorage');
-      const timeoutId = setTimeout(() => {
-        localStorage.setItem("tags", JSON.stringify(tags));
-      }, 100); // Throttle localStorage saves
-      
-      return () => clearTimeout(timeoutId);
-    }
+    console.log('[Sidebar] Tags changed, saving to localStorage');
+    const timeoutId = setTimeout(() => {
+      localStorage.setItem("tags", JSON.stringify(tags));
+    }, 100); // Throttle localStorage saves
+    
+    return () => clearTimeout(timeoutId);
   }, [tags]);
 
   // Note: ensureActiveRecurringInstances is now handled automatically by useTaskManagement

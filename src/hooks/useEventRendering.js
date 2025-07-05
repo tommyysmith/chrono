@@ -28,10 +28,13 @@ export const useEventRendering = (
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   const [tagUpdateKey, setTagUpdateKey] = useState(0);
   const [taskContextMenu, setTaskContextMenu] = useState({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
-  const [currentDefaultColor, setCurrentDefaultColor] = useState(() => localStorage.getItem('defaultEventColor') || '#F59E0B');
+  const [currentDefaultColor, setCurrentDefaultColor] = useState('#F59E0B');
 
-  // Listen for default event color updates
+  // Initialize and listen for default event color updates
   useEffect(() => {
+    // Set initial value from localStorage after hydration
+    setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
+
     const handleDefaultColorUpdate = () => {
       setCurrentDefaultColor(localStorage.getItem('defaultEventColor') || '#F59E0B');
     };
@@ -42,8 +45,12 @@ export const useEventRendering = (
 
   // Helper function to get fresh tag data from localStorage
   const getFreshTagData = useCallback((tagId) => {
-    const tags = JSON.parse(localStorage.getItem('tags') || '{}');
-    return tags[tagId] || null;
+    try {
+      const tags = JSON.parse(localStorage.getItem('tags') || '{}');
+      return tags[tagId] || null;
+    } catch (e) {
+      return null;
+    }
   }, [tagUpdateKey]); // Include tagUpdateKey to force re-computation when tags update
 
 

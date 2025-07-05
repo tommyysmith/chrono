@@ -1529,7 +1529,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
       <div className="w-[600px] h-full bg-light-bg-light dark:bg-dark-bg-light border-r border-light-border dark:border-dark-border overflow-y-auto flex justify-end">
         <div className="p-6 pt-16 w-64">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-10 h-10 bg-light-bg-lighter border border-light-border dark:border-dark-border rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-full flex items-center justify-center">
               <span className="text-light-text/50 dark:text-dark-text/50 text-sm font-medium">TS</span>
             </div>
             <div>
