@@ -514,8 +514,8 @@ const EnhancedTaskContextMenu = ({
             Edit
           </button>
 
-          {/* Remove from calendar (only if on calendar) */}
-          {isOnCalendar && (
+          {/* Remove from calendar (only if on calendar and not a recurring task) */}
+          {isOnCalendar && !(task.isRepeat === true || task.seriesId || (task.repeat && task.repeat !== 'none')) && (
             <button onClick={() => {
               onRemoveFromCalendar?.(task);
               onOpenChange?.(false);
@@ -772,8 +772,8 @@ const EnhancedTaskContextMenu = ({
             Edit
           </DropdownMenuItem>
 
-          {/* Remove from calendar (only if on calendar) */}
-          {isOnCalendar && (
+          {/* Remove from calendar (only if on calendar and not a recurring task) */}
+          {isOnCalendar && !(task.isRepeat === true || task.seriesId || (task.repeat && task.repeat !== 'none')) && (
             <DropdownMenuItem onClick={() => {
               onRemoveFromCalendar?.(task);
               onOpenChange?.(false);

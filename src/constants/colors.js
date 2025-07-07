@@ -14,5 +14,6 @@ export const TAG_COLORS = [
   '#A855F7', // purple
   '#D946EF', // fuchsia
   '#EC4899', // pink
-  '#64748B'  // slate
+  '#64748B',  // slate
+  '#D9D9D9'  // gray
 ];

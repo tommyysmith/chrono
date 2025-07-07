@@ -4,7 +4,41 @@ import { useDraggable } from '@dnd-kit/core';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import { Repeat } from "@/assets/icons/Repeat";
 import { Tag } from "@/assets/icons/Tag";
+import { None } from "@/assets/icons/None";
+import { Low } from "@/assets/icons/Low";
+import { Medium } from "@/assets/icons/Medium";
+import { High } from "@/assets/icons/High";
 import Checkbox from "@/components/Checkbox";
+
+// Helper function to get the appropriate priority icon
+const getPriorityIcon = (priority) => {
+  switch (priority) {
+    case 'High':
+      return High;
+    case 'Medium':
+      return Medium;
+    case 'Low':
+      return Low;
+    case 'None':
+    default:
+      return None;
+  }
+};
+
+// Helper function to get priority color
+const getPriorityColor = (priority) => {
+  switch (priority) {
+    case 'High':
+      return '#EF4444';
+    case 'Medium':
+      return '#F59E0B';
+    case 'Low':
+      return '#10B981';
+    case 'None':
+    default:
+      return '#6B7280';
+  }
+};
 
 const TaskEventItem = ({
   event,
@@ -90,6 +124,10 @@ const TaskEventItem = ({
   const shouldShowRepeatIndicator = () => {
     return ((event.originalTask?.repeat && event.originalTask.repeat !== 'none') || 
             (event.originalTask?.seriesId && event.originalTask?.originalBaseId));
+  };
+
+  const shouldShowPriorityIndicator = () => {
+    return event.originalTask?.priority && event.originalTask.priority !== 'None';
   };
 
 
@@ -250,7 +288,7 @@ const TaskEventItem = ({
             </div>
 
             {/* Absolutely positioned icons in bottom right */}
-            {(shouldShowRepeatIndicator() || event.originalTask?.tag) && (
+            {(shouldShowRepeatIndicator() || event.originalTask?.tag || shouldShowPriorityIndicator()) && (
               <div className="absolute bottom-1 right-1 flex items-center gap-1 z-20">
                 {shouldShowRepeatIndicator() && (
                   <TooltipProvider>
@@ -283,6 +321,24 @@ const TaskEventItem = ({
                     </Tooltip>
                   </TooltipProvider>
                 )}
+                {shouldShowPriorityIndicator() && (() => {
+                  const IconComponent = getPriorityIcon(event.originalTask.priority);
+                  const priorityColor = getPriorityColor(event.originalTask.priority);
+                  return (
+                    <TooltipProvider>
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-xs rounded-[4px] bg-white dark:bg-dark-bg-light">
+                            <IconComponent className="w-2.5 h-2.5" style={{ color: priorityColor }} />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{event.originalTask.priority} priority</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  );
+                })()}
               </div>
             )}
 
@@ -333,6 +389,16 @@ export const TaskEventDragPreview = ({ event, dimensions, livePreview, getFreshT
                     <Repeat className="h-2.5 w-2.5 opacity-100" />
                   </div>
                 )}
+                
+                {event.originalTask?.priority && event.originalTask.priority !== 'None' && (() => {
+                  const IconComponent = getPriorityIcon(event.originalTask.priority);
+                  const priorityColor = getPriorityColor(event.originalTask.priority);
+                  return (
+                    <div className="inline-flex items-center px-1 h-[16px] outline outline-1 outline-light-border dark:outline-dark-border text-[10px] rounded-[4px] bg-white dark:bg-dark-bg-light opacity-100">
+                      <IconComponent className="h-2.5 w-2.5 opacity-100" style={{ color: priorityColor }} />
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

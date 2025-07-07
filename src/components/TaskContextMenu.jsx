@@ -61,7 +61,7 @@ const TaskContextMenu = ({
                 <Pencil className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50 group-hover:text-dark-text dark:group-hover:text-dark-text" />
                 Edit
               </button>
-              {isOnCalendar && (
+              {isOnCalendar && !(task.isRepeat === true || task.seriesId || (task.repeat && task.repeat !== 'none')) && (
                 <button
                   onClick={handleRemoveFromCalendar}
                   className="w-full group text-left text-primary dark:text-primary px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all focus:outline-none focus-visible:outline-none"

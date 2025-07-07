@@ -2576,7 +2576,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         bounce: 0,
                         duration: 0.5
                       }}
-                      className="flex flex-col gap-4 min-w-[450px]"
+                      className="flex flex-col gap-4 w-[450px]"
                       style={{
                         transform: 'translateZ(0)',
                         backfaceVisibility: 'hidden'
@@ -3089,7 +3089,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                     bounce: 0,
                     duration: 0.5
                   }}
-                  className="flex flex-col gap-4 min-w-[450px]"
+                  className="flex flex-col gap-4 w-[450px]"
                   style={{
                     transform: 'translateZ(0)',
                     backfaceVisibility: 'hidden'
@@ -3556,7 +3556,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                 <motion.div
                   layout
                   key="commandBar-go-to-date"
-                  className="flex flex-col min-w-[450px]"
+                  className="flex flex-col w-[450px]"
                   initial={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}

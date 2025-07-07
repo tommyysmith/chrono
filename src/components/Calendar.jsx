@@ -1554,14 +1554,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           </PopoverTrigger>
                   <PopoverContent 
           ref={contextMenuRef}
-          className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[280px] p-0 focus:outline-none focus-visible:outline-none"
+          className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden z-50 outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-0 focus:outline-none focus-visible:outline-none"
           sideOffset={5}
           align="start"
           side="bottom"
           forceMount
         >
           <div>
-            <div className="flex flex-wrap gap-2 pb-2 p-3">
+            <div className="grid grid-cols-8 justify-items-center grid-rows-2 w-full gap-y-2 pb-1 p-2">
               {colors.map((color) => {
                 const eventForMenu = events.find(e => e.id === contextMenu.eventId);
                 const isSelected = eventForMenu && eventForMenu.color === color;
@@ -1570,7 +1570,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                     key={color}
                     whileHover={{ scale: 1.1 }} 
                     whileTap={{ scale: 0.9 }}
-                    className="relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center focus:outline-none focus-visible:outline-none"
+                    className="relative w-4 h-4 rounded-[5px] cursor-pointer flex items-center justify-center focus:outline-none focus-visible:outline-none"
                     style={{ backgroundColor: color }}
                     onClick={(e) => handleColorSelect(e, color)}
                     onMouseDown={(e) => e.stopPropagation()}
