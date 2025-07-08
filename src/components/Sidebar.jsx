@@ -1611,7 +1611,7 @@ export default function Sidebar({
 
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
-    <aside className="w-[240px] min-w-[240px] h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
+    <aside className="w-full h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
       <div className="h-full flex flex-col justify-between">
         
         <div className="flex-1 min-h-0 relative overflow-hidden">

@@ -115,3 +115,63 @@ input[type="checkbox"] {
   animation-duration: 0ms !important;
   transition-duration: 0ms !important;
 }
+
+/* iOS-style task resize handles */
+.task-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  background: linear-gradient(to right, transparent, rgba(59, 130, 246, 0.1), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-resize-handle::after {
+  content: '';
+  width: 2px;
+  height: 24px;
+  background: rgba(59, 130, 246, 0.6);
+  border-radius: 1px;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3);
+}
+
+.task-resize-handle:hover {
+  opacity: 1;
+  background: linear-gradient(to right, transparent, rgba(59, 130, 246, 0.2), transparent);
+}
+
+.task-resize-handle:hover::after {
+  background: rgba(59, 130, 246, 0.8);
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.4);
+}
+
+.task-resize-handle.active {
+  opacity: 1;
+  background: linear-gradient(to right, transparent, rgba(59, 130, 246, 0.25), transparent);
+}
+
+.task-resize-handle.active::after {
+  background: rgb(59, 130, 246);
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+}
+
+/* Prevent text selection and hover states during resize */
+body.resizing {
+  user-select: none;
+  cursor: col-resize !important;
+}
+
+body.resizing * {
+  user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* Allow pointer events on the resize handle itself */
+body.resizing .resize-handle {
+  pointer-events: auto !important;
+}

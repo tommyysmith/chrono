@@ -89,6 +89,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     }
     return '#F59E0B';
   });
+  
+  // Sidebar resize state
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const savedWidth = localStorage.getItem('sidebarWidth');
+      return savedWidth ? parseInt(savedWidth, 10) : 240;
+    }
+    return 240;
+  });
+  const [isResizing, setIsResizing] = useState(false);
   const colors = TAG_COLORS;
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
@@ -158,6 +168,40 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     window.addEventListener('default-event-color-updated', handleDefaultColorUpdate);
     return () => window.removeEventListener('default-event-color-updated', handleDefaultColorUpdate);
   }, []);
+
+  // Save sidebar width to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+    }
+  }, [sidebarWidth]);
+
+  // Sidebar resize handlers
+  const handleSidebarResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    
+    // Add body class to prevent text selection
+    document.body.classList.add('resizing');
+    
+    const handleMouseMove = (e) => {
+      const deltaX = e.clientX - startX;
+      const newWidth = Math.max(240, Math.min(500, startWidth + deltaX)); // Min width of 240px, max width of 500px
+      setSidebarWidth(newWidth);
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.body.classList.remove('resizing');
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [sidebarWidth]);
 
   // Add keyboard shortcut for sidebar toggle (Shift + S)
   useEffect(() => {
@@ -1325,14 +1369,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               <motion.div 
                 className="flex items-center mr-4"
                 initial={{
-                  width: isSidebarVisible ? 228 : 'auto',
-                  minWidth: isSidebarVisible ? 228 : 'auto'
+                  width: isSidebarVisible ? sidebarWidth - 12 : 'auto',
+                  minWidth: isSidebarVisible ? sidebarWidth - 12 : 'auto'
                 }}
                 animate={{
-                  width: isSidebarVisible ? 228 : 'auto',
-                  minWidth: isSidebarVisible ? 228 : 'auto'
+                  width: isSidebarVisible ? sidebarWidth - 12 : 'auto',
+                  minWidth: isSidebarVisible ? sidebarWidth - 12 : 'auto'
                 }}
-                transition={{
+                transition={isResizing ? { duration: 0 } : {
                   type: "easeInOut",
                   duration: 0.2,
                   ease: [0.25, 1, 0.5, 1],
@@ -1341,7 +1385,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
               >
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setIsSidebarVisible(!isSidebarVisible)}
+                  onClick={() => {
+                    if (!isSidebarVisible) {
+                      // If sidebar is hidden, restore it to the saved width
+                      setSidebarWidth(Math.max(240, sidebarWidth));
+                    }
+                    setIsSidebarVisible(!isSidebarVisible);
+                  }}
                   className="flex group w-[32px] h-[32px] items-center justify-center rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter transition-colors"
                 >
                   <SidebarIcon className="w-5 h-5 text-light-text dark:text-dark-text" />
@@ -1436,16 +1486,17 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         {isSidebarVisible && (
           <motion.div
             initial={{ x: "-100%", width: 0 }}
-            animate={{ x: 0, width: 240 }}
+            animate={{ x: 0, width: sidebarWidth }}
             exit={{ x: "-100%", width: 0 }}
-            transition={{
+            transition={isResizing ? { duration: 0 } : {
               type: "easeInOut",
               duration: 0.2,
               ease: [0.25, 1, 0.5, 1],
             }}
-            className="overflow-hidden h-full"
+            className="overflow-hidden h-full relative"
+            style={{ width: `${sidebarWidth}px` }}
           >
-            <div className="w-[240px] h-full">
+            <div className="h-full relative w-full">
               <Sidebar
                 commandBarRef={commandBarRef}
                 events={events}
@@ -1467,6 +1518,24 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         )}
       </AnimatePresence>
       </TooltipProvider>
+      
+      {/* Resize handle in the gap between sidebar and calendar */}
+      {isSidebarVisible && (
+        <div
+          className={`resize-handle absolute top-14 left-0 w-3 cursor-col-resize transition-opacity duration-200 flex items-center justify-center z-50 ${
+            isResizing ? 'opacity-100' : 'opacity-0 hover:opacity-100'
+          }`}
+          style={{ 
+            left: `${sidebarWidth}px`,
+            height: 'calc(100vh - 56px)' // Full viewport height minus header height (56px = 14 * 4px)
+          }}
+          onMouseDown={handleSidebarResizeStart}
+        >
+          <div className={`w-0.5 h-16 bg-gray-400/40 dark:bg-gray-500/40 rounded-full transition-all duration-150 ${
+            isResizing ? 'bg-gray-600/80 dark:bg-gray-300/80 w-1' : 'hover:bg-gray-500/60 dark:hover:bg-gray-400/60'
+          }`} />
+        </div>
+      )}
       
       <motion.div 
         className="flex-1 flex flex-col h-full bg-light-bg-light dark:bg-dark-bg relative"
