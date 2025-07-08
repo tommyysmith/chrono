@@ -942,7 +942,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           ...originalTask,
           scheduledDate: dropPosition.start.toISOString(),
           duration: durationMinutes,
-          addToCalendar: true,
+          addToCalendar: true, // Keep as true since dragging/resizing in calendar indicates intent to have it on calendar
           updatedAt: new Date().toISOString(),
           _editScope: 'single' // Default to single for task drag operations
         };

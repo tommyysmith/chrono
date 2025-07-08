@@ -133,6 +133,21 @@ export const useEventFiltering = () => {
     const tasks = JSON.parse(localStorage.getItem('tasks') || '{}');
     const allTasks = tasks.all || [];
     
+    // Helper function to check if a task has a specific time (not just date)
+    const hasSpecificTime = (task) => {
+      if (!task.scheduledDate) return false;
+      
+      const scheduledDate = new Date(task.scheduledDate);
+      
+      // If task has a duration, it definitely has a specific time
+      if (task.duration && task.duration > 0) return true;
+      
+      // If the time is not midnight (00:00), it has a specific time
+      if (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0) return true;
+      
+      return false;
+    };
+    
     if (viewType === ViewType.WEEK) {
       const weekStart = new Date(selectedDate);
       weekStart.setDate(weekStart.getDate() - weekStart.getDay());
@@ -143,6 +158,7 @@ export const useEventFiltering = () => {
         task.addToCalendar && 
         task.scheduledDate && 
         !task.completed &&
+        hasSpecificTime(task) && // Only include tasks with specific times
         new Date(task.scheduledDate) >= weekStart && 
         new Date(task.scheduledDate) < weekEnd
       );
@@ -171,6 +187,7 @@ export const useEventFiltering = () => {
         task.addToCalendar && 
         task.scheduledDate && 
         !task.completed &&
+        hasSpecificTime(task) && // Only include tasks with specific times
         isSameDay(new Date(task.scheduledDate), selectedDateObj)
       );
 
@@ -214,4 +231,4 @@ export const useEventFiltering = () => {
     getTaskEventsForView,
     isEventPast,
   };
-}; 
+};

@@ -512,8 +512,10 @@ export default function Sidebar({
       // Save updated tasks to localStorage
       localStorage.setItem('tasks', JSON.stringify(newTasks));
       
-      // Dispatch tasks updated event to update the CommandBar and other components
-      window.dispatchEvent(new CustomEvent('tasks-updated', { detail: newTasks }));
+      // Dispatch tasks updated event to update the CommandBar and other components (delayed to avoid render conflicts)
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('tasks-updated', { detail: newTasks }));
+      }, 0);
       
       return newTasks;
     });
@@ -1437,7 +1439,7 @@ export default function Sidebar({
             id: "dueToday",
             label: "Due today",
             icon: Calendar,
-            color: getDefaultEventColor(),
+            color: "#F59E0B",
             count: dueTodayTasks.length,
             tasks: sortTasksByPriorityAndDate(dueTodayTasks),
           },
@@ -1747,10 +1749,12 @@ export default function Sidebar({
                                      );
                                      setTags(updatedTags);
                                      
-                                     // Dispatch tags-updated event to notify other components
-                                     window.dispatchEvent(new CustomEvent('tags-updated', {
-                                       detail: updatedTags
-                                     }));
+                             // Dispatch tags-updated event to notify other components (delayed to avoid render conflicts)
+                             setTimeout(() => {
+                               window.dispatchEvent(new CustomEvent('tags-updated', {
+                                 detail: updatedTags
+                               }));
+                             }, 0);
                                      
                                      // Update all tasks that use this tag
                                      setTasks((prevTasks) => {
@@ -1771,10 +1775,12 @@ export default function Sidebar({
                                          }
                                        });
                                        
-                                       // Dispatch tasks-updated event to notify other components
-                                       window.dispatchEvent(new CustomEvent('tasks-updated', {
-                                         detail: updatedTasksState
-                                       }));
+                       // Dispatch tasks-updated event to notify other components (delayed to avoid render conflicts)
+                       setTimeout(() => {
+                         window.dispatchEvent(new CustomEvent('tasks-updated', {
+                           detail: updatedTasksState
+                         }));
+                       }, 0);
                                        
                                        return updatedTasksState;
                                      });
@@ -1922,6 +1928,7 @@ export default function Sidebar({
                                             }
                                           }}
                                         hideTag={["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id) ? false : true}
+                                        showTagIconOnly={["overdue", "dueToday", "dueTomorrow", "dueSoon", "inbox"].includes(section.id)}
                                         isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')}
                                         onUpdateTask={handleTaskUpdate}
                                       />
@@ -1964,6 +1971,7 @@ export default function Sidebar({
                                   }
                                 }}
                                   hideTag={false}
+                                  showTagIconOnly={false}
                                   checked={true}
                                   isRecurring={task.isRepeat || (task.repeat && task.repeat !== 'none')} // Force checked state for completed tasks
                                   onUpdateTask={handleTaskUpdate}
@@ -2006,6 +2014,7 @@ export default function Sidebar({
                                     }
                                   }}
                                   hideTag={false}
+                                  showTagIconOnly={false}
                                   onUpdateTask={handleTaskUpdate}
                                 />
                               ))
@@ -2078,17 +2087,17 @@ export default function Sidebar({
                 side="right"
                 sideOffset={5}
                 avoidCollisions={true}
-                style={{ width: 'auto' }}
+                style={{ width: '180px' }}
               >
                 <div className="pointer-events-auto">
-                  <div className="flex flex-wrap gap-2 pb-1 p-3" style={{ maxWidth: '280px' }}>
+                  <div className="grid grid-cols-8 justify-items-center grid-rows-2 w-full gap-y-2 pb-1 p-2 w-[180px]">
                     {TAG_COLORS.map((color) => {
                       const selectedTag = tags.find(t => t.id === selectedTagId);
                       const isSelected = selectedTag && selectedTag.color === color;
                       return (
                         <motion.div
                           key={color}
-                          className={`relative w-5 h-5 rounded-md cursor-pointer flex items-center justify-center`}
+                          className={`relative w-4 h-4 rounded-md cursor-pointer flex items-center justify-center`}
                           style={{ backgroundColor: color }}
                           whileHover={{ scale: 1.1 }}
                           whileTap={{ scale: 0.9 }}
@@ -2122,10 +2131,12 @@ export default function Sidebar({
                                 }
                               });
                               
-                              // Dispatch tasks-updated event to notify other components
-                              window.dispatchEvent(new CustomEvent('tasks-updated', {
-                                detail: updatedTasksState
-                              }));
+                               // Dispatch tasks-updated event to notify other components (delayed to avoid render conflicts)
+                               setTimeout(() => {
+                                 window.dispatchEvent(new CustomEvent('tasks-updated', {
+                                   detail: updatedTasksState
+                                 }));
+                               }, 0);
                               
                               return updatedTasksState;
                             });
@@ -2143,10 +2154,10 @@ export default function Sidebar({
                   <div className="pt-1">
                     {selectedTagId && (
                       <>
-                        <div className="border-t border-light-border-2 dark:border-dark-border mt-2" />
-                        <div className="p-1 space-y-1">
+                        <div className="border-t border-light-border-2 dark:border-dark-border mt-1" />
+                        <div className="p-1 space-y-0.5">
                           <button
-                            className="w-full group flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-light-text dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/10"
+                            className="w-full group flex items-center gap-2 text-left px-2 py-1.5 rounded-[5px] font-medium text-xs text-light-text dark:text-dark-text hover:bg-white/15 dark:hover:bg-white/10"
                             onClick={() => {
                               const tagToRename = tags.find(t => t.id === selectedTagId);
                               if (tagToRename) {
@@ -2160,7 +2171,7 @@ export default function Sidebar({
                             <span className="text-white"> Rename </span>
                           </button>
                           <button
-                            className="w-full flex items-center gap-2 text-left px-2 py-2 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
+                            className="w-full flex items-center gap-2 text-left px-2 py-1.5 rounded-[5px] font-medium text-xs text-red-500 hover:bg-[#EC0F0F] dark:hover:bg-[#BE2020] hover:text-white"
                             onClick={() => {
                               const updatedTags = tags.filter((tag) => tag.id !== selectedTagId);
                               setTags(updatedTags);

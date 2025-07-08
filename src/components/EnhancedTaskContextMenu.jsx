@@ -6,6 +6,8 @@ import { EyeHidden } from "@/assets/icons/EyeHidden";
 import { Lightning } from "@/assets/icons/Lightning";
 import { Tag } from "@/assets/icons/Tag";
 import { Calendar as CalendarIcon } from "@/assets/icons/Calendar";
+import { Tomorrow } from "@/assets/icons/Tomorrow";
+import { Anytime } from "@/assets/icons/Anytime";
 import { Check } from "@/assets/icons/Check";
 import { None } from "@/assets/icons/None";
 import { Low } from "@/assets/icons/Low";
@@ -109,8 +111,12 @@ const EnhancedTaskContextMenu = ({
     };
   }, []);
 
-  // Check if task is on calendar (has scheduledDate or addToCalendar flag)
-  const isOnCalendar = task?.scheduledDate || task?.addToCalendar;
+  // Check if task is on calendar (has scheduledDate with specific time and addToCalendar flag)
+  const isOnCalendar = task?.scheduledDate && task?.addToCalendar && (() => {
+    const scheduledDate = new Date(task.scheduledDate);
+    const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
+    return hasSpecificTime;
+  })();
 
   // Schedule options
   const getScheduleOptions = () => {
@@ -119,9 +125,10 @@ const EnhancedTaskContextMenu = ({
     tomorrow.setDate(tomorrow.getDate() + 1);
     
     return [
+      { id: 'anytime', label: 'Anytime', date: null },
       { id: 'today', label: 'Today', date: today },
       { id: 'tomorrow', label: 'Tomorrow', date: tomorrow },
-      { id: 'custom', label: 'Pick date...', date: null },
+      { id: 'custom', label: 'Pick a date...', date: null },
     ];
   };
 
@@ -196,15 +203,24 @@ const EnhancedTaskContextMenu = ({
     if (option.id === 'custom') {
       // For now, just call with a placeholder - could open a date picker in the future
       onScheduleChange?.(task, 'custom');
+    } else if (option.id === 'anytime') {
+      // Remove scheduling - set to null
+      onScheduleChange?.(task, null);
     } else {
-      onScheduleChange?.(task, option.date);
+      // Keep the date but set time to midnight (00:00) for date-only scheduling
+      const dateOnly = new Date(option.date);
+      dateOnly.setHours(0, 0, 0, 0);
+      onScheduleChange?.(task, dateOnly);
     }
     setScheduleMenuOpen(false);
     onOpenChange?.(false);
   };
 
   const handleCustomDateSelect = (date) => {
-    onScheduleChange?.(task, date);
+    // Keep the date but set time to midnight (00:00) for date-only scheduling
+    const dateOnly = new Date(date);
+    dateOnly.setHours(0, 0, 0, 0);
+    onScheduleChange?.(task, dateOnly);
     setCustomDateMenuOpen(false);
     setScheduleMenuOpen(false);
     onOpenChange?.(false);
@@ -447,6 +463,24 @@ const EnhancedTaskContextMenu = ({
               data-context-menu
             >
               {getScheduleOptions().map((option) => {
+                // Get the appropriate icon and color for each option
+                const getIconAndColor = (optionId) => {
+                  switch (optionId) {
+                    case 'anytime':
+                      return { Icon: Anytime, color: '#6B7280' };
+                    case 'today':
+                      return { Icon: CalendarIcon, color: '#F59E0B' };
+                    case 'tomorrow':
+                      return { Icon: Tomorrow, color: '#3B82F6' };
+                    case 'custom':
+                      return { Icon: null, color: null }; // No icon
+                    default:
+                      return { Icon: CalendarIcon, color: '#6B7280' };
+                  }
+                };
+
+                const { Icon, color } = getIconAndColor(option.id);
+
                 if (option.id === 'custom') {
                   return (
                     <Popover key={option.id} open={customDateMenuOpen} onOpenChange={setCustomDateMenuOpen}>
@@ -458,7 +492,6 @@ const EnhancedTaskContextMenu = ({
                           onClick={(e) => e.preventDefault()}
                         >
                           <div className="flex items-center gap-2">
-                            <CalendarIcon className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
                             {option.label}
                           </div>
                           <ChevronRight className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
@@ -490,7 +523,7 @@ const EnhancedTaskContextMenu = ({
                     onClick={() => handleScheduleSelect(option)}
                     className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all"
                   >
-                    <CalendarIcon className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
+                    {Icon && <Icon className="w-3 h-3" style={{ color }} />}
                     {option.label}
                   </button>
                 );
@@ -707,6 +740,24 @@ const EnhancedTaskContextMenu = ({
               data-context-menu
             >
               {getScheduleOptions().map((option) => {
+                // Get the appropriate icon and color for each option
+                const getIconAndColor = (optionId) => {
+                  switch (optionId) {
+                    case 'anytime':
+                      return { Icon: Anytime, color: '#6B7280' };
+                    case 'today':
+                      return { Icon: CalendarIcon, color: '#F59E0B' };
+                    case 'tomorrow':
+                      return { Icon: Tomorrow, color: '#3B82F6' };
+                    case 'custom':
+                      return { Icon: null, color: null }; // No icon
+                    default:
+                      return { Icon: CalendarIcon, color: '#6B7280' };
+                  }
+                };
+
+                const { Icon, color } = getIconAndColor(option.id);
+
                 if (option.id === 'custom') {
                   return (
                     <Popover key={option.id} open={customDateMenuOpen} onOpenChange={setCustomDateMenuOpen}>
@@ -718,7 +769,6 @@ const EnhancedTaskContextMenu = ({
                           onClick={(e) => e.preventDefault()}
                         >
                           <div className="flex items-center gap-2">
-                            <CalendarIcon className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
                             {option.label}
                           </div>
                           <ChevronRight className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
@@ -750,7 +800,7 @@ const EnhancedTaskContextMenu = ({
                     onClick={() => handleScheduleSelect(option)}
                     className="w-full group text-left text-dark-text dark:text-dark-text px-2 py-1.5 flex flex-row gap-2 items-center rounded-[5px] font-medium text-xs hover:bg-white/15 dark:hover:bg-white/5 transition-all"
                   >
-                    <CalendarIcon className="w-3 h-3 text-dark-text/50 dark:text-dark-text/50" />
+                    {Icon && <Icon className="w-3 h-3" style={{ color }} />}
                     {option.label}
                   </button>
                 );

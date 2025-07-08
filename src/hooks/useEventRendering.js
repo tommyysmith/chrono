@@ -154,14 +154,20 @@ export const useEventRendering = (
 
     const updatedTasks = JSON.parse(savedTasks);
     
-    // Update the task to remove calendar information
+    // Update the task to remove calendar information (keep scheduledDate but remove time component)
     const updatedTask = {
       ...task,
       addToCalendar: false,
-      scheduledDate: null,
       duration: null,
       updatedAt: new Date().toISOString()
     };
+    
+    // If there's a scheduledDate, reset it to midnight to remove time component
+    if (task.scheduledDate) {
+      const dateOnly = new Date(task.scheduledDate);
+      dateOnly.setHours(0, 0, 0, 0);
+      updatedTask.scheduledDate = dateOnly.toISOString();
+    }
     
     // Update the task in all collections
     Object.keys(updatedTasks).forEach(key => {
@@ -591,16 +597,16 @@ export const useEventRendering = (
         setTaskContextMenu({ isOpen: false, taskId: null, task: null, position: { x: 0, y: 0 } });
         return;
       } else if (dateOrOption instanceof Date) {
-        // Set the time to 9 AM by default
+        // Keep the date but set time to midnight (00:00) for date-only scheduling
         const date = new Date(dateOrOption);
-        date.setHours(9, 0, 0, 0);
+        date.setHours(0, 0, 0, 0);
         scheduledDate = date.toISOString();
       }
       
       const updatedTask = {
         ...task,
         scheduledDate: scheduledDate,
-        addToCalendar: true,
+        addToCalendar: false, // Don't automatically add to calendar - user must explicitly set time
         updatedAt: new Date().toISOString()
       };
       

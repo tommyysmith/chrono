@@ -732,13 +732,30 @@ export function useDragAndDrop({
                     }));
                   };
                   
-                  // Update the original task with new scheduled date and duration
+                  // Get the current task data from localStorage to preserve recent edits
+                  const currentTasks = JSON.parse(localStorage.getItem('tasks') || '{}');
+                  let currentTaskData = null;
+                  
+                  // Find the current task data in localStorage
+                  Object.keys(currentTasks).forEach(groupKey => {
+                    if (Array.isArray(currentTasks[groupKey])) {
+                      const foundTask = currentTasks[groupKey].find(t => t.id === resizedEvent.originalTask.id);
+                      if (foundTask) {
+                        currentTaskData = foundTask;
+                      }
+                    }
+                  });
+                  
+                  // Use current task data if found, otherwise fall back to original task
+                  const baseTaskData = currentTaskData || resizedEvent.originalTask;
+                  
+                  // Update the task with new scheduled date and duration while preserving current properties
                   const durationMinutes = Math.round((resizedEvent.end.getTime() - resizedEvent.start.getTime()) / (1000 * 60));
                   const updatedTask = {
-                    ...resizedEvent.originalTask,
+                    ...baseTaskData, // Use current task data from localStorage
                     scheduledDate: resizedEvent.start.toISOString(),
                     duration: durationMinutes, // Update duration on resize
-                    addToCalendar: true,
+                    addToCalendar: true, // Ensure it stays on calendar
                     updatedAt: new Date().toISOString()
                   };
                   

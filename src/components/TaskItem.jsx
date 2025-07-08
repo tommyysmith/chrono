@@ -86,7 +86,7 @@ export const TaskDragPreview = ({ task }) => {
             {is15MinTask && task.scheduledDate && (() => {
               const scheduledDate = new Date(task.scheduledDate);
               const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
-              const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
+              const isOnCalendar = task.addToCalendar && hasSpecificTime; // Only show time if task has specific time AND is set to appear on calendar
               
               if (hasSpecificTime && isOnCalendar) {
                 return (
@@ -108,7 +108,7 @@ export const TaskDragPreview = ({ task }) => {
                     {(() => {
                       const scheduledDate = new Date(task.scheduledDate);
                       const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
-                      const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
+                      const isOnCalendar = task.addToCalendar && hasSpecificTime; // Only show time if task has specific time AND is set to appear on calendar
                       
                       // For 15-minute tasks, only show date (since time is shown inline with title)
                       if (is15MinTask && hasSpecificTime && isOnCalendar) {
@@ -165,7 +165,7 @@ export const TaskDragPreview = ({ task }) => {
   );
 };
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, isRecurring, checked, isSelected = false, onSelect, onUpdateTask }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, showTagIconOnly = false, isRecurring, checked, isSelected = false, onSelect, onUpdateTask }) {
   // If isRecurring is not explicitly passed, check the task properties
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
@@ -258,16 +258,16 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
         setIsContextMenuOpen(false);
         return;
       } else if (dateOrOption instanceof Date) {
-        // Set the time to 9 AM by default
+        // Keep the date but set time to midnight (00:00) for date-only scheduling
         const date = new Date(dateOrOption);
-        date.setHours(9, 0, 0, 0);
+        date.setHours(0, 0, 0, 0);
         scheduledDate = date.toISOString();
       }
       
       const updatedTask = {
         ...task,
         scheduledDate: scheduledDate,
-        addToCalendar: true,
+        addToCalendar: false, // Don't automatically add to calendar - user must explicitly set time
         updatedAt: new Date().toISOString()
       };
       
@@ -286,10 +286,16 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
       const updatedTask = {
         ...task,
         addToCalendar: false,
-        scheduledDate: null,
         duration: null,
         updatedAt: new Date().toISOString()
       };
+      
+      // If there's a scheduledDate, reset it to midnight to remove time component but preserve date
+      if (task.scheduledDate) {
+        const dateOnly = new Date(task.scheduledDate);
+        dateOnly.setHours(0, 0, 0, 0);
+        updatedTask.scheduledDate = dateOnly.toISOString();
+      }
       
       onUpdateTask(updatedTask);
     }
@@ -662,7 +668,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           {is15MinTask && task.scheduledDate && (() => {
             const scheduledDate = new Date(task.scheduledDate);
             const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
-            const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
+            const isOnCalendar = task.addToCalendar && hasSpecificTime; // Only show time if task has specific time AND is set to appear on calendar
             
             if (hasSpecificTime && isOnCalendar) {
               return (
@@ -684,7 +690,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
             {(() => {
               const scheduledDate = new Date(task.scheduledDate);
               const hasSpecificTime = task.duration || (scheduledDate.getHours() !== 0 || scheduledDate.getMinutes() !== 0);
-              const isOnCalendar = task.addToCalendar && task.duration; // Only show time if task is on calendar with duration
+              const isOnCalendar = task.addToCalendar && hasSpecificTime; // Only show time if task has specific time AND is set to appear on calendar
               
               // For 15-minute tasks, only show date (since time is shown inline with title)
               if (is15MinTask && hasSpecificTime && isOnCalendar) {
@@ -703,19 +709,41 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           </div>
         )}
         {!hideTag && task.tag && (
-          <div 
-            key={`tag-${task.tag.id || 'default'}`}
-            className="inline-flex self-start mt-1 items-center px-1 h-[20px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[11px] rounded-[5px]"
-            style={{
-              color: task.tag.color
-            }}
-          >
-            <Tag className="h-3 w-3"
-            style={{ color: task.tag.color }} />
-            <span className="px-1">
-            {task.tag.label}
-            </span>
-          </div>
+          showTagIconOnly ? (
+            <TooltipProvider delayDuration={500}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div 
+                    key={`tag-${task.tag.id || 'default'}`}
+                    className="inline-flex self-start mt-1 items-center px-1 h-[20px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[11px] rounded-[5px]"
+                    style={{
+                      color: task.tag.color
+                    }}
+                  >
+                    <Tag className="h-3 w-3"
+                    style={{ color: task.tag.color }} />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center">
+                  {task.tag.label}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <div 
+              key={`tag-${task.tag.id || 'default'}`}
+              className="inline-flex self-start mt-1 items-center px-1 h-[20px] bg-white dark:bg-dark-bg-light outline outline-1 outline-light-border dark:outline-dark-border text-[11px] rounded-[5px]"
+              style={{
+                color: task.tag.color
+              }}
+            >
+              <Tag className="h-3 w-3"
+              style={{ color: task.tag.color }} />
+              <span className="px-1">
+              {task.tag.label}
+              </span>
+            </div>
+          )
         )}
 
         {taskIsRecurring && (

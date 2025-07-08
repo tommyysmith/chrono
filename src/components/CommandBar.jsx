@@ -1852,7 +1852,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           repeat: taskRepeatOption !== 'none' ? taskRepeatOption : 'none',
           rruleOptions: taskRepeatOption !== 'none' ? taskRruleOptions : null,
           seriesId: seriesId,
-          isRepeat: false // Base task is never a repeat instance
+          isRepeat: false, // Base task is never a repeat instance
+          // Set addToCalendar to false by default - users must explicitly schedule with time
+          addToCalendar: false
         };
         
         // For recurring tasks, preserve the user's scheduled date for startDateOfSeries calculation

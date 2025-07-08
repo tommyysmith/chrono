@@ -529,6 +529,8 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
                         tag: task.tag || null  // Ensure tag is always passed
                       }}
                       hideScheduledDate={true}  // Hide scheduled date in AgendaView
+                      hideTag={false}
+                      showTagIconOnly={true}  // Show only tag icon in AgendaView for consistency
                       onComplete={handleToggleTaskCompletion}
                       checked={task.completed}
                       onDelete={handleTaskDelete}
