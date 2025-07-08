@@ -108,3 +108,10 @@ input[type="checkbox"] {
   opacity: 1 !important;
   transform: none !important;
 }
+
+/* Instant animation for submenus - keeps animation but makes it 0ms */
+.instant-submenu[data-state="open"],
+.instant-submenu[data-state="closed"] {
+  animation-duration: 0ms !important;
+  transition-duration: 0ms !important;
+}

@@ -353,7 +353,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start" 
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (priorityTimeoutRef.current) clearTimeout(priorityTimeoutRef.current);
               }}
@@ -400,7 +400,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start" 
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (tagTimeoutRef.current) clearTimeout(tagTimeoutRef.current);
               }}
@@ -455,7 +455,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start"
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-lg rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (scheduleTimeoutRef.current) clearTimeout(scheduleTimeoutRef.current);
               }}
@@ -500,7 +500,7 @@ const EnhancedTaskContextMenu = ({
                       <PopoverContent 
                         side="right" 
                         align="start"
-                        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 p-3"
+                        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 p-3 instant-submenu"
                         onMouseEnter={() => {
                           if (customDateTimeoutRef.current) clearTimeout(customDateTimeoutRef.current);
                         }}
@@ -630,7 +630,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start" 
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (priorityTimeoutRef.current) clearTimeout(priorityTimeoutRef.current);
               }}
@@ -677,7 +677,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start" 
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (tagTimeoutRef.current) clearTimeout(tagTimeoutRef.current);
               }}
@@ -732,7 +732,7 @@ const EnhancedTaskContextMenu = ({
             <PopoverContent 
               side="right" 
               align="start" 
-              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5"
+              className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 w-[180px] p-1 space-y-0.5 instant-submenu"
               onMouseEnter={() => {
                 if (scheduleTimeoutRef.current) clearTimeout(scheduleTimeoutRef.current);
               }}
@@ -777,7 +777,7 @@ const EnhancedTaskContextMenu = ({
                       <PopoverContent 
                         side="right" 
                         align="start"
-                        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 p-3"
+                        className="bg-dark-bg-lighter dark:bg-dark-bg shadow-2xl rounded-[9px] overflow-hidden outline outline-[1px] outline-dark-border dark:outline-dark-border outline-offset-0 p-3 instant-submenu"
                         onMouseEnter={() => {
                           if (customDateTimeoutRef.current) clearTimeout(customDateTimeoutRef.current);
                         }}
