@@ -1612,7 +1612,7 @@ export default function Sidebar({
   return (
     // eslint-disable-next-line tailwindcss/no-custom-classname
     <aside className="w-full h-full bg-light-bg-light dark:bg-dark-bg overflow-y-auto relative flex flex-col">
-      <div className="h-full flex flex-col justify-between">
+      <div className="h-full flex flex-col justify-between scrollbar-hide">
         
         <div className="flex-1 min-h-0 relative overflow-hidden">
           <AnimatePresence initial={false} mode="sync">
@@ -1657,7 +1657,7 @@ export default function Sidebar({
                   </button>
                 </div>
                 
-                <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg safari-layout-stable">
+                <nav className="flex-1 overflow-auto pt-2 dark:bg-dark-bg safari-layout-stable scrollbar-hide">
                   <div className="space-y-1 flex flex-col safari-no-flicker">
                     {selectedView === "all" ? (
                       <>
@@ -2054,7 +2054,7 @@ export default function Sidebar({
                   ease: [0.25, 1, 0.5, 1],
                 }}
               >
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto scrollbar-hide">
                   <AgendaView
                     events={events}
                     tasks={allTasksArray}

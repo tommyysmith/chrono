@@ -59,6 +59,7 @@ const EnhancedTaskContextMenu = ({
   onPriorityChange,
   onTagChange,
   onScheduleChange,
+  hideSchedule = false, // New prop to hide schedule options
   children, // This will be the trigger element
 }) => {
   const [tags, setTags] = useState([]);
@@ -437,6 +438,7 @@ const EnhancedTaskContextMenu = ({
           </Popover>
 
           {/* Schedule Submenu */}
+          {!hideSchedule && (
           <Popover open={scheduleMenuOpen} onOpenChange={setScheduleMenuOpen}>
             <PopoverTrigger asChild>
               <button 
@@ -530,6 +532,7 @@ const EnhancedTaskContextMenu = ({
               })}
             </PopoverContent>
           </Popover>
+          )}
         </div>
 
         <div className="my-1 h-px bg-dark-border dark:bg-dark-border" />
@@ -714,6 +717,7 @@ const EnhancedTaskContextMenu = ({
           </Popover>
 
           {/* Schedule Submenu */}
+          {!hideSchedule && (
           <Popover open={scheduleMenuOpen} onOpenChange={setScheduleMenuOpen}>
             <PopoverTrigger asChild>
               <DropdownMenuItem 
@@ -807,6 +811,7 @@ const EnhancedTaskContextMenu = ({
               })}
             </PopoverContent>
           </Popover>
+          )}
         </div>
 
         <DropdownMenuSeparator />

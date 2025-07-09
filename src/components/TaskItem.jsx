@@ -165,7 +165,7 @@ export const TaskDragPreview = ({ task }) => {
   );
 };
 
-export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, showTagIconOnly = false, isRecurring, checked, isSelected = false, onSelect, onUpdateTask }) {
+export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleClickEdit, onClick, hideScheduledDate, hideTag, showTagIconOnly = false, hideSchedule = false, isRecurring, checked, isSelected = false, onSelect, onUpdateTask }) {
   // If isRecurring is not explicitly passed, check the task properties
   const taskIsRecurring = isRecurring !== undefined ? isRecurring : (task.repeat && task.repeat !== 'none');
   const [isHovering, setIsHovering] = useState(false);
@@ -862,6 +862,7 @@ export default function TaskItem({ task, onComplete, onDelete, onEdit, onDoubleC
           onPriorityChange={handlePriorityChange}
           onTagChange={handleTagChange}
           onScheduleChange={handleScheduleChange}
+          hideSchedule={hideSchedule}
         >
           <motion.button
             initial={{ opacity: 0 }}

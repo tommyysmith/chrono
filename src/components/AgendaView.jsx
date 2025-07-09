@@ -8,10 +8,13 @@ import { Chevron } from '../assets/icons/Chevron';
 import { Return } from '../assets/icons/Return';
 import { Task } from '../assets/icons/Task';
 import { Calendar as CalendarIcon } from '../assets/icons/Calendar';
+import { Anytime } from '../assets/icons/Anytime';
+import { Clock } from '../assets/icons/Clock';
 import { DayPicker } from 'react-day-picker';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import TaskItem from './TaskItem';
+import Checkbox from './Checkbox';
 import 'react-day-picker/dist/style.css';
 
 const dayPickerStyles = {
@@ -44,16 +47,18 @@ const EventItem = memo(({ event }) => {
   
   return (
     <div className="flex items-start relative" style={{ opacity: isPastEvent ? 0.5 : 1 }}>
-      {/* Left color bar - absolute positioned to fill height */}
-      {!event.isDraft && (
-        <div 
-          className="absolute left-0 top-0 bottom-0 w-[4px] rounded-full"
-          style={{ backgroundColor: bgColor }}
-        />
-      )}
+      {/* Left color bar container - same width as checkbox */}
+      <div className="absolute left-0 top-0 w-[14px] h-full flex items-start justify-center pt-1">
+        {!event.isDraft && (
+          <div 
+            className="w-[4px] h-full rounded-full"
+            style={{ backgroundColor: bgColor }}
+          />
+        )}
+      </div>
       
-      {/* Content with padding to accommodate the color bar */}
-      <div className="flex flex-col pl-4">
+      {/* Content with padding to accommodate the color bar container */}
+      <div className="flex flex-col pl-6">
         <div className="text-sm mb-1 font-semibold" style={{ color: bgColor }}>
           {event.title || 'New Event'}
           
@@ -70,6 +75,75 @@ const EventItem = memo(({ event }) => {
 });
 
 EventItem.displayName = 'EventItem';
+
+// TaskEventItem component that looks like EventItem but with checkbox
+const TaskEventItem = memo(({ task, onToggleTaskCompletion, events }) => {
+  // Find the corresponding event from the events array to get the actual time
+  const correspondingEvent = events.find(event => 
+    (event.isTaskBlock || event.originalTask || event.type === 'task') &&
+    event.originalTask?.id === task.id
+  );
+  
+  let taskDate, duration;
+  
+  if (correspondingEvent) {
+    // Use the event's start time and calculate duration from event
+    taskDate = new Date(correspondingEvent.start);
+    const eventEnd = new Date(correspondingEvent.end);
+    duration = Math.floor((eventEnd - taskDate) / (60 * 1000)); // Duration in minutes
+  } else {
+    // Fallback to task's scheduled date with default time
+    taskDate = new Date(task.scheduledDate);
+    duration = task.duration || 60; // Default to 1 hour if no duration
+  }
+  
+  const endTime = new Date(taskDate.getTime() + (duration * 60 * 1000));
+  const now = new Date();
+  const isPastTask = endTime < now;
+  
+  // Format duration text
+  const getDurationText = () => {
+    if (duration < 60) {
+      return `${duration}m`;
+    } else {
+      const hours = Math.floor(duration / 60);
+      const remainingMinutes = duration % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+    }
+  };
+  
+  return (
+    <div className="flex items-start relative" style={{ opacity: isPastTask ? 0.5 : 1 }}>
+      {/* Checkbox instead of color bar */}
+      <div className="absolute left-0 top-0 pt-1">
+        <Checkbox 
+          checked={task.completed || false}
+          onChange={() => {
+            if (onToggleTaskCompletion) {
+              onToggleTaskCompletion(task, 'single');
+            }
+          }}
+        />
+      </div>
+      
+      {/* Content with padding to accommodate the checkbox */}
+      <div className="flex flex-col pl-6">
+        <div className="text-sm mb-1 font-semibold text-light-text dark:text-dark-text">
+          {task.title || 'New Task'}
+        </div>
+        <div className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+          {format(taskDate, 'h:mm a')}
+        </div>
+        <div className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+          {getDurationText()}
+        </div>
+      </div>
+    </div>
+  );
+});
+
+TaskEventItem.displayName = 'TaskEventItem';
+
 
 const IconLeft = memo(() => (
   <TooltipProvider>
@@ -102,11 +176,10 @@ IconRight.displayName = 'IconRight';
 
 export default function AgendaView({ events = [], tasks = [], selectedDate = new Date(), onDateSelect, isWeekView = false, onTaskComplete, onTaskDelete, onTaskEdit, commandBarRef }) {
   // Get task management functions
-  const { getRecurringTaskInstances, handleToggleTaskCompletion, ensureActiveRecurringInstances } = useTaskManagement();
+  const { getRecurringTaskInstances, handleToggleTaskCompletion, ensureActiveRecurringInstances, handleUpdateTask } = useTaskManagement();
   
   const [currentDate, setCurrentDate] = useState(selectedDate);
   const [month, setMonth] = useState(selectedDate);
-  const [viewMode, setViewMode] = useState('events'); // 'events' or 'tasks'
   const [commandBarSelectedTasks, setCommandBarSelectedTasks] = useState(new Set());
 
   // Sync CommandBar selected tasks with local state using callbacks
@@ -268,17 +341,77 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
     }
   }, [onDateSelect]);
 
-  const filteredEvents = useMemo(() => {
-    return events
-      .filter(event => isSameDay(new Date(event.start), currentDate))
-      .sort((a, b) => new Date(a.start) - new Date(b.start));
-  }, [events, currentDate]);
+  // Unified scheduled items combining events and tasks
+  const allScheduledItems = useMemo(() => {
+    // Filter out task-events from the events array to avoid duplicates
+    // Only show actual calendar events, not tasks converted to events
+    const regularEvents = events
+      .filter(event => {
+        // Skip task-events (tasks that were converted to events)
+        if (event.isTaskBlock || event.originalTask || event.type === 'task') {
+          return false;
+        }
+        return isSameDay(new Date(event.start), currentDate);
+      })
+      .map(event => ({
+        ...event,
+        itemType: 'event',
+        hasTime: true,
+        sortTime: new Date(event.start).getTime()
+      }));
 
-  const filteredTasks = useMemo(() => {
     const tasks = filterTasks(currentDate);
-    console.log('AgendaView filteredTasks:', tasks);
-    return tasks;
-  }, [filterTasks, currentDate]);
+    console.log(`[AgendaView] Filtered tasks for ${format(currentDate, 'yyyy-MM-dd')}:`, tasks);
+    
+    const taskItems = tasks.map(task => {
+      // Check if this task has an active TaskEventItem in the events array
+      // All TaskEventItems are time-scheduled, so if a task has one, it's timed
+      const hasActiveTaskEvent = events.some(event => 
+        (event.isTaskBlock || event.originalTask || event.type === 'task') &&
+        event.originalTask?.id === task.id &&
+        isSameDay(new Date(event.start), currentDate)
+      );
+      
+      let sortTime = 0;
+      
+      console.log(`[AgendaView] Task "${task.title}" - hasActiveTaskEvent: ${hasActiveTaskEvent}`);
+      
+      if (hasActiveTaskEvent) {
+        // Find the corresponding event to get the sort time
+        const correspondingEvent = events.find(event => 
+          (event.isTaskBlock || event.originalTask || event.type === 'task') &&
+          event.originalTask?.id === task.id &&
+          isSameDay(new Date(event.start), currentDate)
+        );
+        
+        if (correspondingEvent) {
+          sortTime = new Date(correspondingEvent.start).getTime();
+          console.log(`[AgendaView] Task "${task.title}" found corresponding event, sortTime: ${sortTime}`);
+        }
+      }
+
+      return {
+        ...task,
+        itemType: 'task',
+        hasTime: hasActiveTaskEvent,
+        sortTime
+      };
+    });
+
+    const allItems = [...regularEvents, ...taskItems];
+    
+    // Separate timed and anytime items
+    const timedItems = allItems
+      .filter(item => item.hasTime)
+      .sort((a, b) => a.sortTime - b.sortTime);
+    
+    const anytimeItems = allItems
+      .filter(item => !item.hasTime)
+      .sort((a, b) => a.title.localeCompare(b.title));
+
+    console.log(`[AgendaView] AllScheduledItems - Timed: ${timedItems.length}, Anytime: ${anytimeItems.length}`);
+    return { timedItems, anytimeItems, totalCount: allItems.length };
+  }, [events, filterTasks, currentDate]);
   
   // Force a re-render when tasks change to update the UI
   const forceRefresh = useCallback(() => {
@@ -339,22 +472,12 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
   // Note: Task instance generation is handled automatically by useTaskManagement
   // AgendaView delegates to the task management system for all recurring task logic
 
-  // Determine if we need to show the selector
-  const showSelector = filteredEvents.length > 0 && filteredTasks.length > 0;
-
-  // If no events but tasks exist, default to tasks view
-  useEffect(() => {
-    if (filteredEvents.length === 0 && filteredTasks.length > 0) {
-      setViewMode('tasks');
-    } else {
-      setViewMode('events');
-    }
-  }, [filteredEvents.length, filteredTasks.length]);
 
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex h-full flex-col">
       <TooltipProvider delayDuration={750}>
-        <div className="flex flex-col">
+        {/* Fixed header section with calendar and date */}
+        <div className="flex-shrink-0 flex flex-col gap-4">
         <div className="flex px-3 justify-center">
           <DayPicker
             mode="single"
@@ -429,134 +552,141 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
             {isToday(currentDate) ? 'Today' : format(currentDate, 'EEE d MMM')}
           </h2>
           
-          {showSelector && (
-            <div className="flex group gap-1 mt-2 mb-2 bg-white border border-light-border dark:border-dark-border shadow-sm dark:bg-white/5 rounded-[9px] p-1 w-fit">
-              <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'events' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text'}`}
-                onClick={() => setViewMode('events')}
-              >
-                <CalendarIcon className="w-4 h-4" />
-                <span className="text-xs mr-1">
-                  {filteredEvents.length}
-                </span>
-              </button>
-              <button 
-                className={`px-1 py-1 text-sm rounded-[5px] flex items-center gap-1.5 ${viewMode === 'tasks' ? 'bg-light-bg-lighter dark:bg-white/5 text-light-text dark:text-dark-text' : 'text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text'}`}
-                onClick={() => setViewMode('tasks')}
-              >
-                <Task className="w-4 h-4" />
-                <span className="text-xs mr-1">
-                  {filterTasks(currentDate).length}
-                </span>
-              </button>
+          {allScheduledItems.totalCount > 0 && (
+            <div className="flex items-center gap-1 text-light-text/50 dark:text-dark-text/50">
+              <span className="text-xs">
+                {allScheduledItems.totalCount} item{allScheduledItems.totalCount !== 1 ? 's' : ''}
+              </span>
             </div>
           )}
         </div>
         </div>
 
-        {viewMode === 'events' ? (
-          <>
-            {filteredEvents.length === 0 ? (
-              <div className="flex flex-col items-center justify-center px-4 rounded-[9px] py-6 text-center">
-                                              <div className="text-light-text/50 dark:text-dark-text/50 mb-3">
-                                                <CalendarIcon className="w-6 h-6" />
-                                              </div>
-                                              <p className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
-                                              Nothing scheduled
-                                              </p>
-                                              <p className="text-xs text-light-text/50 dark:text-dark-text/50 mt-1 leading-relaxed">
-                                              Schedule an event or task for this date and you will see it here!
-                                              </p> 
-                                              <div className="flex gap-2">
-                                              <button 
-                                                onClick={() => {
-                                                  // If commandBarRef is available, open CommandBar with the current date
-                                                  if (commandBarRef?.current) {
-                                                    // Use the new openForNewTask method which opens the task creation flow
-                                                    commandBarRef.current.openForNewTask(new Date(currentDate));
-                                                  } else {
-                                                    // Fallback to the original behavior if commandBarRef is not available
-                                                    onDateSelect?.(new Date(currentDate));
-                                                  }
-                                                }}
-                                                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                                              >
-                                                Add task
-                                              </button>
-                                              <button 
-                                                onClick={() => {
-                                                  // If commandBarRef is available, open CommandBar with the current date
-                                                  if (commandBarRef?.current) {
-                                                    // Use the new openForNewEvent method which doesn't create an event immediately
-                                                    commandBarRef.current.openForNewEvent(new Date(currentDate));
-                                                  } else {
-                                                    // Fallback to the original behavior if commandBarRef is not available
-                                                    onDateSelect?.(new Date(currentDate));
-                                                  }
-                                                }}
-                                                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
-                                              >
-                                                Add event
-                                              </button>
-                                              </div>
-                                            </div>
-            ) : (
-              <div className="flex flex-col gap-6 px-3 py-2">
-                {filteredEvents.map((event) => (
-                  <EventItem key={event.id} event={event} />
-                ))}
-              </div>
-            )}
-          </>
+        {allScheduledItems.totalCount === 0 ? (
+          <div className="flex flex-col items-center justify-center px-4 rounded-[9px] py-6 text-center">
+            <div className="text-light-text/50 dark:text-dark-text/50 mb-3">
+              <CalendarIcon className="w-6 h-6" />
+            </div>
+            <p className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+              Nothing scheduled
+            </p>
+            <p className="text-xs text-light-text/50 dark:text-dark-text/50 mt-1 leading-relaxed">
+              Schedule an event or task for this date and you will see it here!
+            </p> 
+            <div className="flex gap-2">
+              <button 
+                onClick={() => {
+                  if (commandBarRef?.current) {
+                    commandBarRef.current.openForNewTask(new Date(currentDate));
+                  } else {
+                    onDateSelect?.(new Date(currentDate));
+                  }
+                }}
+                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+              >
+                Add task
+              </button>
+              <button 
+                onClick={() => {
+                  if (commandBarRef?.current) {
+                    commandBarRef.current.openForNewEvent(new Date(currentDate));
+                  } else {
+                    onDateSelect?.(new Date(currentDate));
+                  }
+                }}
+                className="flex mt-3 items-center cursor-pointer flex-row px-3 h-[32px] font-medium shadow-sm bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% hover:bg-gradient-to-b hover:from-light-bg-light hover:to-light-bg-lighter dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] dark:hover:bg-gradient-to-b dark:hover:from-dark-bg-lighter dark:hover:to-dark-bg-lighter hover:bg-gradient-to-b outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border dark:hover:bg-white/10 text-light-text/50 dark:text-dark-text/50 text-xs hover:text-light-text dark:hover:text-dark-text rounded-[5px]"
+              >
+                Add event
+              </button>
+            </div>
+          </div>
         ) : (
-          <>
-            {filteredTasks.length === 0 ? (
-              <div className="text-center text-light-text/50 dark:text-dark-text/50 px-4">
-                No tasks scheduled for {isToday(currentDate) ? 'today' : format(currentDate, 'MMM d, yyyy')}
-              </div>
-            ) : (
-              <div className="flex px-2 flex-col gap-2">
-                {filteredTasks.map((task) => {
-                  // Handle completed tasks behavior consistently
-                  // Skip completed tasks unless user is specifically viewing completed tasks
-                  if (task.completed && viewMode !== 'completed') return null;
+          <div className="flex-1 overflow-y-auto scrollbar-hide">
+            <div className="flex flex-col gap-6 px-3 py-2">
+              {/* Anytime Items Section - moved to top */}
+              {allScheduledItems.anytimeItems.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  {/* Anytime header */}
+                  <div className="flex items-center gap-2 px-1">
+                    <Anytime className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                    <span className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+                      Anytime
+                    </span>
+                  </div>
                   
-                  return (
-                    <TaskItem 
-                      key={`agenda-${task.id}`} 
-                      task={{
-                        ...task,
-                        tag: task.tag || null  // Ensure tag is always passed
-                      }}
-                      hideScheduledDate={true}  // Hide scheduled date in AgendaView
-                      hideTag={false}
-                      showTagIconOnly={true}  // Show only tag icon in AgendaView for consistency
-                      onComplete={handleToggleTaskCompletion}
-                      checked={task.completed}
-                      onDelete={handleTaskDelete}
-                      onDoubleClickEdit={(task) => {
-                        // Let the parent component handle the edit logic
-                        // It will determine if it's a recurring task and handle accordingly
-                        onTaskEdit(task);
-                      }}
-                      isSelected={commandBarSelectedTasks.has(task.id)}
-                      onSelect={(taskId, e, isSelected) => {
-                         if (commandBarRef?.current?.selectTask) {
-                           commandBarRef.current.selectTask(taskId, e, isSelected);
-                         }
-                       }}
-                      isRecurring={task.repeat && task.repeat !== 'none' || task.isRepeat}
-                      onUpdateTask={(updatedTask) => {
-                        // Handle task updates in AgendaView by forcing a refresh
-                        // The actual update is handled by localStorage and storage events
-                        forceRefresh();
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </>
+                  {allScheduledItems.anytimeItems.map((item) => {
+                    if (item.itemType === 'event') {
+                      return <EventItem key={item.id} event={item} />;
+                    } else {
+                      return (
+                        <TaskItem 
+                          key={`agenda-${item.id}`} 
+                          task={{
+                            ...item,
+                            tag: item.tag || null
+                          }}
+                          hideScheduledDate={true}
+                          hideTag={false}
+                          showTagIconOnly={true}
+                          hideSchedule={true}
+                          onComplete={handleToggleTaskCompletion}
+                          checked={item.completed}
+                          onDelete={handleTaskDelete}
+                          onDoubleClickEdit={(task) => {
+                            onTaskEdit(task);
+                          }}
+                          isSelected={commandBarSelectedTasks.has(item.id)}
+                          onSelect={(taskId, e, isSelected) => {
+                             if (commandBarRef?.current?.selectTask) {
+                               commandBarRef.current.selectTask(taskId, e, isSelected);
+                             }
+                           }}
+                          isRecurring={item.repeat && item.repeat !== 'none' || item.isRepeat}
+                          onUpdateTask={(updatedTask) => {
+                            handleUpdateTask(updatedTask);
+                            forceRefresh();
+                          }}
+                        />
+                      );
+                    }
+                  })}
+                </div>
+              )}
+              
+              {/* Timed Items Section */}
+              {allScheduledItems.timedItems.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  {/* Scheduled header */}
+                  <div className="flex items-center gap-2 px-1 mb-2">
+                    <Clock className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                    <span className="text-xs font-medium text-light-text/50 dark:text-dark-text/50">
+                      Scheduled
+                    </span>
+                  </div>
+                  
+                  {allScheduledItems.timedItems.map((item) => {
+                    if (item.itemType === 'event') {
+                      return (
+                        <div key={item.id} className="px-1">
+                          <EventItem event={item} />
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div key={`agenda-${item.id}`} className="px-1">
+                          <TaskEventItem 
+                            task={item}
+                            events={events}
+                            onToggleTaskCompletion={handleToggleTaskCompletion}
+                          />
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </TooltipProvider>
     </div>
