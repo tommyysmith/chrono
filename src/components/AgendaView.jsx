@@ -601,8 +601,8 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-y-auto scrollbar-hide">
-            <div className="flex flex-col gap-6 px-3 py-2">
+          <div className="flex-1 overflow-y-auto scrollbar-hide pt-2">
+            <div className="flex flex-col gap-4 px-3 py-2">
               {/* Anytime Items Section - moved to top */}
               {allScheduledItems.anytimeItems.length > 0 && (
                 <div className="flex flex-col gap-3">
