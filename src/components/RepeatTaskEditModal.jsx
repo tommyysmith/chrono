@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { format, isSameDay } from 'date-fns';
 import { Return } from '../assets/icons/Return';
+import { Edit } from '../assets/icons/Edit';
+import { Cross } from '../assets/icons/Cross';
 
 const RepeatTaskEditModal = ({ 
   isOpen, 
@@ -224,10 +226,26 @@ const RepeatTaskEditModal = ({
       />
       
       {/* Modal */}
-      <div className="relative bg-light-bg dark:bg-dark-bg-lighter outline outline-light-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
-        <h2 className="text-sm px-8 pt-8 text-light-text dark:text-dark-text mb-6">
-          Edit repeat task <span className="!font-semibold">"{taskTitle || 'Untitled'}"</span>
-        </h2>
+      <div className="relative bg-light-bg dark:bg-dark-bg-lighter outline outline-1 outline-light-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
+        <div className="p-8 pb-2">
+          <div className="flex flex-row gap-2 items-center mb-6">
+            <div className="flex justify-center items-center h-[20px] w-[20px] outline outline-1 outline-primary/20 bg-primary/10 rounded-[5px]">
+              <Edit className="h-3 w-3 text-primary" />
+            </div>
+            <h2 className="text-light-text dark:text-dark-text text-sm">
+              Edit repeat task <span className="!font-semibold">"{taskTitle || 'Untitled'}"</span>
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="absolute right-8 top-8 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+          >
+            <div className="group flex items-center justify-center h-6 w-6 rounded-full bg-light-bg-lighter dark:bg-white/5">
+              <Cross className="h-3 w-3 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+            </div>
+            <span className="sr-only">Close</span>
+          </button>
+        </div>
 
         <div className="space-y-4 px-8 mb-6">
           {/* Single task option */}
@@ -241,7 +259,7 @@ const RepeatTaskEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -268,7 +286,7 @@ const RepeatTaskEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -295,7 +313,7 @@ const RepeatTaskEditModal = ({
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${editScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'

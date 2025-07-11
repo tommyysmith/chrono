@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { Trash } from '../assets/icons/Trash';
+import { Cross } from '../assets/icons/Cross';
 
 const DeleteTaskModal = ({ isOpen, taskTitle, onClose, onDelete }) => {
   // Use a state variable to store the selected scope
@@ -17,15 +19,31 @@ const DeleteTaskModal = ({ isOpen, taskTitle, onClose, onDelete }) => {
     <div className="fixed inset-0 flex items-center justify-center z-[9999]">
       {/* Backdrop */}
       <div 
-        className="absolute inset-0 bg-black/30 dark:bg-black/50"
+        className="absolute inset-0"
         onClick={onClose}
       />
       
       {/* Modal */}
-      <div className="relative bg-light-bg dark:bg-dark-bg-lighter outline outline-light-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
-        <h2 className="text-sm px-8 pt-8 text-light-text dark:text-dark-text mb-6">
-          Delete recurring task <span className="!font-semibold">"{taskTitle || 'Untitled'}"</span>
-        </h2>
+      <div className="relative bg-light-bg dark:bg-dark-bg-lighter outline outline-1 outline-light-border dark:outline-dark-border rounded-[9px] shadow-2xl w-full max-w-lg">
+        <div className="p-8 pb-2">
+          <div className="flex flex-row gap-2 items-center mb-6">
+            <div className="flex justify-center items-center h-[20px] w-[20px] outline outline-1 outline-primary/20 bg-primary/10 rounded-[5px]">
+              <Trash className="h-3 w-3 text-primary" />
+            </div>
+            <h2 className="text-light-text dark:text-dark-text text-sm">
+              Delete recurring task <span className="!font-semibold">"{taskTitle || 'Untitled'}"</span>
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="absolute right-8 top-8 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none"
+          >
+            <div className="group flex items-center justify-center h-6 w-6 rounded-full bg-light-bg-lighter dark:bg-white/5">
+              <Cross className="h-3 w-3 text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text" />
+            </div>
+            <span className="sr-only">Close</span>
+          </button>
+        </div>
 
         <div className="space-y-4 px-8 mb-6">
           {/* Single task option */}
@@ -39,7 +57,7 @@ const DeleteTaskModal = ({ isOpen, taskTitle, onClose, onDelete }) => {
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${deleteScope === 'single' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -66,7 +84,7 @@ const DeleteTaskModal = ({ isOpen, taskTitle, onClose, onDelete }) => {
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${deleteScope === 'future' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
@@ -93,7 +111,7 @@ const DeleteTaskModal = ({ isOpen, taskTitle, onClose, onDelete }) => {
               className="hidden"
             />
             <div 
-              className={`w-4 h-4 rounded-full border-2 border-black/10 dark:border-white/10 flex items-center justify-center
+              className={`w-4 h-4 rounded-full border border-black/10 dark:border-white/10 flex items-center justify-center
                 ${deleteScope === 'all' 
                   ? 'border-primary bg-primary' 
                   : 'border-light-border dark:border-dark-border'
