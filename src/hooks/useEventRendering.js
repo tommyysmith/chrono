@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { format, isSameDay, addDays } from "date-fns";
+import { format, isSameDay, addDays, startOfDay } from "date-fns";
 
 import { ViewType } from "../constants/views";
 import { findOverlappingGroup, getEventStyle } from "@/utils/eventUtils";
@@ -369,12 +369,24 @@ export const useEventRendering = (
     // First, identify multi-day events that span across days
     allItems.forEach(event => {
       const isAllDayEvent = event.allDay || event.isAllDay;
-      const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
+      const eventStart = new Date(event.start);
+      const eventEnd = new Date(event.end);
+      
+      // Check if this is truly a multi-day event
+      // For all-day events, if end time is exactly at start of next day (midnight), it's a single-day event
+      let isMultiDayEvent;
+      if (isAllDayEvent) {
+        const startOfNextDay = new Date(eventStart);
+        startOfNextDay.setDate(startOfNextDay.getDate() + 1);
+        startOfNextDay.setHours(0, 0, 0, 0);
+        
+        // If event ends exactly at midnight of next day, it's a single-day all-day event
+        isMultiDayEvent = eventEnd.getTime() !== startOfNextDay.getTime() && !isSameDay(eventStart, eventEnd);
+      } else {
+        isMultiDayEvent = event.isMultiDay || (!isSameDay(eventStart, eventEnd));
+      }
 
-      if (isAllDayEvent || isMultiDayEvent) {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
-
+      if ((isAllDayEvent && isMultiDayEvent) || (!isAllDayEvent && isMultiDayEvent)) {
         // Check if the event overlaps with our week view
         if (eventEnd >= weekStart && eventStart < weekEnd) {
           const startDayIndex = Math.max(0, Math.floor((eventStart - weekStart) / (24 * 60 * 60 * 1000)));
@@ -418,7 +430,45 @@ export const useEventRendering = (
       }
     });
 
-    const numRows = eventRows.length > 0 ? eventRows.length : 1;
+    // Calculate total rows needed including single-day events
+    // First calculate how many single-day events we have in each column
+    const singleDayEventsPerColumn = Array.from({ length: 7 }, (_, dayIndex) => {
+      const currentDate = addDays(weekStart, dayIndex);
+      return allItems.filter((event) => {
+        const isAllDayEvent = event.allDay || event.isAllDay;
+        const eventStart = new Date(event.start);
+        const eventEnd = new Date(event.end);
+        
+        let isSingleDay;
+        if (isAllDayEvent) {
+          const startOfNextDay = new Date(eventStart);
+          startOfNextDay.setDate(startOfNextDay.getDate() + 1);
+          startOfNextDay.setHours(0, 0, 0, 0);
+          isSingleDay = eventEnd.getTime() === startOfNextDay.getTime() || isSameDay(eventStart, eventEnd);
+        } else {
+          isSingleDay = isSameDay(eventStart, eventEnd) || (eventEnd.getTime() - eventStart.getTime() < 24 * 60 * 60 * 1000);
+        }
+        
+        return isAllDayEvent && isSingleDay && isSameDay(eventStart, currentDate) && !multiDayEvents.some(e => e.id === event.id);
+      }).length;
+    });
+
+    // Calculate total rows needed
+    let totalRows = eventRows.length;
+    Array.from({ length: 7 }).forEach((_, dayIndex) => {
+      let rowsNeededForThisColumn = 0;
+      // Count multi-day events occupying this column
+      eventRows.forEach((row, rowIndex) => {
+        row.forEach((multiDayEvent) => {
+          if (multiDayEvent.startDayIndex <= dayIndex && multiDayEvent.endDayIndex >= dayIndex) {
+            rowsNeededForThisColumn = Math.max(rowsNeededForThisColumn, rowIndex + 1);
+          }
+        });
+      });
+      // Add single-day events for this column
+      rowsNeededForThisColumn += singleDayEventsPerColumn[dayIndex];
+      totalRows = Math.max(totalRows, rowsNeededForThisColumn);
+    });
 
     return (
       <div className="grid grid-cols-[60px_1fr] min-h-[32px] border-t border-b border-light-border/50 dark:border-dark-border">
@@ -427,10 +477,10 @@ export const useEventRendering = (
         </div>
         <div 
           className="relative grid grid-cols-7" 
-          style={{ gridTemplateRows: `repeat(${numRows}, minmax(24px, auto))` }}
+          style={{ gridTemplateRows: `repeat(${totalRows}, minmax(24px, auto))` }}
         >
           {/* Grid background cells */}
-          {Array.from({ length: 7 * numRows }).map((_, index) => (
+          {Array.from({ length: 7 * totalRows }).map((_, index) => (
             <div
               key={`bg-cell-${index}`}
               className="border-l border-light-border/50 dark:border-dark-border"
@@ -438,50 +488,18 @@ export const useEventRendering = (
             />
           ))}
 
-          {/* Single-day all-day events */}
-          {Array.from({ length: 7 }).map((_, dayIndex) => {
-            const currentDate = addDays(weekStart, dayIndex);
-            const dayEvents = allItems.filter((event) => {
-              const isAllDayEvent = event.allDay || event.isAllDay;
-              const eventStart = new Date(event.start);
-              const eventEnd = new Date(event.end);
-              const isSingleDay = isSameDay(eventStart, eventEnd) || (eventEnd.getTime() - eventStart.getTime() < 24 * 60 * 60 * 1000);
-              return isAllDayEvent && isSingleDay && isSameDay(eventStart, currentDate) && !multiDayEvents.some(e => e.id === event.id);
-            });
-
-            return (
-              <div
-                key={`day-col-${dayIndex}`}
-                className="relative p-1 flex flex-col gap-1 overflow-hidden z-10"
-                style={{ gridColumn: dayIndex + 1, gridRow: 1 }}
-              >
-                {dayEvents.map((event) => (
-                  <AllDayEventItem
-                    key={event.id}
-                    event={event}
-                    onDoubleClick={handleEventDoubleClick}
-                    onContextMenu={handleEventContextMenuClick}
-                    onToggleTaskCompletion={handleToggleTaskCompletion}
-                    getFreshTagData={getFreshTagData}
-                    isEventPast={isEventPastUtil}
-                  />
-                ))}
-              </div>
-            );
-          })}
-
-          {/* Multi-day events spanning across columns */}
+          {/* Multi-day events spanning across columns - render first to be behind single-day events */}
           {eventRows.map((row, rowIndex) => {
             return row.map((event) => {
               const eventStyle = {
                 gridColumnStart: event.startDayIndex + 1,
                 gridColumnEnd: event.endDayIndex + 2,
                 gridRowStart: rowIndex + 1,
-                backgroundColor: event.isTask ? undefined : (event.color ? `${event.color}20` : undefined),
+                zIndex: 1, // Lower z-index than single-day events
               };
 
               return (
-                <div key={event.id} style={eventStyle}>
+                <div key={`multi-${event.id}`} style={eventStyle} className="p-1">
                   <AllDayEventItem
                     event={event}
                     onDoubleClick={handleEventDoubleClick}
@@ -494,6 +512,62 @@ export const useEventRendering = (
               );
             });
           })}
+
+          {/* Single-day all-day events - render on top */}
+          {Array.from({ length: 7 }).map((_, dayIndex) => {
+            const currentDate = addDays(weekStart, dayIndex);
+            const dayEvents = allItems.filter((event) => {
+              const isAllDayEvent = event.allDay || event.isAllDay;
+              const eventStart = new Date(event.start);
+              const eventEnd = new Date(event.end);
+              
+              // Check if this is a single-day all-day event
+              let isSingleDay;
+              if (isAllDayEvent) {
+                const startOfNextDay = new Date(eventStart);
+                startOfNextDay.setDate(startOfNextDay.getDate() + 1);
+                startOfNextDay.setHours(0, 0, 0, 0);
+                
+                // If event ends exactly at midnight of next day, it's a single-day all-day event
+                isSingleDay = eventEnd.getTime() === startOfNextDay.getTime() || isSameDay(eventStart, eventEnd);
+              } else {
+                isSingleDay = isSameDay(eventStart, eventEnd) || (eventEnd.getTime() - eventStart.getTime() < 24 * 60 * 60 * 1000);
+              }
+              
+              return isAllDayEvent && isSingleDay && isSameDay(eventStart, currentDate) && !multiDayEvents.some(e => e.id === event.id);
+            });
+
+            // Find the first available row for single-day events in this column
+            let availableRow = 1;
+            eventRows.forEach((row, rowIndex) => {
+              row.forEach((multiDayEvent) => {
+                if (multiDayEvent.startDayIndex <= dayIndex && multiDayEvent.endDayIndex >= dayIndex) {
+                  availableRow = Math.max(availableRow, rowIndex + 2); // +2 because rows are 1-indexed and we want the next row
+                }
+              });
+            });
+
+            return dayEvents.map((event, eventIndex) => (
+              <div
+                key={`single-${event.id}`}
+                className="relative p-1 flex flex-col gap-1 overflow-hidden"
+                style={{ 
+                  gridColumn: dayIndex + 1, 
+                  gridRow: availableRow + eventIndex,
+                  zIndex: 10 // Higher z-index than multi-day events
+                }}
+              >
+                <AllDayEventItem
+                  event={event}
+                  onDoubleClick={handleEventDoubleClick}
+                  onContextMenu={handleEventContextMenuClick}
+                  onToggleTaskCompletion={handleToggleTaskCompletion}
+                  getFreshTagData={getFreshTagData}
+                  isEventPast={isEventPastUtil}
+                />
+              </div>
+            ));
+          })}
         </div>
       </div>
     );
@@ -502,10 +576,22 @@ export const useEventRendering = (
   const renderDayAllDayEvents = useCallback((allEventsAndTasks, selectedDate, handleEventDoubleClick, handleEventContextMenuClick) => {
     const filteredEvents = allEventsAndTasks.filter((event) => {
       const isAllDayEvent = event.allDay || event.isAllDay;
-      const isMultiDayEvent = event.isMultiDay || (!isSameDay(new Date(event.start), new Date(event.end)));
-
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
+      
+      // Check if this is truly a multi-day event
+      let isMultiDayEvent;
+      if (isAllDayEvent) {
+        const startOfNextDay = new Date(eventStart);
+        startOfNextDay.setDate(startOfNextDay.getDate() + 1);
+        startOfNextDay.setHours(0, 0, 0, 0);
+        
+        // If event ends exactly at midnight of next day, it's a single-day all-day event
+        isMultiDayEvent = eventEnd.getTime() !== startOfNextDay.getTime() && !isSameDay(eventStart, eventEnd);
+      } else {
+        isMultiDayEvent = event.isMultiDay || (!isSameDay(eventStart, eventEnd));
+      }
+
       const selectedDateObj = new Date(selectedDate);
       const nextDay = new Date(selectedDate);
       nextDay.setDate(nextDay.getDate() + 1);
