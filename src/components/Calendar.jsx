@@ -82,7 +82,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [currentDate, setCurrentDate] = useState(selectedDate);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [showTodaysTasks, setShowTodaysTasks] = useState(true);
+  const [showTodaysTasks, setShowTodaysTasks] = useState(false);
   const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('defaultEventColor') || '#F59E0B';
@@ -1496,7 +1496,17 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             className="overflow-hidden h-full relative"
             style={{ width: `${sidebarWidth}px` }}
           >
-            <div className="h-full relative w-full">
+            <motion.div 
+              className="h-full relative w-full"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={isResizing ? { duration: 0 } : {
+                type: "easeInOut",
+                duration: 0.2,
+                ease: [0.25, 1, 0.5, 1],
+              }}
+            >
               <Sidebar
                 commandBarRef={commandBarRef}
                 events={events}
@@ -1513,7 +1523,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 setIsVisible={setIsSidebarVisible}
                 showTodaysTasks={showTodaysTasks}
               />
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
