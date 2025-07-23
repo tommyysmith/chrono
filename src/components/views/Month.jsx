@@ -15,10 +15,10 @@ function getMonthDays(year, month) {
   const lastDay = new Date(year, month + 1, 0);
   const days = [];
 
-  // Add days from previous month to start on Monday
-  const firstDayOfWeek = firstDay.getDay() || 7;
-  for (let i = 1; i < firstDayOfWeek; i++) {
-    const date = new Date(year, month, 1 - i);
+  // Add days from previous month to align with Sunday start
+  const firstDayOfWeek = firstDay.getDay();
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    const date = new Date(year, month, -i);
     days.unshift({ date, isCurrentMonth: false });
   }
 
