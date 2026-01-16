@@ -130,44 +130,13 @@ export function useContextMenu(
       );
 
       if (eventToEdit) {
-        let openRepeatModal = false;
-        let actualOriginalEvent = eventToEdit; // Default to the event itself
-
-        // Check if it's an instance of a recurring series
-        if (eventToEdit.seriesId) {
-          const rootEventCandidate = events.find(e => e.id === eventToEdit.seriesId);
-          if (rootEventCandidate) {
-            actualOriginalEvent = rootEventCandidate; // Found the root/master event
-          } else {
-            // This case should ideally not happen if data is consistent.
-            // If the root event isn't found, actualOriginalEvent remains eventToEdit.
-            // The RepeatEditModal might not behave as expected for series edits.
-            console.warn(`Original series event with id "${eventToEdit.seriesId}" not found for instance "${eventToEdit.id}".`);
-          }
-          openRepeatModal = true;
-        } 
-        // Else, check if it's a root event that itself defines a recurrence rule
-        else if (eventToEdit.rruleOptions) { 
-          // actualOriginalEvent is already eventToEdit, which is correct here
-          openRepeatModal = true;
-        }
-
-        if (openRepeatModal) {
-          setRepeatEditModalState({
-            isOpen: true,
-            event: eventToEdit,                 // The specific event instance that was clicked
-            originalEvent: actualOriginalEvent, // The root definition of the series
-            draggedEvent: eventToEdit,          // Set to the event being edited
-            isEditOperation: true,
-          });
-        } else {
-          // It's a non-recurring event
-          commandBarRef.current.openForEdit(eventToEdit);
-        }
+        // Always open CommandBar directly for viewing/editing
+        // RepeatEditModal will be shown when user actually makes changes to a recurring event
+        commandBarRef.current.openForEdit(eventToEdit);
       }
       setContextMenu({ show: false, eventId: null, x: 0, y: 0 });
     },
-    [contextMenu.eventId, events, commandBarRef, setRepeatEditModalState, setContextMenu]
+    [contextMenu.eventId, events, commandBarRef, setContextMenu]
   );
 
   // We don't need a click outside handler anymore as the popover handles this automatically

@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
-import Sidebar from '../components/Sidebar';
 import Calendar from '../components/Calendar';
+import AuthWrapper from '../components/AuthWrapper';
+import UserMenu from '../components/UserMenu';
+import CalendarSync from '../components/CalendarSync';
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -11,12 +13,20 @@ export default function Home() {
   });
 
   return (
-    <main className="w-full h-screen overflow-hidden flex">
+    <AuthWrapper>
+      {/* Auto-sync calendar events */}
+      <CalendarSync />
       
-      <div className="flex-1 overflow-auto">
-        <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />
-      </div>
-      
-    </main>
+      <main className="w-full h-screen overflow-hidden flex flex-col">
+        {/* User menu in top right */}
+        <div className="absolute top-4 right-4 z-50">
+          <UserMenu />
+        </div>
+        
+        <div className="flex-1 overflow-auto">
+          <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />
+        </div>
+      </main>
+    </AuthWrapper>
   );
 }

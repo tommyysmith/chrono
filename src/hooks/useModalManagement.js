@@ -15,7 +15,7 @@ const initialDragState = {
   edge: null,
 };
 
-export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState) {
+export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState, onEventUpdateWithParticipants) {
   const confirmationHasBeenHandled = useRef(false);
 
   const [isGoToDateOpen, setIsGoToDateOpen] = useState(false);
@@ -183,8 +183,14 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           timeChange: eventToUpdate._timeChange
         });
 
-        // Use the handleUpdateEvent function to ensure consistent state updates
-        handleUpdateEvent(eventToUpdate);
+        // Check if event has other participants - if so, show SendUpdateModal instead of updating directly
+        if (event._hasOtherParticipants && onEventUpdateWithParticipants) {
+          // Pass to SendUpdateModal for confirmation before updating
+          onEventUpdateWithParticipants(eventToUpdate, repeatEditModalState.originalEvent);
+        } else {
+          // Use the handleUpdateEvent function to ensure consistent state updates
+          handleUpdateEvent(eventToUpdate);
+        }
       } else {
         // For double-click edits, open the CommandBar
         if (commandBarRef?.current) {
@@ -216,7 +222,7 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
         setDragState(initialDragState);
       }
     },
-    [commandBarRef, handleUpdateEvent, repeatEditModalState, setRepeatEditModalState, setDragState]
+    [commandBarRef, handleUpdateEvent, repeatEditModalState, setRepeatEditModalState, setDragState, onEventUpdateWithParticipants]
   );
 
   const handleRepeatEditDiscard = useCallback(() => {

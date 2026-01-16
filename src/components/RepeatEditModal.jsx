@@ -93,6 +93,8 @@ const RepeatEditModal = ({
       _isResizing: draggedEvent._isResizing === true,
       _updateSeries: editScope === 'all',
       _preserveRepeat: editScope !== 'single',
+      // Preserve the _hasOtherParticipants flag for SendUpdateModal flow
+      _hasOtherParticipants: draggedEvent._hasOtherParticipants === true,
       // Preserve exact position for 'this event' scope
       _exactPosition: {
         start: new Date(draggedEvent.start),

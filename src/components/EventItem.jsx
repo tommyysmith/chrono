@@ -1,3 +1,4 @@
+import { memo, useCallback } from "react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { useDraggable } from '@dnd-kit/core';
@@ -5,18 +6,28 @@ import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/comp
 import { Repeat } from "@/assets/icons/Repeat";
 import EventTooltipContent from "@/components/EventTooltipContent";
 
-const EventItem = ({
+const EventItem = memo(({
   event,
   eventStyle,
   viewType,
   dragState,
   onDragStart,
+  onClick,
   onDoubleClick,
   onContextMenu,
   onResizeStart,
+  isSelected = false,
 }) => {
   const isRepeatEvent = event.seriesId || (event.repeat && event.repeat !== "none") || event.rruleOptions;
   const repeatClass = isRepeatEvent ? "repeat-event" : "";
+  
+  // Check if this is an unaccepted event (user hasn't responded or declined)
+  // Also check attendees array for self.responseStatus as fallback
+  const selfAttendee = event.attendees?.find(a => a.self);
+  const responseStatus = event.myResponseStatus || selfAttendee?.responseStatus;
+  const isUnacceptedEvent = responseStatus && 
+    responseStatus !== 'accepted' && 
+    !event.organizer?.self;
 
   // Calculate if this is a 15-minute event
   const is15MinEvent = event.start && event.end && 
@@ -58,6 +69,16 @@ const EventItem = ({
       }`;
     }
     
+    // Selected state: solid background color with white text
+    if (isSelected) {
+      return `${baseClasses} rounded-[9px]`;
+    }
+    
+    // Unaccepted event: dashed border style, no background, 1px border
+    if (isUnacceptedEvent) {
+      return `${baseClasses} rounded-[9px] border border-dashed ${editingClasses}`;
+    }
+    
     return `${baseClasses} backdrop-blur-md rounded-[9px] ${
       editingClasses ? "bg-primary/30" : "bg-primary/10"
     }`;
@@ -71,10 +92,27 @@ const EventItem = ({
             ref={setNodeRef}
             className={`${getEventClasses()} ${repeatClass} ${isDragging ? '!opacity-0' : ''}`}
             data-is-dragging={isDragging}
-            style={{ ...eventStyle, ...dragTransform }}
+            style={{ 
+              ...eventStyle, 
+              ...dragTransform,
+              // Selected state: solid background color
+              ...(isSelected && !event.isTaskBlock && !event.isTask ? {
+                backgroundColor: event.color || "#808080",
+                color: 'white',
+              } : {}),
+              // Unaccepted event: no background, just border color
+              ...(isUnacceptedEvent && !isSelected ? {
+                backgroundColor: 'transparent',
+                borderColor: event.color || "#808080",
+              } : {})
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onClick) onClick(event);
+            }}
             onDoubleClick={(e) => {
               e.stopPropagation();
-              onDoubleClick(event);
+              if (onDoubleClick) onDoubleClick(event);
             }}
             onContextMenu={(e) => onContextMenu(e, event)}
             {...attributes}
@@ -84,8 +122,8 @@ const EventItem = ({
               className="absolute inset-0 cursor-pointer z-0"
               {...listeners}
             />
-            {/* Color stripe for non-task events */}
-            {!event.isTask && !event.isTaskBlock && !event.isDraft && (
+            {/* Color stripe for non-task events (hidden for unaccepted events) */}
+            {!event.isTask && !event.isTaskBlock && !event.isDraft && !isUnacceptedEvent && (
               <div
                 className="absolute left-0 top-0 bottom-0 w-1"
                 style={{ backgroundColor: event.color || "#808080" }}
@@ -118,16 +156,16 @@ const EventItem = ({
 
             {/* Event content - positioned above drag area but below resize handles */}
             <div className={`relative z-10 pointer-events-none ${is15MinEvent ? 'px-1 py-0.5 flex items-center h-full' : 'px-2 py-1'}`}>
-              <div className={`font-medium text-xs ${is15MinEvent ? 'flex items-center gap-1 px-1' : ''}`}>
+              <div className={`font-medium text-xs ${is15MinEvent ? 'flex items-center gap-1 px-1' : ''} ${isSelected ? 'text-white' : ''}`}>
                 <span>{event.title || 'New Event'}</span>
                 {is15MinEvent && (
-                  <span className="text-light-text/30 px-1 dark:text-dark-text/30">
+                  <span className={isSelected ? "text-white/70 px-1" : "text-light-text/30 px-1 dark:text-dark-text/30"}>
                     {format(event.start, "h:mm a")}
                   </span>
                 )}
               </div>
               {!is15MinEvent && (
-                <div className="text-xs text-light-text/30 dark:text-dark-text/30">
+                <div className={`text-xs ${isSelected ? 'text-white/70' : 'text-light-text/30 dark:text-dark-text/30'}`}>
                   {format(event.start, "h:mm a")} - {format(event.end, "h:mm a")}
                 </div>
               )}
@@ -147,7 +185,7 @@ const EventItem = ({
       </Tooltip>
     </TooltipProvider>
   );
-};
+});
 
 // EventDragPreview component for DragOverlay
 export const EventDragPreview = ({ event, dimensions, livePreview }) => {

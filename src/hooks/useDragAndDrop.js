@@ -31,6 +31,8 @@ export function useDragAndDrop({
   setClickState,
   colors,
   handleUpdateEvent,
+  onEventUpdateWithParticipants,
+  onEventUpdateNotOwned,
 }) {
   const [dragState, setDragState] = useState(initialDragState);
 
@@ -58,6 +60,41 @@ export function useDragAndDrop({
   const wasResizingRef = useRef(false);
   const originalEventRef = useRef(null);
   const finalDraggedEventRef = useRef(null);
+
+  // Helper to check if event has other participants (not just self)
+  const hasOtherParticipants = useCallback((attendees) => {
+    if (!attendees || attendees.length === 0) return false;
+    return attendees.some(a => !a.self);
+  }, []);
+
+  // Helper to check if user is the organizer of the event
+  const isUserOrganizer = useCallback((organizer) => {
+    if (!organizer) return true; // If no organizer info, assume user owns it
+    return organizer.self === true;
+  }, []);
+
+  // Wrapper for handleUpdateEvent that checks for participants and ownership
+  const safeUpdateEvent = useCallback((eventData, originalEvent) => {
+    // Check if user is NOT the organizer (event not owned by user)
+    if (!isUserOrganizer(eventData.organizer)) {
+      if (onEventUpdateNotOwned) {
+        onEventUpdateNotOwned(eventData, originalEvent);
+        return false; // Indicate update was intercepted
+      }
+    }
+
+    // Check if event has other participants
+    if (hasOtherParticipants(eventData.attendees)) {
+      if (onEventUpdateWithParticipants) {
+        onEventUpdateWithParticipants(eventData, originalEvent);
+        return false; // Indicate update was intercepted
+      }
+    }
+
+    // No guardrails needed, proceed with update
+    handleUpdateEvent(eventData);
+    return true;
+  }, [handleUpdateEvent, hasOtherParticipants, isUserOrganizer, onEventUpdateWithParticipants, onEventUpdateNotOwned]);
 
   const handleDragStart = useCallback(
     (e, event) => {
@@ -231,8 +268,23 @@ export function useDragAndDrop({
             end: finalDraggedEvent.end.toISOString()
           } : 'null');
 
+          // First check if user is NOT the organizer - they can't edit this event
+          if (!isUserOrganizer(event.organizer)) {
+            if (onEventUpdateNotOwned) {
+              // Revert local state first
+              setEvents(prev => prev.map(e => 
+                e.id === event.id ? dragStartOriginalEvent : e
+              ));
+              onEventUpdateNotOwned(finalDraggedEvent, dragStartOriginalEvent);
+              window.removeEventListener("mousemove", handleMove);
+              window.removeEventListener("mouseup", handleUp);
+              return;
+            }
+          }
+
           if (isRepeatedEvent && finalDraggedEvent) {
-            // For repeated events, show the RepeatEditModal
+            // For repeated events owned by user, show the RepeatEditModal
+            // Mark if event has participants so we can show SendUpdateModal after scope selection
             setRepeatEditModalState({
               isOpen: true,
               event: {
@@ -247,6 +299,8 @@ export function useDragAndDrop({
                 // Add flags for the type of operation
                 _isDragging: true,
                 _isResizing: false,
+                // Flag to indicate this event has other participants - will trigger SendUpdateModal after scope selection
+                _hasOtherParticipants: hasOtherParticipants(event.attendees),
               },
               originalEvent: {
                 ...dragStartOriginalEvent,
@@ -264,7 +318,7 @@ export function useDragAndDrop({
             return;
           } else if (finalDraggedEvent) {
             // For non-repeated events, update directly with exact position information
-            console.log('[useDragAndDrop] Calling handleUpdateEvent for non-repeated DRAG');
+            console.log('[useDragAndDrop] Calling safeUpdateEvent for non-repeated DRAG');
             const nonRepeatedTimeChange = {
               startDiff: finalDraggedEvent.start.getTime() - dragStartOriginalEvent.start.getTime(),
               endDiff: finalDraggedEvent.end.getTime() - dragStartOriginalEvent.end.getTime()
@@ -288,7 +342,14 @@ export function useDragAndDrop({
               e.id === finalDraggedEvent.id ? eventWithTimestamp : e
             ));
             
-            handleUpdateEvent(eventWithTimestamp);
+            // Use safeUpdateEvent to check for participants/ownership
+            const wasUpdated = safeUpdateEvent(eventWithTimestamp, dragStartOriginalEvent);
+            if (!wasUpdated) {
+              // Revert the local state change if update was intercepted
+              setEvents(prev => prev.map(e => 
+                e.id === finalDraggedEvent.id ? dragStartOriginalEvent : e
+              ));
+            }
           }
         }
 
@@ -325,7 +386,10 @@ export function useDragAndDrop({
       setEvents,
       setRepeatEditModalState,
       setClickState,
-      handleUpdateEvent,
+      safeUpdateEvent,
+      isUserOrganizer,
+      hasOtherParticipants,
+      onEventUpdateNotOwned,
     ]
   );
 
@@ -677,11 +741,38 @@ export function useDragAndDrop({
           const endChanged = resizedEvent.end.getTime() !== originalEvent.end.getTime();
 
           if (startChanged || endChanged) {
+            // First check if user is NOT the organizer - they can't edit this event
+            if (!isUserOrganizer(resizedEvent.organizer)) {
+              if (onEventUpdateNotOwned) {
+                // Revert local state first
+                setEvents(prev => prev.map(e => 
+                  e.id === resizedEvent.id ? originalEvent : e
+                ));
+                onEventUpdateNotOwned(resizedEvent, originalEvent);
+                window.removeEventListener("pointermove", handleMove);
+                window.removeEventListener("pointerup", handleUp);
+                
+                // Reset the drag state
+                setDragState({
+                  isResizing: false,
+                  eventId: null,
+                  edge: null,
+                  startTime: null,
+                  initialHeight: null,
+                  initialWidth: null,
+                });
+                resizedEventRef.current = null;
+                originalEventRef.current = null;
+                return;
+              }
+            }
+
             // Check if this is a repeated event
             const isRepeatedEvent = resizedEvent.seriesId || (resizedEvent.repeat && resizedEvent.repeat !== "none");
 
             if (isRepeatedEvent) {
-              // For repeated events, show the RepeatEditModal
+              // For repeated events owned by user, show the RepeatEditModal
+              // Mark if event has participants so we can show SendUpdateModal after scope selection
               setRepeatEditModalState({
                 isOpen: true,
                 event: originalEvent,
@@ -690,6 +781,8 @@ export function useDragAndDrop({
                   // Add flags for the type of operation
                   _isDragging: false,
                   _isResizing: true,
+                  // Flag to indicate this event has other participants - will trigger SendUpdateModal after scope selection
+                  _hasOtherParticipants: hasOtherParticipants(resizedEvent.attendees),
                 },
                 originalEvent: {
                   ...originalEvent,
@@ -796,7 +889,14 @@ export function useDragAndDrop({
                 e.id === resizedEvent.id ? eventWithTimestamp : e
               ));
               
-              handleUpdateEvent(eventWithTimestamp);
+              // Use safeUpdateEvent to check for participants/ownership
+              const wasUpdated = safeUpdateEvent(eventWithTimestamp, originalEvent);
+              if (!wasUpdated) {
+                // Revert the local state change if update was intercepted
+                setEvents(prev => prev.map(e => 
+                  e.id === resizedEvent.id ? originalEvent : e
+                ));
+              }
             }
           }
         }
@@ -822,7 +922,7 @@ export function useDragAndDrop({
       window.addEventListener("pointermove", handleMove);
       window.addEventListener("pointerup", handleUp);
     },
-    [events, setEvents, setRepeatEditModalState, handleUpdateEvent, currentDate]
+    [events, setEvents, setRepeatEditModalState, safeUpdateEvent, currentDate, isUserOrganizer, hasOtherParticipants, onEventUpdateNotOwned]
   );
 
   return {

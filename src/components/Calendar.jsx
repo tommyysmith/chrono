@@ -17,6 +17,8 @@ import DeleteEventModal from "./DeleteEventModal";
 import RepeatEditModal from "./RepeatEditModal";
 import RepeatTaskEditModal from "./RepeatTaskEditModal";
 import DeleteTaskModal from "./DeleteTaskModal";
+import SendUpdateModal from "./SendUpdateModal";
+import EditOriginalEventModal from "./EditOriginalEventModal";
 import CommandBar from "./CommandBar";
 import GoToDateCommand from "./GoToDateCommand";
 import Settings from "./Settings";
@@ -298,12 +300,32 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     event: null,
   });
 
+  // State for send update modal (when drag/resize events with participants)
+  const [sendUpdateModalState, setSendUpdateModalState] = useState({
+    isOpen: false,
+    eventData: null,
+    originalEvent: null,
+  });
+
+  // State for edit original event modal (when drag/resize events not owned by user)
+  const [editOriginalEventModalState, setEditOriginalEventModalState] = useState({
+    isOpen: false,
+    eventData: null,
+    originalEvent: null,
+  });
+
   // Task modal state management
   const [isRepeatTaskEditModalOpen, setIsRepeatTaskEditModalOpen] = useState(false);
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+
+  // Callback to clear selected event
+  const clearSelectedEvent = useCallback(() => {
+    setSelectedEventId(null);
+  }, []);
 
   const {
     setClickState,
@@ -312,7 +334,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleCellClick,
     handleEventClick,
     handleCommandBarClose,
-  } = useCalendarInteractions(commandBarRef, setRepeatEditModalState);
+  } = useCalendarInteractions(commandBarRef, setRepeatEditModalState, clearSelectedEvent);
 
   const {
     dragState,
@@ -331,6 +353,20 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     setClickState,
     colors,
     handleUpdateEvent,
+    onEventUpdateWithParticipants: (eventData, originalEvent) => {
+      setSendUpdateModalState({
+        isOpen: true,
+        eventData,
+        originalEvent,
+      });
+    },
+    onEventUpdateNotOwned: (eventData, originalEvent) => {
+      setEditOriginalEventModalState({
+        isOpen: true,
+        eventData,
+        originalEvent,
+      });
+    },
   });
 
   const {
@@ -362,7 +398,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleDeleteModalClose,
     handleRepeatEditConfirm,
     handleRepeatEditDiscard,
-  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState);
+  } = useModalManagement(setEvents, commandBarRef, handleUpdateEvent, handleDeleteSeriesEvents, repeatEditModalState, setRepeatEditModalState, setDragState, deleteModalState, setDeleteModalState, (eventData, originalEvent) => {
+    // Callback for events with participants after RepeatEditModal scope selection
+    setSendUpdateModalState({
+      isOpen: true,
+      eventData,
+      originalEvent,
+    });
+  });
 
   const {
     handleCreateTask,
@@ -541,7 +584,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     commandBarRef,
     handleToggleTaskCompletion,
     handleTaskEdit,
-    handleTaskDelete
+    handleTaskDelete,
+    selectedEventId,
+    setSelectedEventId
   );
   // Handle date selection from GoToDateCommand
   const handleGoToDate = useCallback((date) => {
@@ -1074,6 +1119,29 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         lastDragTime: Date.now(),
       };
       
+      // Helper to check if user is the organizer
+      const isUserOrganizer = (organizer) => {
+        if (!organizer) return true; // If no organizer info, assume user owns it
+        return organizer.self === true;
+      };
+      
+      // Helper to check if event has other participants
+      const hasOtherParticipants = (attendees) => {
+        if (!attendees || attendees.length === 0) return false;
+        return attendees.some(a => !a.self);
+      };
+      
+      // First check if user is NOT the organizer - they can't edit this event
+      if (!isUserOrganizer(eventToMove.organizer)) {
+        // Show EditOriginalEventModal
+        setEditOriginalEventModalState({
+          isOpen: true,
+          eventData: draggedEvent,
+          originalEvent: eventToMove,
+        });
+        return;
+      }
+      
       // Check if this is a recurring event
       const isRecurringEvent = eventToMove.seriesId || 
                               (eventToMove.repeat && eventToMove.repeat !== "none") || 
@@ -1081,25 +1149,39 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       
       if (isRecurringEvent) {
         // For recurring events, show the RepeatEditModal
+        // Mark if event has participants so we can show SendUpdateModal after scope selection
         setRepeatEditModalState({
           isOpen: true,
           originalEvent: eventToMove,
-          draggedEvent: draggedEvent,
+          draggedEvent: {
+            ...draggedEvent,
+            _hasOtherParticipants: hasOtherParticipants(eventToMove.attendees),
+          },
           eventTitle: eventToMove.title,
           event: draggedEvent,
           isEditOperation: false
         });
+      } else if (hasOtherParticipants(eventToMove.attendees)) {
+        // For non-recurring events with participants, show SendUpdateModal
+        setSendUpdateModalState({
+          isOpen: true,
+          eventData: draggedEvent,
+          originalEvent: eventToMove,
+        });
       } else {
-        // For non-recurring events, update directly
+        // For non-recurring events without participants, update directly
         setEvents(prev => prev.map(e => {
           if (e.id === eventToMove.id) {
             return draggedEvent;
           }
           return e;
         }));
+        
+        // Also persist the update
+        handleUpdateEvent(draggedEvent);
       }
     }
-  }, [setEvents, createTaskBlock, taskDropPreview, handleUpdateTask]);
+  }, [setEvents, createTaskBlock, taskDropPreview, handleUpdateTask, handleUpdateEvent, setSendUpdateModalState, setEditOriginalEventModalState, setRepeatEditModalState]);
 
   const renderHeader = () => {
     const dateFormat = { month: "long", year: "numeric" };
@@ -1770,6 +1852,82 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             setTaskToDelete(null);
           }}
         />
+        
+        {/* Send Update Modal - shown when drag/resize events with other participants OR from CommandBar */}
+        <SendUpdateModal
+          isOpen={sendUpdateModalState.isOpen}
+          eventTitle={sendUpdateModalState.eventData?.title}
+          originalTime={sendUpdateModalState.originalEvent ? {
+            start: sendUpdateModalState.originalEvent.start,
+            end: sendUpdateModalState.originalEvent.end,
+          } : null}
+          newTime={sendUpdateModalState.eventData ? {
+            start: sendUpdateModalState.eventData.start,
+            end: sendUpdateModalState.eventData.end,
+          } : null}
+          onClose={() => setSendUpdateModalState({ isOpen: false, eventData: null, originalEvent: null })}
+          onDiscard={() => {
+            // If there's a custom discard handler from CommandBar, use it
+            if (sendUpdateModalState._onDiscard) {
+              sendUpdateModalState._onDiscard();
+            } else {
+              // Revert the event to original state (for drag/resize)
+              if (sendUpdateModalState.originalEvent?.id) {
+                setEvents(prev => prev.map(e => 
+                  e.id === sendUpdateModalState.originalEvent.id ? sendUpdateModalState.originalEvent : e
+                ));
+              }
+            }
+            setSendUpdateModalState({ isOpen: false, eventData: null, originalEvent: null });
+          }}
+          onSendUpdate={() => {
+            // If there's a custom send handler from CommandBar, use it
+            if (sendUpdateModalState._onSendUpdate) {
+              sendUpdateModalState._onSendUpdate();
+            } else {
+              // Proceed with the update (for drag/resize)
+              if (sendUpdateModalState.eventData) {
+                handleUpdateEvent(sendUpdateModalState.eventData);
+              }
+            }
+            setSendUpdateModalState({ isOpen: false, eventData: null, originalEvent: null });
+          }}
+        />
+
+        {/* Edit Original Event Modal - shown when drag/resize events not owned by user */}
+        <EditOriginalEventModal
+          isOpen={editOriginalEventModalState.isOpen}
+          eventTitle={editOriginalEventModalState.eventData?.title}
+          onClose={() => {
+            // Revert the event to original state
+            if (editOriginalEventModalState.originalEvent) {
+              setEvents(prev => prev.map(e => 
+                e.id === editOriginalEventModalState.originalEvent.id ? editOriginalEventModalState.originalEvent : e
+              ));
+            }
+            setEditOriginalEventModalState({ isOpen: false, eventData: null, originalEvent: null });
+          }}
+          onEditEvent={() => {
+            const eventData = editOriginalEventModalState.eventData;
+            const externalId = eventData?.externalId;
+            const calendarId = eventData?.externalCalendarId;
+            
+            if (externalId && calendarId) {
+              window.open(`https://calendar.google.com/calendar/event?eid=${btoa(externalId + ' ' + calendarId)}`, '_blank');
+            } else if (externalId) {
+              window.open(`https://calendar.google.com/calendar/r/eventedit/${externalId}`, '_blank');
+            }
+            
+            // Revert the event to original state
+            if (editOriginalEventModalState.originalEvent) {
+              setEvents(prev => prev.map(e => 
+                e.id === editOriginalEventModalState.originalEvent.id ? editOriginalEventModalState.originalEvent : e
+              ));
+            }
+            setEditOriginalEventModalState({ isOpen: false, eventData: null, originalEvent: null });
+          }}
+        />
+
         <GoToDateCommand
           isOpen={isGoToDateOpen}
           onClose={() => setIsGoToDateOpen(false)}
@@ -1780,6 +1938,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         ref={commandBarRef}
         onCreateEvent={useCallback(handleCreateEvent, [])}
         onUpdateEvent={useCallback(handleUpdateEvent, [])}
+        setRepeatEditModalState={setRepeatEditModalState}
         onPrevious={useCallback(
           () => handlePrevious(viewType, currentDate, onDateSelect),
           [viewType, currentDate, onDateSelect]
@@ -1802,6 +1961,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         onDateSelect={useCallback((date) => handleGoToDate(date), [handleGoToDate])}
         onOpenSettings={useCallback(() => setIsSettingsOpen(true), [])}
         isDraggingTask={isDraggingTask}
+        onShowSendUpdateModal={useCallback(({ eventData, originalTime, newTime, onSendUpdate, onDiscard }) => {
+          setSendUpdateModalState({
+            isOpen: true,
+            eventData,
+            originalEvent: { start: originalTime?.start, end: originalTime?.end },
+            _onSendUpdate: onSendUpdate,
+            _onDiscard: onDiscard,
+          });
+        }, [])}
       />
       {TaskContextMenuPopover && <TaskContextMenuPopover />}
       

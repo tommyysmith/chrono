@@ -1,4 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { useConvexAuth } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { generateEventId } from "../utils/eventUtils";
 import { generateRecurringEvents, updateSeriesEvents, getEventsInSeries } from "../utils/recurrenceUtils";
 
@@ -6,59 +9,55 @@ export function useEventManagement(commandBarRef) {
   const [events, setEvents] = useState([]);
   const [editingEventId, setEditingEventId] = useState(null);
   
-  // Load events from localStorage when component mounts
+  // Convex queries and mutations
+  const { isAuthenticated } = useConvexAuth();
+  const convexEvents = useQuery(api.events.listEvents);
+  const createEventMutation = useMutation(api.events.createEvent);
+  const updateEventMutation = useMutation(api.events.updateEvent);
+  const deleteEventMutation = useMutation(api.events.deleteEvent);
+  const pushEventToGoogle = useAction(api.googleCalendar.pushEventToGoogle);
+  const deleteGoogleEventAction = useAction(api.googleCalendar.deleteGoogleEvent);
+  
+  // Load events from Convex
   useEffect(() => {
-    const savedEvents = localStorage.getItem("calendarEvents");
-    if (savedEvents) {
-      try {
-        const parsedEvents = JSON.parse(savedEvents)
-          .filter(event => !event.isDraft) // Filter out draft events on page refresh
-          .map((event) => {
-            // Parse regular date fields
-            const processedEvent = {
-              ...event,
-              start: new Date(event.start),
-              end: new Date(event.end),
-            };
+    if (convexEvents) {
+      console.log('[useEventManagement] Loading events from Convex:', convexEvents.length);
+      
+      const processedEvents = convexEvents
+        .filter(event => !event.isDraft)
+        .map((event) => {
+          // Parse regular date fields
+          const processedEvent = {
+            ...event,
+            id: event._id, // Map _id to id for frontend compatibility
+            start: new Date(event.start),
+            end: new Date(event.end),
+          };
 
-            // ✅ Fix: Parse rruleOptions dates for custom recurrence patterns
-            if (event.rruleOptions) {
-              processedEvent.rruleOptions = { ...event.rruleOptions };
-              
-              // Convert dtstart and until from strings to Date objects
-              if (event.rruleOptions.dtstart) {
-                processedEvent.rruleOptions.dtstart = new Date(event.rruleOptions.dtstart);
-              }
-              if (event.rruleOptions.until) {
-                processedEvent.rruleOptions.until = new Date(event.rruleOptions.until);
-              }
+          // Parse rruleOptions dates for custom recurrence patterns
+          if (event.rruleOptions && typeof event.rruleOptions === 'object') {
+            processedEvent.rruleOptions = { ...event.rruleOptions };
+            
+            // Convert dtstart and until from strings/numbers to Date objects
+            if (event.rruleOptions.dtstart) {
+              processedEvent.rruleOptions.dtstart = new Date(event.rruleOptions.dtstart);
             }
+            if (event.rruleOptions.until && event.rruleOptions.until !== 'undefined') {
+              processedEvent.rruleOptions.until = new Date(event.rruleOptions.until);
+            }
+          }
 
-            return processedEvent;
-          });
-        setEvents(parsedEvents);
-      } catch (error) {
-        console.error("Error parsing saved events:", error);
-        setEvents([]);
-      }
+          return processedEvent;
+        });
+      
+      setEvents(processedEvents);
     }
-  }, []);
-
-  // Save events to localStorage whenever they change
-  useEffect(() => {
-    // Filter out draft events before saving to localStorage
-    const eventsToSave = events.filter(event => !event.isDraft);
-    
-    if (eventsToSave.length > 0) {
-      localStorage.setItem("calendarEvents", JSON.stringify(eventsToSave));
-    } else {
-      // Clear localStorage when all non-draft events are deleted
-      localStorage.removeItem("calendarEvents");
-    }
-  }, [events]);
+  }, [convexEvents]);
 
   const handleCreateEvent = useCallback(
     (eventData) => {
+      console.log('[useEventManagement] handleCreateEvent called with attendees:', eventData.attendees);
+      
       // Ensure we have valid start/end times
       const start = eventData.start instanceof Date ? eventData.start : new Date(eventData.start);
       const end = eventData.end instanceof Date ? eventData.end : new Date(eventData.end);
@@ -94,6 +93,59 @@ export function useEventManagement(commandBarRef) {
         return newEvents;
       });
 
+      // Persist to Convex database and sync to Google Calendar
+      const persistEvent = async () => {
+        try {
+          // Prepare rruleOptions for Convex (convert Date objects to timestamps)
+          let rruleOptionsForConvex = null;
+          if (newEvent.rruleOptions) {
+            rruleOptionsForConvex = { ...newEvent.rruleOptions };
+            if (rruleOptionsForConvex.dtstart instanceof Date) {
+              rruleOptionsForConvex.dtstart = rruleOptionsForConvex.dtstart.getTime();
+            }
+            if (rruleOptionsForConvex.until instanceof Date) {
+              rruleOptionsForConvex.until = rruleOptionsForConvex.until.getTime();
+            }
+          }
+
+          console.log('[useEventManagement] Persisting event with attendees:', newEvent.attendees);
+          
+          const convexEventId = await createEventMutation({
+            title: newEvent.title || 'New Event',
+            description: newEvent.description || '',
+            color: newEvent.color || '#F59E0B',
+            location: newEvent.location || '',
+            start: start.getTime(),
+            end: end.getTime(),
+            isAllDay: newEvent.isAllDay || false,
+            repeat: newEvent.repeat || 'none',
+            seriesId: newEvent.seriesId || undefined,
+            isRepeat: newEvent.isRepeat || false,
+            rruleOptions: rruleOptionsForConvex,
+            viewId: newEvent.viewId || 'default',
+            source: 'local',
+            isDraft: false,
+            attendees: newEvent.attendees || undefined,
+          });
+
+          console.log('[useEventManagement] Event persisted to Convex:', convexEventId);
+
+          // Sync to Google Calendar if authenticated
+          if (isAuthenticated && convexEventId) {
+            try {
+              const syncResult = await pushEventToGoogle({ eventId: convexEventId });
+              console.log('[useEventManagement] Event synced to Google Calendar:', syncResult);
+            } catch (syncError) {
+              console.error('[useEventManagement] Failed to sync to Google Calendar:', syncError);
+            }
+          }
+        } catch (error) {
+          console.error('[useEventManagement] Failed to persist event to Convex:', error);
+        }
+      };
+
+      persistEvent();
+
       // Immediately open CommandBar for editing
       if (commandBarRef.current) {
         commandBarRef.current.openForEdit(newEvent);
@@ -101,7 +153,7 @@ export function useEventManagement(commandBarRef) {
 
       return newEvent;
     },
-    [commandBarRef]
+    [commandBarRef, createEventMutation, isAuthenticated, pushEventToGoogle]
   );
 
   const handleUpdateEvent = useCallback((updatedEvent) => {
@@ -216,7 +268,74 @@ export function useEventManagement(commandBarRef) {
         event.id === cleanEvent.id ? cleanEvent : event
       );
     });
-  }, [setEvents]);
+
+    // Persist update to Convex and sync to Google Calendar
+    const persistUpdate = async () => {
+      try {
+        // Check if this is a Convex ID (starts with specific format) or local ID
+        const convexId = updatedEvent._id || updatedEvent.id;
+        
+        // Skip if no valid Convex ID or if it's a draft
+        if (!convexId || updatedEvent.isDraft) {
+          return;
+        }
+
+        // Prepare rruleOptions for Convex (convert Date objects to timestamps)
+        let rruleOptionsForConvex = null;
+        if (updatedEvent.rruleOptions) {
+          rruleOptionsForConvex = { ...updatedEvent.rruleOptions };
+          if (rruleOptionsForConvex.dtstart instanceof Date) {
+            rruleOptionsForConvex.dtstart = rruleOptionsForConvex.dtstart.getTime();
+          }
+          if (rruleOptionsForConvex.until instanceof Date) {
+            rruleOptionsForConvex.until = rruleOptionsForConvex.until.getTime();
+          }
+          if (Array.isArray(rruleOptionsForConvex.exdate)) {
+            rruleOptionsForConvex.exdate = rruleOptionsForConvex.exdate.map(d => 
+              d instanceof Date ? d.getTime() : d
+            );
+          }
+        }
+
+        const start = updatedEvent.start instanceof Date ? updatedEvent.start.getTime() : updatedEvent.start;
+        const end = updatedEvent.end instanceof Date ? updatedEvent.end.getTime() : updatedEvent.end;
+
+        console.log('[useEventManagement] Updating event with attendees:', updatedEvent.attendees);
+
+        await updateEventMutation({
+          id: convexId,
+          title: updatedEvent.title,
+          description: updatedEvent.description || '',
+          color: updatedEvent.color,
+          location: updatedEvent.location || '',
+          start,
+          end,
+          isAllDay: updatedEvent.isAllDay || false,
+          repeat: updatedEvent.repeat || 'none',
+          seriesId: updatedEvent.seriesId || undefined,
+          isRepeat: updatedEvent.isRepeat || false,
+          rruleOptions: rruleOptionsForConvex,
+          attendees: updatedEvent.attendees || undefined,
+        });
+
+        console.log('[useEventManagement] Event updated in Convex:', convexId);
+
+        // Sync to Google Calendar if authenticated and event has externalId or is local
+        if (isAuthenticated && convexId) {
+          try {
+            const syncResult = await pushEventToGoogle({ eventId: convexId });
+            console.log('[useEventManagement] Event update synced to Google Calendar:', syncResult);
+          } catch (syncError) {
+            console.error('[useEventManagement] Failed to sync update to Google Calendar:', syncError);
+          }
+        }
+      } catch (error) {
+        console.error('[useEventManagement] Failed to update event in Convex:', error);
+      }
+    };
+
+    persistUpdate();
+  }, [setEvents, updateEventMutation, isAuthenticated, pushEventToGoogle]);
 
   const handleDeleteEvent = useCallback((event, setDeleteModalState) => {
     const isRepeatedEvent = event.repeat && event.repeat !== "none" && event.seriesId;
@@ -236,8 +355,37 @@ export function useEventManagement(commandBarRef) {
         });
         return updatedEvents;
       });
+
+      // Persist deletion to Convex and sync to Google Calendar
+      const persistDelete = async () => {
+        try {
+          const convexId = event._id || event.id;
+          if (!convexId) return;
+
+          // Delete from Convex
+          await deleteEventMutation({ id: convexId });
+          console.log('[useEventManagement] Event deleted from Convex:', convexId);
+
+          // Delete from Google Calendar if it has an externalId
+          if (isAuthenticated && event.externalId && event.externalCalendarId) {
+            try {
+              await deleteGoogleEventAction({
+                calendarId: event.externalCalendarId,
+                googleEventId: event.externalId,
+              });
+              console.log('[useEventManagement] Event deleted from Google Calendar:', event.externalId);
+            } catch (syncError) {
+              console.error('[useEventManagement] Failed to delete from Google Calendar:', syncError);
+            }
+          }
+        } catch (error) {
+          console.error('[useEventManagement] Failed to delete event from Convex:', error);
+        }
+      };
+
+      persistDelete();
     }
-  }, []);
+  }, [deleteEventMutation, isAuthenticated, deleteGoogleEventAction]);
 
   const handleDeleteSeriesEvents = useCallback((event, scope) => {
     if (!event || !event.seriesId) {
@@ -310,7 +458,63 @@ export function useEventManagement(commandBarRef) {
 
       return updatedEvents;
     });
-  }, [setEvents]);
+
+    // Persist series deletion to Convex and sync to Google Calendar
+    const persistSeriesDelete = async () => {
+      try {
+        // Get the base event for the series
+        const seriesEvents = events.filter(e => e.seriesId === event.seriesId);
+        const baseEvent = seriesEvents.sort((a, b) => new Date(a.start) - new Date(b.start))[0];
+
+        if (scope === 'all') {
+          // Delete all events in the series from Convex
+          for (const seriesEvent of seriesEvents) {
+            const convexId = seriesEvent._id || seriesEvent.id;
+            if (convexId) {
+              try {
+                await deleteEventMutation({ id: convexId });
+              } catch (err) {
+                console.error('[useEventManagement] Failed to delete series event:', err);
+              }
+            }
+          }
+          console.log('[useEventManagement] Series deleted from Convex:', event.seriesId);
+
+          // Delete from Google Calendar if base event has externalId
+          if (isAuthenticated && baseEvent?.externalId && baseEvent?.externalCalendarId) {
+            try {
+              await deleteGoogleEventAction({
+                calendarId: baseEvent.externalCalendarId,
+                googleEventId: baseEvent.externalId,
+              });
+              console.log('[useEventManagement] Series deleted from Google Calendar');
+            } catch (syncError) {
+              console.error('[useEventManagement] Failed to delete series from Google Calendar:', syncError);
+            }
+          }
+        } else if (baseEvent) {
+          // For 'single' or 'future' scope, update the base event with new rruleOptions
+          const convexId = baseEvent._id || baseEvent.id;
+          if (convexId) {
+            // The rruleOptions were already updated in local state, sync to Convex
+            const updatedBaseEvent = events.find(e => e.id === baseEvent.id);
+            if (updatedBaseEvent) {
+              try {
+                await pushEventToGoogle({ eventId: convexId });
+                console.log('[useEventManagement] Series update synced to Google Calendar');
+              } catch (syncError) {
+                console.error('[useEventManagement] Failed to sync series update to Google Calendar:', syncError);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[useEventManagement] Failed to persist series deletion:', error);
+      }
+    };
+
+    persistSeriesDelete();
+  }, [setEvents, events, deleteEventMutation, isAuthenticated, deleteGoogleEventAction, pushEventToGoogle]);
 
   return {
     events,

@@ -6,6 +6,10 @@ import { motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
+import { useAuthActions } from "@convex-dev/auth/react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { api } from "../../convex/_generated/api";
+// Note: Google Calendar is now connected automatically during sign-in
 import {
   DndContext,
   closestCenter,
@@ -81,6 +85,132 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
   const [dayPopoverOpen, setDayPopoverOpen] = useState(false);
   const sliderRef = useRef(null);
   const dayInputRef = useRef(null);
+
+  // Auth hooks
+  const { signOut } = useAuthActions();
+  const currentUser = useQuery(api.auth.currentUser);
+  
+  // Google Calendar hooks
+  const connectedCalendars = useQuery(api.googleCalendar.listConnectedCalendars);
+  const toggleCalendarSync = useMutation(api.googleCalendar.toggleCalendarSync);
+  const disconnectCalendar = useMutation(api.googleCalendar.disconnectCalendar);
+  const syncGoogleCalendar = useAction(api.googleCalendar.syncGoogleCalendar);
+  const getGoogleAuthUrl = useAction(api.googleCalendar.getGoogleAuthUrl);
+  const clearAllEvents = useMutation(api.events.clearAllEvents);
+  const fetchGoogleCalendarList = useAction(api.googleCalendar.fetchGoogleCalendarList);
+  const connectAdditionalCalendar = useMutation(api.googleCalendar.connectAdditionalCalendar);
+  
+  const [syncingCalendarId, setSyncingCalendarId] = useState(null);
+  const [isConnectingCalendar, setIsConnectingCalendar] = useState(false);
+  const [isClearingEvents, setIsClearingEvents] = useState(false);
+  const [availableCalendars, setAvailableCalendars] = useState(null);
+  const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
+  const [isConnectingAdditional, setIsConnectingAdditional] = useState(null);
+  
+  // Handle sign out
+  const handleSignOut = async () => {
+    await signOut();
+    onClose();
+  };
+  
+  // Handle calendar sync
+  const handleSyncCalendar = async (calendarId) => {
+    setSyncingCalendarId(calendarId);
+    try {
+      await syncGoogleCalendar({ calendarId });
+    } catch (error) {
+      console.error("Failed to sync calendar:", error);
+    } finally {
+      setSyncingCalendarId(null);
+    }
+  };
+  
+  // Handle clear and resync
+  const handleClearAndResync = async (calendarId) => {
+    setIsClearingEvents(true);
+    try {
+      // First clear all events from Convex
+      await clearAllEvents();
+      // Then resync from Google Calendar
+      await syncGoogleCalendar({ calendarId });
+    } catch (error) {
+      console.error("Failed to clear and resync:", error);
+    } finally {
+      setIsClearingEvents(false);
+    }
+  };
+  
+  // Handle fetch available calendars
+  const handleFetchAvailableCalendars = async () => {
+    setIsLoadingCalendars(true);
+    try {
+      const calendars = await fetchGoogleCalendarList();
+      setAvailableCalendars(calendars);
+    } catch (error) {
+      console.error("Failed to fetch calendars:", error);
+    } finally {
+      setIsLoadingCalendars(false);
+    }
+  };
+  
+  // Handle connect additional calendar
+  const handleConnectAdditionalCalendar = async (calendar) => {
+    setIsConnectingAdditional(calendar.id);
+    try {
+      const result = await connectAdditionalCalendar({
+        googleCalendarId: calendar.id,
+        calendarName: calendar.summary,
+        backgroundColor: calendar.backgroundColor,
+      });
+      if (result.success) {
+        // Sync the newly connected calendar
+        await syncGoogleCalendar({ calendarId: calendar.id });
+        // Refresh the available calendars list
+        setAvailableCalendars(prev => prev?.filter(c => c.id !== calendar.id));
+      }
+    } catch (error) {
+      console.error("Failed to connect calendar:", error);
+    } finally {
+      setIsConnectingAdditional(null);
+    }
+  };
+  
+  // Handle toggle sync
+  const handleToggleSync = async (calendarDbId, currentState) => {
+    try {
+      await toggleCalendarSync({ calendarId: calendarDbId, syncEnabled: !currentState });
+    } catch (error) {
+      console.error("Failed to toggle sync:", error);
+    }
+  };
+  
+  // Handle calendar disconnect
+  const handleDisconnectCalendar = async (calendarDbId) => {
+    try {
+      await disconnectCalendar({ calendarId: calendarDbId });
+    } catch (error) {
+      console.error("Failed to disconnect calendar:", error);
+    }
+  };
+  
+  // Handle connect Google Calendar via OAuth
+  const handleConnectGoogleCalendar = async () => {
+    setIsConnectingCalendar(true);
+    try {
+      const { authUrl } = await getGoogleAuthUrl({ origin: window.location.origin });
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error("Failed to get Google auth URL:", error);
+      setIsConnectingCalendar(false);
+    }
+  };
+  
+  // Get user display info
+  const userInitials = currentUser?.name 
+    ? currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : currentUser?.email?.slice(0, 2).toUpperCase() || 'U';
+  const userName = currentUser?.name || 'User';
+  const userEmail = currentUser?.email || '';
 
 
 
@@ -318,12 +448,20 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
 
         {/* Profile Avatar */}
         <div className="mb-8 p-10 rounded-[9px] flex flex-col items-center bg-gradient-to-t dark:from-dark-bg-light dark:to-dark-bg from-light-bg-light to-light-bg to-80% border border-light-border dark:border-dark-border">
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4">
-            <span className="text-white text-2xl font-semibold">TS</span>
-          </div>
+          {currentUser?.image ? (
+            <img 
+              src={currentUser.image} 
+              alt={userName}
+              className="w-20 h-20 rounded-full mb-4 object-cover"
+            />
+          ) : (
+            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mb-4">
+              <span className="text-white text-2xl font-semibold">{userInitials}</span>
+            </div>
+          )}
           <div className="flex flex-col items-center">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Tom Smith</h2>
-            <p className="text-gray-600 dark:text-gray-400">youremail@gmail.com</p>
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{userName}</h2>
+            <p className="text-gray-600 dark:text-gray-400">{userEmail}</p>
           </div>
         </div>
 
@@ -1328,11 +1466,197 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
           </div>
         </div>
 
-        {/* Future calendar settings can be added here */}
-        <div className="border-t border-light-border dark:border-dark-border pt-8">
-          <div className="text-light-text/50 dark:text-dark-text/50">
-            <p>Additional calendar settings will be available here in future updates.</p>
-          </div>
+        {/* Connected Calendars Section */}
+        <div className="border-t border-light-border dark:border-dark-border pt-8 mb-8">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">Connected Calendars</h3>
+          <p className="text-light-text/50 dark:text-dark-text/50 text-sm mb-4">
+            Connect external calendars to sync your events.
+          </p>
+
+          {/* Connected calendars list */}
+          {connectedCalendars && connectedCalendars.length > 0 ? (
+            <div className="space-y-3 mb-6">
+              {connectedCalendars.map((calendar) => (
+                <div 
+                  key={calendar._id} 
+                  className="flex items-center justify-between p-4 bg-light-bg-light dark:bg-dark-bg-light rounded-[9px] border border-light-border dark:border-dark-border"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white dark:bg-dark-bg rounded-full flex items-center justify-center border border-light-border dark:border-dark-border">
+                      <svg className="w-5 h-5" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="font-medium text-light-text dark:text-dark-text">
+                        {calendar.googleCalendarName}
+                      </p>
+                      <p className="text-xs text-light-text/50 dark:text-dark-text/50">
+                        {calendar.accountEmail}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/* Sync toggle */}
+                    <button
+                      onClick={() => handleToggleSync(calendar._id, calendar.syncEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+                        calendar.syncEnabled ? 'bg-primary' : 'bg-black/10 dark:bg-white/10'
+                      }`}
+                      title={calendar.syncEnabled ? "Sync enabled" : "Sync disabled"}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          calendar.syncEnabled ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                    {/* Sync now button */}
+                    <button
+                      onClick={() => handleSyncCalendar(calendar.googleCalendarId)}
+                      disabled={syncingCalendarId === calendar.googleCalendarId || !calendar.syncEnabled}
+                      className={`p-2 rounded-[5px] transition-colors ${
+                        calendar.syncEnabled 
+                          ? 'hover:bg-light-border dark:hover:bg-dark-border text-light-text/70 dark:text-dark-text/70' 
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                      title="Sync now"
+                    >
+                      <svg 
+                        className={`w-4 h-4 ${syncingCalendarId === calendar.googleCalendarId ? 'animate-spin' : ''}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                    {/* Clear & Resync button */}
+                    <button
+                      onClick={() => handleClearAndResync(calendar.googleCalendarId)}
+                      disabled={isClearingEvents || !calendar.syncEnabled}
+                      className={`p-2 rounded-[5px] transition-colors ${
+                        calendar.syncEnabled 
+                          ? 'hover:bg-orange-50 dark:hover:bg-orange-900/20 text-orange-500' 
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                      title="Clear & Resync (fixes duplicate events)"
+                    >
+                      <svg 
+                        className={`w-4 h-4 ${isClearingEvents ? 'animate-spin' : ''}`}
+                        fill="none" 
+                        viewBox="0 0 24 24" 
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                    {/* Disconnect button */}
+                    <button
+                      onClick={() => handleDisconnectCalendar(calendar._id)}
+                      className="p-2 rounded-[5px] hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 transition-colors"
+                      title="Disconnect"
+                    >
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mb-6 p-6 border border-dashed border-light-border dark:border-dark-border rounded-[9px] text-center">
+              <p className="text-light-text/50 dark:text-dark-text/50 text-sm">
+                No calendars connected yet
+              </p>
+            </div>
+          )}
+
+          {/* Auto-connection info */}
+          {(!connectedCalendars || connectedCalendars.length === 0) && (
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[9px]">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-blue-500 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="12" cy="12" r="10" strokeWidth="2"/>
+                  <path d="M12 16v-4M12 8h.01" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+                <div>
+                  <p className="font-medium text-blue-700 dark:text-blue-300 text-sm">Calendar syncs automatically</p>
+                  <p className="text-xs text-blue-600/70 dark:text-blue-400/70 mt-1">
+                    Your Google Calendar is connected when you sign in. Sign out and sign in again to sync your calendar events.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Last synced info */}
+          {connectedCalendars && connectedCalendars.length > 0 && connectedCalendars[0].lastSyncedAt && (
+            <p className="text-xs text-light-text/50 dark:text-dark-text/50 mt-3">
+              Last synced: {new Date(connectedCalendars[0].lastSyncedAt).toLocaleString()}
+            </p>
+          )}
+
+          {/* Add More Calendars Section */}
+          {connectedCalendars && connectedCalendars.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-light-border dark:border-dark-border">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="text-sm font-medium text-light-text dark:text-dark-text">Add More Calendars</h4>
+                <button
+                  onClick={handleFetchAvailableCalendars}
+                  disabled={isLoadingCalendars}
+                  className="px-3 py-1.5 text-xs font-medium rounded-[7px] bg-light-bg-lighter dark:bg-dark-bg-lighter hover:bg-light-border dark:hover:bg-dark-border transition-colors"
+                >
+                  {isLoadingCalendars ? 'Loading...' : availableCalendars ? 'Refresh' : 'Show Available'}
+                </button>
+              </div>
+              
+              {availableCalendars && (
+                <div className="space-y-2">
+                  {availableCalendars
+                    .filter(cal => !connectedCalendars.some(cc => cc.googleCalendarId === cal.id))
+                    .map(calendar => (
+                      <div 
+                        key={calendar.id}
+                        className="flex items-center justify-between p-3 rounded-[9px] bg-light-bg-lighter dark:bg-dark-bg-lighter"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: calendar.backgroundColor || '#808080' }}
+                          />
+                          <div>
+                            <p className="text-sm font-medium text-light-text dark:text-dark-text">
+                              {calendar.summary}
+                              {calendar.primary && (
+                                <span className="ml-2 text-xs text-light-text/50 dark:text-dark-text/50">(Primary)</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-light-text/50 dark:text-dark-text/50">
+                              {calendar.accessRole}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleConnectAdditionalCalendar(calendar)}
+                          disabled={isConnectingAdditional === calendar.id}
+                          className="px-3 py-1.5 text-xs font-medium rounded-[7px] bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+                        >
+                          {isConnectingAdditional === calendar.id ? 'Connecting...' : 'Connect'}
+                        </button>
+                      </div>
+                    ))}
+                  {availableCalendars.filter(cal => !connectedCalendars.some(cc => cc.googleCalendarId === cal.id)).length === 0 && (
+                    <p className="text-sm text-light-text/50 dark:text-dark-text/50 text-center py-4">
+                      All available calendars are already connected
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1529,11 +1853,19 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
       <div className="w-[600px] h-full bg-light-bg-light dark:bg-dark-bg-light border-r border-light-border dark:border-dark-border overflow-y-auto flex justify-end">
         <div className="p-6 pt-16 w-64">
           <div className="flex items-center space-x-3 mb-6">
-            <div className="w-10 h-10 bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-full flex items-center justify-center">
-              <span className="text-light-text/50 dark:text-dark-text/50 text-sm font-medium">TS</span>
-            </div>
+            {currentUser?.image ? (
+              <img 
+                src={currentUser.image} 
+                alt={userName}
+                className="w-10 h-10 rounded-full object-cover border border-light-border dark:border-dark-border"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-light-bg-lighter dark:bg-dark-bg-lighter border border-light-border dark:border-dark-border rounded-full flex items-center justify-center">
+                <span className="text-light-text/50 dark:text-dark-text/50 text-sm font-medium">{userInitials}</span>
+              </div>
+            )}
             <div>
-              <h2 className="text-sm font-medium text-gray-900 dark:text-white">Tom Smith</h2>
+              <h2 className="text-sm font-medium text-gray-900 dark:text-white">{userName}</h2>
               <p className="text-sm text-light-text/50 dark:text-dark-text/50">Workspace Settings</p>
             </div>
           </div>
@@ -1569,7 +1901,7 @@ const Settings = ({ isOpen, onClose, showTodaysTasks, setShowTodaysTasks }) => {
           {/* Logout */}
           <div className="mt-8 pt-6 border-t border-light-border dark:border-dark-border">
             <DirectionalHoverButton
-              onClick={() => {}}
+              onClick={handleSignOut}
               isActive={false}
               icon={Logout}
               label="Log out"

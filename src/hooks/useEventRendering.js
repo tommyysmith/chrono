@@ -23,7 +23,9 @@ export const useEventRendering = (
   commandBarRef,
   handleToggleTaskCompletion,
   handleTaskEdit,
-  handleTaskDelete = null
+  handleTaskDelete = null,
+  selectedEventId = null,
+  setSelectedEventId = null
 ) => {
   const [taskUpdateTrigger, setTaskUpdateTrigger] = useState(0);
   const [tagUpdateKey, setTagUpdateKey] = useState(0);
@@ -243,33 +245,54 @@ export const useEventRendering = (
     };
   }, []);
 
-  const renderEvents = useCallback(() => {
+  // Pre-compute filtered events and styles with useMemo for performance
+  const { filteredEvents, eventStylesMap } = useMemo(() => {
     const { filteredEvents } = filterEventsForView(events, selectedDate, viewType, currentDefaultColor);
-
-    const handleEventDoubleClick = (event) => {
-      if (event.isTask || event.isTaskBlock) {
-        // Handle task click - open task edit modal for the original task
-        if (handleTaskEdit) {
-          handleTaskEdit(event.originalTask);
-        } else if (commandBarRef?.current?.openForTaskEdit) {
-          commandBarRef.current.openForTaskEdit(event.originalTask);
-        }
-      } else {
-        handleEventClick(event);
-      }
-    };
-
-    const handleEventContextMenuClick = (e, event) => {
-      if (event.isTask || event.isTaskBlock) {
-        handleTaskContextMenu(e, event.originalTask);
-      } else {
-        handleEventContextMenu(e, event.id);
-      }
-    };
-
-    return filteredEvents.map((event) => {
+    
+    // Pre-compute all event styles to avoid O(n²) on each render
+    const stylesMap = new Map();
+    for (const event of filteredEvents) {
       const overlappingEvents = findOverlappingGroup(event, filteredEvents);
-      const eventStyle = getEventStyle(event, overlappingEvents, viewType);
+      stylesMap.set(event.id, getEventStyle(event, overlappingEvents, viewType));
+    }
+    
+    return { filteredEvents, eventStylesMap: stylesMap };
+  }, [events, selectedDate, viewType, currentDefaultColor, filterEventsForView, taskUpdateTrigger]);
+
+  // Memoize click handlers outside of render to prevent recreation
+  const handleEventSingleClick = useCallback((event) => {
+    if (event.isTask || event.isTaskBlock) {
+      if (handleTaskEdit) {
+        handleTaskEdit(event.originalTask);
+      } else if (commandBarRef?.current?.openForTaskEdit) {
+        commandBarRef.current.openForTaskEdit(event.originalTask);
+      }
+    } else {
+      // Use requestAnimationFrame to defer state updates and improve INP
+      requestAnimationFrame(() => {
+        if (setSelectedEventId) {
+          setSelectedEventId(event.id);
+        }
+        handleEventClick(event);
+      });
+    }
+  }, [handleTaskEdit, commandBarRef, setSelectedEventId, handleEventClick]);
+
+  const handleEventDoubleClick = useCallback((event) => {
+    // Double-click is now a no-op since single-click handles selection
+  }, []);
+
+  const handleEventContextMenuClick = useCallback((e, event) => {
+    if (event.isTask || event.isTaskBlock) {
+      handleTaskContextMenu(e, event.originalTask);
+    } else {
+      handleEventContextMenu(e, event.id);
+    }
+  }, [handleTaskContextMenu, handleEventContextMenu]);
+
+  const renderEvents = useCallback(() => {
+    return filteredEvents.map((event) => {
+      const eventStyle = eventStylesMap.get(event.id);
 
       if (event.isTask || event.isTaskBlock) {
         return (
@@ -297,27 +320,28 @@ export const useEventRendering = (
           viewType={viewType}
           dragState={dragState}
           onDragStart={handleDragStart}
+          onClick={handleEventSingleClick}
           onDoubleClick={handleEventDoubleClick}
           onContextMenu={handleEventContextMenuClick}
           onResizeStart={handleResizeStart}
+          isSelected={selectedEventId === event.id}
         />
       );
     });
   }, [
-    events,
-    selectedDate,
+    filteredEvents,
+    eventStylesMap,
     viewType,
     dragState,
     handleDragStart,
-    handleEventClick,
-    handleEventContextMenu,
+    handleEventSingleClick,
+    handleEventDoubleClick,
+    handleEventContextMenuClick,
     handleResizeStart,
     handleToggleTaskCompletion,
-    currentDefaultColor,
-    taskUpdateTrigger,
     tagUpdateKey,
     getFreshTagData,
-    filterEventsForView,
+    selectedEventId,
   ]);
 
 

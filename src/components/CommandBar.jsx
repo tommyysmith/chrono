@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback, useMemo, memo, startTransition } from 'react';
 import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
-import { useMeasure } from '@uidotdev/usehooks';
+// Removed useMeasure - replaced with ResizeObserver for better performance
 // Add addDays, isBefore, isEqual imports
 import { format, addHours, parse, isToday, isTomorrow, isYesterday, getDate, isSameDay, addDays, isBefore, isEqual, differenceInMilliseconds, add, parseISO } from 'date-fns';
 import { TAG_COLORS } from '../constants/colors';
@@ -32,6 +32,7 @@ import { Trash } from '../assets/icons/Trash'
 import RepeatEditModal from './RepeatEditModal';
 import RepeatTaskEditModal from './RepeatTaskEditModal';
 import GoToDateCommand from './GoToDateCommand';
+import EditOriginalEventModal from './EditOriginalEventModal';
 
 import { parseNaturalLanguage } from '../utils/dateUtils';
 import { Shift } from '../assets/icons/Shift';
@@ -240,7 +241,7 @@ const TabSelector = ({ activeTab, onTabChange, ...props }) => {
   );
 };
 
-const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onToggleTaskCompletion, onClose, onDateSelect, onOpenSettings, isDraggingTask = false }, ref) => {
+const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent, onCreateTask, onUpdateTask, onToggleTaskCompletion, onClose, onDateSelect, onOpenSettings, isDraggingTask = false, setRepeatEditModalState, onShowSendUpdateModal }, ref) => {
   const [selectedDate, setSelectedDate] = useState(null);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
@@ -301,6 +302,20 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     }
     
     return endTime;
+  };
+
+  // Format time to natural language (Morning, Afternoon, Evening, Night)
+  const formatTimeToNatural = (timeStr) => {
+    if (!timeStr) return '';
+    try {
+      const [hours] = timeStr.split(':').map(Number);
+      if (hours >= 5 && hours < 12) return 'Morning';
+      if (hours >= 12 && hours < 17) return 'Afternoon';
+      if (hours >= 17 && hours < 21) return 'Evening';
+      return 'Night';
+    } catch {
+      return '';
+    }
   };
 
   const formatDateToNatural = (dateStr) => {
@@ -450,6 +465,23 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const [isEndTimePickerOpen, setIsEndTimePickerOpen] = useState(false);
   const [startTimeSearch, setStartTimeSearch] = useState('');
   const [endTimeSearch, setEndTimeSearch] = useState('');
+  
+  // State for attendee/participant input
+  const [isAttendeePopoverOpen, setIsAttendeePopoverOpen] = useState(false);
+  const [attendeeSearchText, setAttendeeSearchText] = useState('');
+  const [recentContacts, setRecentContacts] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('recentContacts');
+      return saved ? JSON.parse(saved) : [];
+    }
+    return [];
+  });
+  
+  // State for edit original event modal (when editing events not owned by user)
+  const [editOriginalEventModalState, setEditOriginalEventModalState] = useState({
+    isOpen: false,
+    eventData: null,
+  });
 
   // Default event color state
   const [currentDefaultColor, setCurrentDefaultColor] = useState(() => {
@@ -549,27 +581,84 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   const exitingRef = useRef(false);
   const prevStateRef = useRef(null);
   
-  // New state variables for jakub.kr approach
-  const [contentRef, contentBounds] = useMeasure();
-  const [direction, setDirection] = useState(0);
-  const [previousContentKey, setPreviousContentKey] = useState(null);
+  // Custom ResizeObserver-based measurement (more performant than useMeasure)
+  const contentMeasureRef = useRef(null);
+  const [contentBounds, setContentBounds] = useState({ width: 0, height: 0 });
+  const resizeTimeoutRef = useRef(null);
+  
+  // Set up ResizeObserver only once, with debouncing to prevent rapid updates
+  useEffect(() => {
+    if (!contentMeasureRef.current) return;
+    
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) {
+        const { width, height } = entry.contentRect;
+        // Debounce resize updates to prevent rapid re-renders during animation
+        if (resizeTimeoutRef.current) {
+          cancelAnimationFrame(resizeTimeoutRef.current);
+        }
+        resizeTimeoutRef.current = requestAnimationFrame(() => {
+          setContentBounds(prev => {
+            // Only update if dimensions actually changed (avoid unnecessary re-renders)
+            if (Math.abs(prev.width - width) > 1 || Math.abs(prev.height - height) > 1) {
+              return { width, height };
+            }
+            return prev;
+          });
+        });
+      }
+    });
+    
+    observer.observe(contentMeasureRef.current);
+    return () => {
+      observer.disconnect();
+      if (resizeTimeoutRef.current) {
+        cancelAnimationFrame(resizeTimeoutRef.current);
+      }
+    };
+  }, []);
+  
+  // Callback ref to handle both the ref assignment and initial measurement
+  const contentRef = useCallback((node) => {
+    contentMeasureRef.current = node;
+    if (node) {
+      const { width, height } = node.getBoundingClientRect();
+      setContentBounds({ width, height });
+    }
+  }, []);
+  
+  // Use ref instead of state for direction to avoid re-render cycles
+  const directionRef = useRef(0);
   
   // Base height for the command bar (when in default state)
   const BASE_HEIGHT = 52;
+  
+  // Memoize animation configs to prevent object recreation on every render
+  const containerAnimationConfig = useMemo(() => ({
+    initial: { opacity: 0, y: 60, scale: 0.95 },
+    animate: { opacity: 1, y: 0, scale: 1 },
+    exit: { opacity: 0, y: 60, scale: 0.95 },
+    transition: { type: "tween", duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }
+  }), []);
+  
+  const contentAnimationConfig = useMemo(() => ({
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { type: "tween", duration: 0.1, ease: "easeOut" }
+  }), []);
 
-  // Track content changes and calculate direction for animations
-  useEffect(() => {
-    const newContentKey = isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default';
-    
-    if (newContentKey !== activeContentKey) {
-      const contentOrder = ['default', 'task', 'event', 'go-to-date'];
-      const currentIndex = contentOrder.indexOf(activeContentKey);
-      const newIndex = contentOrder.indexOf(newContentKey);
-      
-      setPreviousContentKey(activeContentKey);
-      setDirection(newIndex > currentIndex ? 1 : -1);
-    }
-  }, [isAddingEvent, isAddingTask, isGoToDateMode, activeContentKey]);
+  // Compute direction synchronously during render (no useEffect = no extra re-render)
+  // This avoids the cascading re-render that was caused by useEffect + setState
+  const computedContentKey = isAddingEvent ? 'event' : isAddingTask ? 'task' : isGoToDateMode ? 'go-to-date' : 'default';
+  if (computedContentKey !== activeContentKey) {
+    const contentOrder = ['default', 'task', 'event', 'go-to-date'];
+    const currentIndex = contentOrder.indexOf(previousContentKeyRef.current || 'default');
+    const newIndex = contentOrder.indexOf(computedContentKey);
+    directionRef.current = newIndex > currentIndex ? 1 : -1;
+  }
+  const direction = directionRef.current;
 
   useEffect(() => {
     // Capture dimensions when component mounts or state changes
@@ -1016,18 +1105,33 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       _forceSeriesUpdate: eventCopy._seriesUpdate || false,
       // Store the current times as preserved times for all-day toggle
       _preservedStartTime: format(eventCopy.start, 'HH:mm'),
-      _preservedEndTime: format(eventCopy.end, 'HH:mm')
+      _preservedEndTime: format(eventCopy.end, 'HH:mm'),
+      // Google Calendar specific fields
+      source: eventCopy.source || 'local',
+      hangoutLink: eventCopy.hangoutLink || null,
+      conferenceData: eventCopy.conferenceData || null,
+      attendees: eventCopy.attendees || [],
+      organizer: eventCopy.organizer || null,
+      location: eventCopy.location || '',
+      // RSVP response status - find current user's response from attendees
+      myResponseStatus: eventCopy.myResponseStatus || 
+        (eventCopy.attendees?.find(a => a.self)?.responseStatus) || 
+        (eventCopy.organizer?.self ? 'accepted' : 'needsAction'),
+      // Attachments (Notion docs, Google Docs, etc.)
+      attachments: eventCopy.attachments || [],
     };
 
-    // Set both the original state and event state
-    setOriginalEventState(eventCopy);
-    setEventState(eventData);
-    setSelectedColor(eventCopy.color || getDefaultEventColor());
-    setIsAddingEvent(true);
-    setHasChanges(false);
-    setPreviewEvent({
-      ...eventCopy,
-      _isPreview: true
+    // Use startTransition to batch state updates and improve INP
+    startTransition(() => {
+      setOriginalEventState(eventCopy);
+      setEventState(eventData);
+      setSelectedColor(eventCopy.color || getDefaultEventColor());
+      setIsAddingEvent(true);
+      setHasChanges(false);
+      setPreviewEvent({
+        ...eventCopy,
+        _isPreview: true
+      });
     });
   }, []);
 
@@ -1179,6 +1283,55 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     });
   }, [originalEventState, roundToNearest15Min, ensureMinimumGap]);
 
+  // Helper to check if event has other participants (not just self)
+  const hasOtherParticipants = useCallback((attendees) => {
+    if (!attendees || attendees.length === 0) return false;
+    return attendees.some(a => !a.self);
+  }, []);
+
+  // Helper to check if user is the organizer of the event
+  const isUserOrganizer = useCallback((organizer) => {
+    if (!organizer) return true; // If no organizer info, assume user owns it
+    return organizer.self === true;
+  }, []);
+
+  // Actual save function that performs the update/create
+  const performSave = useCallback((eventData, skipSendUpdate = false) => {
+    // Check if this is a recurring event that needs the RepeatEditModal
+    const isRecurringEvent = originalEventState?.seriesId || 
+                            (originalEventState?.repeat && originalEventState?.repeat !== 'none') || 
+                            originalEventState?.rruleOptions ||
+                            originalEventState?.isRepeat;
+
+    if (originalEventState?.isDraft) {
+      // For draft events, create a new event and remove the draft
+      onCreateEvent(eventData);
+      // Remove the draft event
+      onUpdateEvent({ ...originalEventState, _shouldDelete: true });
+      handleClose({ skipDelete: true });
+    } else if (originalEventState?.id && isRecurringEvent && setRepeatEditModalState) {
+      // For recurring events, show the RepeatEditModal to ask about edit scope
+      setRepeatEditModalState({
+        isOpen: true,
+        event: eventData,
+        draggedEvent: eventData,
+        originalEvent: {
+          ...originalEventState,
+          start: new Date(originalEventState.start || originalEventState._exactPosition?.start),
+          end: new Date(originalEventState.end || originalEventState._exactPosition?.end),
+        },
+        isEditOperation: true,
+      });
+      handleClose({ skipDelete: true });
+    } else if (originalEventState?.id) {
+      onUpdateEvent(eventData);
+      handleClose({ skipDelete: true });
+    } else {
+      onCreateEvent(eventData);
+      handleClose({ skipDelete: true });
+    }
+  }, [originalEventState, onUpdateEvent, onCreateEvent, handleClose, setRepeatEditModalState]);
+
   const handleSaveChanges = useCallback(() => {
 
     const eventData = {
@@ -1224,22 +1377,66 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       // Force series update if this is a series edit
       _forceSeriesUpdate: originalEventState?._seriesUpdate || false,
       // Remove draft flag when saving
-      isDraft: false
+      isDraft: false,
+      // RSVP response status
+      myResponseStatus: eventState.myResponseStatus,
+      // Update attendees array with user's response
+      attendees: eventState.attendees?.map(attendee => 
+        attendee.self 
+          ? { ...attendee, responseStatus: eventState.myResponseStatus }
+          : attendee
+      ) || [],
+      // Preserve other Google Calendar fields
+      organizer: eventState.organizer,
+      hangoutLink: eventState.hangoutLink,
+      conferenceData: eventState.conferenceData,
+      location: eventState.location,
+      source: eventState.source,
+      externalId: originalEventState?.externalId,
+      externalCalendarId: originalEventState?.externalCalendarId,
     };
 
-    if (originalEventState?.isDraft) {
-      // For draft events, create a new event and remove the draft
-      onCreateEvent(eventData);
-      // Remove the draft event
-      onUpdateEvent({ ...originalEventState, _shouldDelete: true });
-    } else if (originalEventState?.id) {
-      onUpdateEvent(eventData);
-    } else {
-      onCreateEvent(eventData);
+    // Check if this is an existing event being edited (not a new event or draft)
+    const isExistingEvent = originalEventState?.id && !originalEventState?.isDraft;
+    
+    // Check if user is NOT the organizer (event not owned by user)
+    if (isExistingEvent && !isUserOrganizer(eventState.organizer)) {
+      // Show edit original event modal
+      setEditOriginalEventModalState({
+        isOpen: true,
+        eventData,
+      });
+      return;
     }
 
-    handleClose({ skipDelete: true });
-  }, [originalEventState, eventState, onUpdateEvent, onCreateEvent, handleClose, createLocalDateTime, createLocalDate]);
+    // Check if event has other participants and this is an update
+    if (isExistingEvent && hasOtherParticipants(eventState.attendees)) {
+      // Calculate original and new times for display
+      const originalTime = {
+        start: originalEventState?.start || originalEventState?._exactPosition?.start,
+        end: originalEventState?.end || originalEventState?._exactPosition?.end,
+      };
+      const newTime = {
+        start: eventData.start,
+        end: eventData.end,
+      };
+      
+      // Show send update modal via callback to parent (Calendar.jsx)
+      if (onShowSendUpdateModal) {
+        onShowSendUpdateModal({
+          eventData,
+          originalTime,
+          newTime,
+          onSendUpdate: () => performSave(eventData),
+          onDiscard: () => handleClose({ skipDelete: true }),
+        });
+      }
+      return;
+    }
+
+    // No guardrails needed, proceed with save
+    performSave(eventData);
+  }, [originalEventState, eventState, createLocalDateTime, createLocalDate, hasOtherParticipants, isUserOrganizer, performSave, onShowSendUpdateModal, handleClose]);
 
   const handleDiscardDraft = useCallback(() => {
     if (originalEventState?.isDraft) {
@@ -1250,31 +1447,9 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
   }, [originalEventState, onUpdateEvent, handleClose]);
 
   const openForTaskEdit = useCallback((task) => {
-    console.log('🚀 [CHRONO-DEBUG] openForTaskEdit called with task:', {
-      id: task.id,
-      title: task.title,
-      isRepeat: task.isRepeat,
-      seriesId: task.seriesId,
-      _detachedTask: task._detachedTask,
-      _editScope: task._editScope
-    });
-    
-    setIsOpen(true);
-    setIsAddingTask(true);
-    setIsAddingEvent(false);
-    setTaskTitle(task.title || '');
-    setTaskNotes(task.notes || '');
-    setSelectedTag(task.tag || null);
-    setDraftTag(task.tag || null);
-    setTaskPriority(task.priority || 'Medium');
-    setTagSearchText(''); // Don't set the tag search text when editing
-    
-    // CRITICAL FIX: For recurring tasks, don't set scheduledDate in UI
-    // This prevents users from editing schedule dates of recurring tasks
-    // which should be controlled by recurrence patterns only
-    // EXCEPTION: Allow schedule editing for single instance edits
+    // Compute all values upfront before any state updates
     const isRecurringTask = task.seriesId && (task.repeat || task.isRepeat) && task._editScope !== 'single';
-    setScheduledDate(isRecurringTask ? null : (task.scheduledDate ? new Date(task.scheduledDate) : null));
+    const computedScheduledDate = isRecurringTask ? null : (task.scheduledDate ? new Date(task.scheduledDate) : null);
     
     // Handle repeat options for recurring task instances
     let repeatOption = task.repeat || 'none';
@@ -1282,32 +1457,48 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     let rruleOptions = task.rruleOptions || null;
     
     // If this is a recurring task instance (has seriesId but no repeat), get repeat info from base task
+    // Note: This localStorage read is deferred to avoid blocking the main thread
     if (task.isRepeat === true && task.seriesId && (!task.repeat || task.repeat === 'none')) {
-      // Get all tasks from localStorage to find the base task
-      const savedTasks = localStorage.getItem("tasks") || "{}";
-      const tasks = JSON.parse(savedTasks);
-      const allTasks = tasks.all || [];
-      
-      // Find the base task for this series
-      const baseTask = allTasks.find(t => 
-        t.seriesId === task.seriesId && 
-        (t.isRepeat === false || typeof t.isRepeat === 'undefined')
-      );
-      
-      if (baseTask) {
-        repeatOption = baseTask.repeat || 'none';
-        rruleOptions = baseTask.rruleOptions || null;
+      try {
+        const savedTasks = localStorage.getItem("tasks") || "{}";
+        const tasks = JSON.parse(savedTasks);
+        const allTasks = tasks.all || [];
+        
+        const baseTask = allTasks.find(t => 
+          t.seriesId === task.seriesId && 
+          (t.isRepeat === false || typeof t.isRepeat === 'undefined')
+        );
+        
+        if (baseTask) {
+          repeatOption = baseTask.repeat || 'none';
+          rruleOptions = baseTask.rruleOptions || null;
+        }
+      } catch (e) {
+        console.error('Error reading base task:', e);
       }
     }
     
-    // Store the task with the resolved repeat option for proper comparison later
-    let taskToStore = {...task, _originalRepeatOption: repeatOption};
+    const taskToStore = {...task, _originalRepeatOption: repeatOption};
     
-    setTaskRepeatOption(repeatOption);
-    setTaskRepeatSeriesId(repeatSeriesId);
-    setTaskRruleOptions(rruleOptions);
-    setEditingTaskId(task.id);
-    setTaskToEdit(taskToStore);
+    // Use startTransition to batch all state updates and improve INP
+    // This marks these updates as non-urgent, allowing the browser to paint first
+    startTransition(() => {
+      setIsOpen(true);
+      setIsAddingTask(true);
+      setIsAddingEvent(false);
+      setTaskTitle(task.title || '');
+      setTaskNotes(task.notes || '');
+      setSelectedTag(task.tag || null);
+      setDraftTag(task.tag || null);
+      setTaskPriority(task.priority || 'Medium');
+      setTagSearchText('');
+      setScheduledDate(computedScheduledDate);
+      setTaskRepeatOption(repeatOption);
+      setTaskRepeatSeriesId(repeatSeriesId);
+      setTaskRruleOptions(rruleOptions);
+      setEditingTaskId(task.id);
+      setTaskToEdit(taskToStore);
+    });
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -1325,7 +1516,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         isDraft: true
       };
       
-      const eventState = {
+      const newEventState = {
         title: '',
         description: '',
         date: format(new Date(startTime), 'yyyy-MM-dd'),
@@ -1342,10 +1533,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         _preservedEndTime: format(new Date(endTime), 'HH:mm') // Initialize preserved end time
       };
 
-      setOriginalEventState(draftEventData);
-      setEventState(eventState);
-      setIsAddingEvent(true);
-      setHasChanges(false);
+      startTransition(() => {
+        setOriginalEventState(draftEventData);
+        setEventState(newEventState);
+        setIsAddingEvent(true);
+        setHasChanges(false);
+      });
     },
     openWithTime: (date) => {
       const inputDate = new Date(date);
@@ -1371,7 +1564,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
       const createdEvent = onCreateEvent(newEventData);
       
-      const eventState = {
+      const newEventState = {
         title: '',
         description: '',
         date: format(roundedTime, 'yyyy-MM-dd'),
@@ -1388,10 +1581,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
-      setOriginalEventState(createdEvent);
-      setEventState(eventState);
-      setIsAddingEvent(true);
-      setHasChanges(false);
+      startTransition(() => {
+        setOriginalEventState(createdEvent);
+        setEventState(newEventState);
+        setIsAddingEvent(true);
+        setHasChanges(false);
+      });
     },
     openForNewEvent: (date) => {
       // Create timezone-aware date objects
@@ -1403,7 +1598,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
       endTime.setHours(10, 0, 0, 0);
       
       // Set up the event state without creating an actual event
-      const eventState = {
+      const newEventState = {
         title: '',
         description: '',
         date: format(startTime, 'yyyy-MM-dd'),
@@ -1420,52 +1615,48 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         _preservedEndTime: format(endTime, 'HH:mm') // Initialize preserved end time
       };
 
-      // Set original event state to null since this is a new event
-      setOriginalEventState(null);
-      setEventState(eventState);
-      setIsAddingEvent(true);
-      setHasChanges(false);
+      startTransition(() => {
+        setOriginalEventState(null);
+        setEventState(newEventState);
+        setIsAddingEvent(true);
+        setHasChanges(false);
+      });
     },
     openForNewTask: (date) => {
-      // Reset the task state
-      setTaskTitle('');
-      setTaskNotes('');
-      setSelectedTag(null);
-      setDraftTag(null);
-      setTagSearchText('');
-      setTaskRepeatOption('none');
-      setTaskRepeatSeriesId(null);
-      setTaskRruleOptions(null);
-      setTaskPriority('None'); // Reset priority to default
-      setEditingTaskId(null);
-      setTaskToEdit(null);
-      
-      // Set the scheduled date to the provided date
-      setScheduledDate(date ? new Date(date) : null);
-      
-      // Set schedule option based on whether a date is provided
-      // If no date is provided (null), default to 'anytime'
-      // If a date is provided, determine the appropriate option
-      if (!date) {
-        setScheduleOption('anytime');
-      } else {
+      // Compute schedule option before state updates
+      let computedScheduleOption = 'anytime';
+      if (date) {
         const today = new Date();
         const tomorrow = new Date(today);
         tomorrow.setDate(tomorrow.getDate() + 1);
         
         if (date.toDateString() === today.toDateString()) {
-          setScheduleOption('today');
+          computedScheduleOption = 'today';
         } else if (date.toDateString() === tomorrow.toDateString()) {
-          setScheduleOption('tomorrow');
+          computedScheduleOption = 'tomorrow';
         } else {
-          setScheduleOption('custom');
+          computedScheduleOption = 'custom';
         }
       }
       
-      // Open the CommandBar in task creation mode
-      setIsOpen(true);
-      setIsAddingTask(true);
-      setIsAddingEvent(false);
+      startTransition(() => {
+        setTaskTitle('');
+        setTaskNotes('');
+        setSelectedTag(null);
+        setDraftTag(null);
+        setTagSearchText('');
+        setTaskRepeatOption('none');
+        setTaskRepeatSeriesId(null);
+        setTaskRruleOptions(null);
+        setTaskPriority('None');
+        setEditingTaskId(null);
+        setTaskToEdit(null);
+        setScheduledDate(date ? new Date(date) : null);
+        setScheduleOption(computedScheduleOption);
+        setIsOpen(true);
+        setIsAddingTask(true);
+        setIsAddingEvent(false);
+      });
     },
     // Expose setter methods for pre-filling task creation form
     setScheduledDate: (date) => {
@@ -2139,8 +2330,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     setIsRecurrenceModalOpen(false);
   }, [isAddingEvent, isAddingTask, handleEventChange, editingTaskId, taskRepeatSeriesId]);
 
-  // Function to get display text for repeat option
-  const getRepeatDisplayText = (repeatValue, rruleOptions) => {
+  // Memoized function to get display text for repeat option (RRule creation is expensive)
+  const getRepeatDisplayText = useCallback((repeatValue, rruleOptions) => {
     if (repeatValue === 'custom' && rruleOptions) {
       try {
         // Clone options to avoid modifying original
@@ -2151,7 +2342,6 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
           if (typeof options.dtstart === 'string') {
             options.dtstart = new Date(options.dtstart);
           } else if (!(options.dtstart instanceof Date)) {
-            // If it's not a Date object, try to convert it
             options.dtstart = new Date(options.dtstart);
           }
         }
@@ -2162,7 +2352,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             if (day instanceof Weekday) return day;
             if (typeof day === 'number') return new Weekday(day);
             if (day.weekday !== undefined) return new Weekday(day.weekday);
-            return RRule[day]; // Fallback to RRule constants
+            return RRule[day];
           });
         }
         
@@ -2170,11 +2360,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         return rule.toText();
       } catch (e) {
         console.error("Error parsing rrule options:", e);
-        return "Custom"; // Fallback text
+        return "Custom";
       }
     }
     return REPEAT_OPTIONS.find(option => option.id === repeatValue)?.label || 'Does not repeat';
-  };
+  }, []);
 
   // Filtered time options based on search
   const filteredStartTimeOptions = useMemo(() => {
@@ -2209,56 +2399,92 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     return timeFilteredOptions;
   }, [endTimeSearch, eventState.startTime]);
 
-  return (
+  // Filtered attendee suggestions based on search
+  const filteredAttendeeSuggestions = useMemo(() => {
+    if (!attendeeSearchText) return recentContacts.slice(0, 5);
+    const lowerSearch = attendeeSearchText.toLowerCase();
+    return recentContacts.filter(contact => 
+      contact.email?.toLowerCase().includes(lowerSearch) ||
+      contact.displayName?.toLowerCase().includes(lowerSearch)
+    ).slice(0, 5);
+  }, [attendeeSearchText, recentContacts]);
+
+  // Check if input looks like a valid email
+  const isValidEmail = useCallback((email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }, []);
+
+  // Add attendee to event
+  const handleAddAttendee = useCallback((attendee) => {
+    const newAttendee = {
+      email: attendee.email,
+      displayName: attendee.displayName || attendee.email.split('@')[0],
+      responseStatus: 'needsAction',
+    };
+    
+    // Check if attendee already exists
+    const existingAttendees = eventState.attendees || [];
+    if (existingAttendees.some(a => a.email === newAttendee.email)) {
+      setAttendeeSearchText('');
+      setIsAttendeePopoverOpen(false);
+      return;
+    }
+    
+    // Add to event state
+    handleEventChange('attendees', [...existingAttendees, newAttendee]);
+    
+    // Add to recent contacts if not already there
+    if (!recentContacts.some(c => c.email === newAttendee.email)) {
+      const updatedContacts = [newAttendee, ...recentContacts].slice(0, 20);
+      setRecentContacts(updatedContacts);
+      localStorage.setItem('recentContacts', JSON.stringify(updatedContacts));
+    }
+    
+    setAttendeeSearchText('');
+    setIsAttendeePopoverOpen(false);
+  }, [eventState.attendees, handleEventChange, recentContacts]);
+
+  // Remove attendee from event
+  const handleRemoveAttendee = useCallback((emailToRemove) => {
+    const existingAttendees = eventState.attendees || [];
+    handleEventChange('attendees', existingAttendees.filter(a => a.email !== emailToRemove));
+  }, [eventState.attendees, handleEventChange]);
+
+  // Update recent contacts from synced events
+  useEffect(() => {
+    if (eventState.attendees && eventState.attendees.length > 0) {
+      const newContacts = eventState.attendees.filter(
+        attendee => attendee.email && !attendee.self && !recentContacts.some(c => c.email === attendee.email)
+      ).map(attendee => ({
+        email: attendee.email,
+        displayName: attendee.displayName || attendee.email.split('@')[0],
+      }));
+      
+      if (newContacts.length > 0) {
+        const updatedContacts = [...newContacts, ...recentContacts].slice(0, 20);
+        setRecentContacts(updatedContacts);
+        localStorage.setItem('recentContacts', JSON.stringify(updatedContacts));
+      }
+    }
+  }, [eventState.attendees]);
+
+  const renderResult = (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 inline-flex justify-center">
       <AnimatePresence mode="wait">
         {(isOpen || selectedTasks.size > 0) && !isDraggingTask && (
           <motion.div 
             key="commandBar-container"
             ref={containerRef}
-            initial={{ 
-
-
-              y: 140,
-              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"
-            }}
-            animate={{              opacity: 1,              scale: 1,              y: 0,              width: activeContentKey === 'default' ? (contentBounds.width || 'auto') : ((contentBounds.width || 0) + 32),              height: Math.max(contentBounds.height || BASE_HEIGHT, BASE_HEIGHT),              backgroundColor: "var(--background-color, var(--bg-light, #ffffff))"            }}
-            exit={{
-
-
-              y: 140,
-              width: previousSizeRef.current.width || 'auto',
-              height: previousSizeRef.current.height || 'auto'
-            }}
+            initial={containerAnimationConfig.initial}
+            animate={containerAnimationConfig.animate}
+            exit={containerAnimationConfig.exit}
+            transition={containerAnimationConfig.transition}
             style={{
-              willChange: "transform, opacity, background-color, width, height",
-              transformOrigin: "bottom"
-            }}
-            transition={{
-              type: "spring",
-              stiffness: 600,
-              damping: 60,
-              mass: 1,
-              opacity: { duration: 0.15 },
-              scale: { duration: 0.15 },
-              y: { 
-                type: "spring",
-                stiffness: 600,
-                damping: 40,
-                duration: 0.15
-              },
-              width: {
-                type: "spring",
-                stiffness: 800,
-                damping: 50,
-                duration: 0.02
-              },
-              height: {
-                type: "spring",
-                stiffness: 800,
-                damping: 50,
-                duration: 0.02
-              }
+              willChange: "transform, opacity",
+              transformOrigin: "bottom center",
+              width: activeContentKey === 'default' ? (contentBounds.width || 'auto') : ((contentBounds.width || 0) + 32),
+              height: Math.max(contentBounds.height || BASE_HEIGHT, BASE_HEIGHT),
+              transition: 'width 0.15s ease-out, height 0.15s ease-out'
             }}
             data-command-bar
             className={`bg-light-bg dark:!bg-dark-bg-lighter overflow-hidden shadow-lg rounded-[13px] outline outline-1 outline-light-border dark:outline-dark-border dark:hover:bg-white/10 border-light-border dark:border-dark-border ${!isAddingEvent && !isAddingTask && !isGoToDateMode && selectedTasks.size === 0 ? 'px-0' : 'px-4'}`}
@@ -2285,24 +2511,15 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
             >
               <motion.div
                 key={activeContentKey}
-                variants={contentVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                custom={{
-                  direction: getDirection(activeContentKey, previousContentKeyRef.current),
-                  isInitial: previousContentKeyRef.current === null,
-                  isCollapsing: activeContentKey === 'default'
-                }}
-                transition={{
-                  type: "spring",
-                  bounce: 0,
-                  duration: 0.2
-                }}
+                initial={contentAnimationConfig.initial}
+                animate={contentAnimationConfig.animate}
+                exit={contentAnimationConfig.exit}
+                transition={contentAnimationConfig.transition}
                 className={`flex items-center w-full ${(activeContentKey === 'task' || activeContentKey === 'event') ? 'pb-20' : ''}`}
                 style={{
                   transform: 'translateZ(0)',
-                  backfaceVisibility: 'hidden'
+                  backfaceVisibility: 'hidden',
+                  willChange: 'opacity'
                 }}
               >
                 {activeContentKey === 'multiselect' && (
@@ -2453,14 +2670,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   <div className="flex items-center gap-2">
                     <Popover>
                       <PopoverTrigger asChild>
-                        <motion.button 
-                          layout
-                      
+                        <button 
                           className="flex group py-4 px-4 items-center gap-2 text-light-text/50 dark:text-dark-text/50"
                         >
                           <Add className="w-4 h-4 group-hover:text-light-text dark:group-hover:text-dark-text" />
                           <span className="text-light-text/50 dark:text-dark-text/50 group-hover:text-light-text dark:group-hover:text-dark-text font-semibold text-sm">Add new</span>
-                        </motion.button>
+                        </button>
                       </PopoverTrigger>
                       <PopoverContent 
                         className="w-44 flex flex-col p-1 mb-2 bg-light-bg dark:bg-dark-bg-lighter outline outline-1 outline-offset-0 outline-light-border dark:outline-dark-border rounded-[9px] shadow-lg"
@@ -2504,15 +2719,11 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       </PopoverContent>
                     </Popover>
                     
-                    <motion.div 
-                      layout
-                      key="commandBar-divider"
+                    <div 
                       className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                     />
                     
-                    <motion.div 
-                      layout
-                      key="commandBar-date-buttons"
+                    <div 
                       className="flex items-center py-4 px-4 gap-2"
                     >
                       <Chevron
@@ -2529,17 +2740,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         className="w-4 h-4  text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text cursor-pointer" 
                         onClick={onNext}
                       />
-                    </motion.div>
+                    </div>
                     
-                    <motion.div 
-                      layout
-                      key="commandBar-divider-2"
+                    <div 
                       className='h-[24px] w-[1px] bg-light-border dark:bg-dark-border'
                     />
                     
-                    <motion.button 
-                      key="commandBar-ask-me"
-                      layout
+                    <button 
                       onClick={() => {
                         setIsGoToDateMode(true);
                         setQuery('');
@@ -2551,33 +2758,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         <path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </ArrowAlt>
                       <span className="group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50 font-semibold text-sm">Go to date</span>
-                    </motion.button>
+                    </button>
                   </div>
                 )}
                 
                 {activeContentKey === 'task' && (
-                    <motion.div
-                      key="commandBar-adding-task"
-                      variants={contentVariants}
-                      initial="initial"
-                      animate="animate"
-                      exit="exit"
-                      custom={{
-                        direction: getDirection('task', previousContentKeyRef.current),
-                        isInitial: previousContentKeyRef.current === null,
-                        isCollapsing: false
-                      }}
-                      onAnimationStart={() => {
-                        animationInProgressRef.current = true;
-                      }}
-                      onAnimationComplete={() => {
-                        animationInProgressRef.current = false;
-                      }}
-                      transition={{
-                        type: "spring",
-                        bounce: 0,
-                        duration: 0.5
-                      }}
+                    <div
                       className="flex flex-col gap-4 w-[450px]"
                       style={{
                         transform: 'translateZ(0)',
@@ -3065,33 +3251,12 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                       </div>
                     
                   </div>
-                </motion.div>
+                </div>
               )}
 
                 {activeContentKey === 'event' && (
-                  <motion.div
-                  key="commandBar-adding-event"
-                  variants={contentVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  custom={{
-                    direction: getDirection('event', previousContentKeyRef.current),
-                    isInitial: previousContentKeyRef.current === null,
-                    isCollapsing: false
-                  }}
-                  onAnimationStart={() => {
-                    animationInProgressRef.current = true;
-                  }}
-                  onAnimationComplete={() => {
-                    animationInProgressRef.current = false;
-                  }}
-                  transition={{
-                    type: "spring",
-                    bounce: 0,
-                    duration: 0.5
-                  }}
-                  className="flex flex-col gap-4 w-[450px]"
+                  <div
+                  className="flex flex-col gap-4 w-[550px]"
                   style={{
                     transform: 'translateZ(0)',
                     backfaceVisibility: 'hidden'
@@ -3100,7 +3265,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                   <div className="flex flex-col -mx-4">
                     {/* Title Section with Color */}
                     <div 
-                    className="flex px-4 py-4 flex-row border-b border-light-border dark:border-dark-border">
+                    className="flex px-4 py-4 flex-row border-b border-dashed border-light-border dark:border-dark-border">
                       <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
                         <PopoverTrigger asChild>
                           <motion.div 
@@ -3128,7 +3293,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </PopoverContent>
                       </Popover>
                       <div 
-                        className="flex flex-col gap-1 px-4"
+                        className="flex flex-col gap-1 px-4 flex-1"
                       >
                         {/* Title Input */}
                         <input
@@ -3148,12 +3313,90 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                           className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
                         />
                       </div>
+                      {/* Repeat Options - Right side of title row */}
+                      <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
+                        <PopoverTrigger className="flex items-center gap-2 h-[32px] cursor-pointer rounded-md focus:outline-none px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors" ref={repeatDropdownRef}>
+                          <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                          <span className={`text-sm font-medium ${eventState.repeat === 'none' ? 'text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
+                            {eventState.repeat === 'none' ? 'Repeat' : getRepeatDisplayText(eventState.repeat, eventState.rruleOptions)}
+                          </span>
+                        </PopoverTrigger>
+                        <PopoverContent 
+                          className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50"
+                          align="end"
+                          side="bottom"
+                        >
+                          <div role="listbox" className="flex flex-col">
+                            {REPEAT_OPTIONS.map((option) => {
+                              let sublabel = option.sublabel;
+                              
+                              if (option.id === 'weekly' || option.id === 'biweekly') {
+                                const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
+                                const dayOfWeek = format(date, 'EEE');
+                                sublabel = `on ${dayOfWeek}`;
+                              } else if (option.id === 'monthly') {
+                                const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
+                                const dayOfMonth = format(date, 'do');
+                                sublabel = `on the ${dayOfMonth}`;
+                              } else if (option.id === 'monthlyWeekday') {
+                                const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
+                                const dayOfMonth = getDate(date);
+                                const weekNum = Math.ceil(dayOfMonth / 7);
+                                const dayOfWeek = format(date, 'EEE');
+                                const ordinal = weekNum === 1 ? '1st' : weekNum === 2 ? '2nd' : weekNum === 3 ? '3rd' : `${weekNum}th`;
+                                sublabel = `on the ${ordinal} ${dayOfWeek}`;
+                              } else if (option.id === 'monthlyLastWeekday') {
+                                const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
+                                const dayOfWeek = format(date, 'EEE');
+                                sublabel = `on the last ${dayOfWeek}`;
+                              } else if (option.id === 'yearly') {
+                                const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
+                                const monthDay = format(date, 'MMM d');
+                                sublabel = `on ${monthDay}`;
+                              }
+                              
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (option.id === 'custom') {
+                                      setIsRecurrenceModalOpen(true);
+                                      setIsRepeatDropdownOpen(false);
+                                    } else {
+                                      handleEventChange('repeat', option.id);
+                                      handleEventChange('rruleOptions', null);
+                                      setIsRepeatDropdownOpen(false);
+                                    }
+                                  }}
+                                  role="option"
+                                  aria-selected={eventState.repeat === option.id}
+                                >
+                                  <div className="flex w-full justify-between items-center">
+                                    <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${eventState.repeat === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
+                                    <div className="flex items-center gap-2">
+                                      {sublabel && (
+                                        <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
+                                      )}
+                                      {eventState.repeat === option.id && (
+                                        <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />
+                                      )}
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
 
-                    {/* Time and Date Group - No Divider Between */}
-                    <div className="flex flex-col">
+                    {/* Time and Date Group - Side by Side Layout */}
+                    <div className="flex flex-row">
                       {/* Time Section */}
-                      <div className={`flex items-top gap-2 px-4 py-4 ${(eventState.isMultiDay || eventState.isAllDay) ? 'opacity-50' : ''}`}>
+                      <div className={`flex items-top gap-2 px-4 py-4 flex-1 ${(eventState.isMultiDay || eventState.isAllDay) ? 'opacity-50' : ''}`}>
                         <div className="flex flex-col gap-2">
                       <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Time</span>
 
@@ -3339,7 +3582,13 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                               </PopoverContent>
                             </Popover>
                           </div>
-                          <div className="flex items-center gap-2 mt-1"> { /* Add margin-top */}
+                          {/* Time period label - Morning/Afternoon/Evening/Night */}
+                          <div className="flex items-center h-[24px] gap-1">
+                            <span className="text-sm text-light-text/50 dark:text-dark-text/50">
+                              {formatTimeToNatural(eventState.startTime)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
                             <label className="relative inline-flex items-center cursor-pointer">
                               <input
                                 type="checkbox"
@@ -3358,8 +3607,8 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
                       </div>
 
-                      {/* Date Section */}
-                      <div className="flex items-top gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
+                      {/* Date Section - Now side by side with Time */}
+                      <div className="flex items-top gap-2 px-4 py-4 flex-1 border-l border-dashed border-light-border dark:border-dark-border">
                         <div className="flex flex-col gap-2">
                         <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Date</span>
                         <div className="flex flex-row gap-2">
@@ -3369,7 +3618,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
 
                         <div className="flex flex-col gap-1 w-full">
                           {/* Date inputs row */}
-                          <div className="flex items-center h-[16px] gap-2 w-fit"> {/* <-- Add w-fit */}
+                          <div className="flex items-center h-[16px] gap-2 w-fit">
                             <Popover>
                               <PopoverTrigger asChild>
                                 <motion.span
@@ -3451,107 +3700,370 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
                         </div>
                         </div>
                       </div>
-                      {/* Repeat Section */}
-                      <div className="flex items-top group gap-2 px-4 py-4 border-t border-light-border dark:border-dark-border">
-                        <div className="flex flex-col gap-2">
-                          <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Repeat</span>
-                          
-                        <div className="flex flex-row w-auto gap-2 hover:text-light-text dark:hover:text-dark-text">
+                    </div>
 
-                          <Repeat className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
-
-
-                        <div className="flex flex-col gap-1">
-                          <Popover open={isRepeatDropdownOpen} onOpenChange={setIsRepeatDropdownOpen}>
-                            <PopoverTrigger className="flex items-center gap-2 cursor-pointer rounded-md focus:outline-none" ref={repeatDropdownRef}>
-                              <motion.span whileTap={{scale: 0.98}} className={`text-sm/[16px] font-medium ${eventState.repeat === 'none' ? 'group-hover:text-light-text dark:group-hover:text-dark-text text-light-text/50 dark:text-dark-text/50' : 'text-light-text dark:text-dark-text'}`}>
-                                {getRepeatDisplayText(eventState.repeat, eventState.rruleOptions)}
-                              </motion.span>
+                    {/* Participants & Join Call Section - Compact row layout */}
+                    {(eventState.attendees?.length > 0 || eventState.hangoutLink) && (
+                      <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
+                        {/* Participants - Compact with hover tooltip */}
+                        {eventState.attendees && eventState.attendees.length > 0 && (
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <div className="flex items-center gap-2 cursor-pointer group">
+                                <User className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                                {/* Stacked avatars */}
+                                <div className="flex -space-x-2">
+                                  {eventState.attendees.slice(0, 3).map((attendee, index) => (
+                                    <div 
+                                      key={index}
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white ring-2 ring-light-bg dark:ring-dark-bg-lighter"
+                                      style={{ 
+                                        backgroundColor: attendee.organizer ? '#22C55E' : 
+                                          ['#3B82F6', '#A855F7', '#EF4444', '#F59E0B', '#10B981'][index % 5],
+                                        zIndex: 10 - index
+                                      }}
+                                    >
+                                      {(attendee.displayName || attendee.email || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                  ))}
+                                  {eventState.attendees.length > 3 && (
+                                    <div 
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-light-text dark:text-dark-text bg-light-bg-lighter dark:bg-dark-bg ring-2 ring-light-bg dark:ring-dark-bg-lighter"
+                                      style={{ zIndex: 6 }}
+                                    >
+                                      +{eventState.attendees.length - 3}
+                                    </div>
+                                  )}
+                                </div>
+                                <span className="text-sm text-light-text/70 dark:text-dark-text/70 group-hover:text-light-text dark:group-hover:text-dark-text">
+                                  {eventState.attendees.length} participant{eventState.attendees.length !== 1 ? 's' : ''}
+                                </span>
+                              </div>
                             </PopoverTrigger>
                             <PopoverContent 
-                              className="w-[250px] p-1 overflow-hidden bg-dark-bg-lighter dark:bg-dark-bg-light border border-light-border dark:border-dark-border rounded-[9px] shadow-md z-50 
-                                scrollbar-thin scrollbar-thumb-rounded scrollbar-track-transparent scrollbar-thumb-white/20 dark:scrollbar-thumb-white/10"
+                              className="w-[280px] p-2 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
                               align="start"
                               side="top"
                             >
-                              <div role="listbox" className="flex flex-col">
-                                {REPEAT_OPTIONS.map((option) => {
-                                  let sublabel = option.sublabel;
-                                  
-                                  if (option.id === 'weekly' || option.id === 'biweekly') {
-                                    const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
-                                    const dayOfWeek = format(date, 'EEE');
-                                    sublabel = `on ${dayOfWeek}`;
-                                  } else if (option.id === 'monthly') {
-                                    const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
-                                    const dayOfMonth = format(date, 'do');
-                                    sublabel = `on the ${dayOfMonth}`;
-                                  } else if (option.id === 'monthlyWeekday') {
-                                    const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
-                                    const dayOfMonth = getDate(date);
-                                    const weekNum = Math.ceil(dayOfMonth / 7);
-                                    const dayOfWeek = format(date, 'EEE');
-                                    const ordinal = weekNum === 1 ? '1st' : weekNum === 2 ? '2nd' : weekNum === 3 ? '3rd' : `${weekNum}th`;
-                                    sublabel = `on the ${ordinal} ${dayOfWeek}`;
-                                  } else if (option.id === 'monthlyLastWeekday') {
-                                    const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
-                                    const dayOfWeek = format(date, 'EEE');
-                                    sublabel = `on the last ${dayOfWeek}`;
-                                  } else if (option.id === 'yearly') {
-                                    const date = parse(eventState.date, 'yyyy-MM-dd', new Date());
-                                    const monthDay = format(date, 'MMM d');
-                                    sublabel = `on ${monthDay}`;
-                                  }
-                                  
-                                  return (
-                                    <button
-                                      key={option.id}
-                                      type="button"
-                                      className={`px-2 py-2 text-xs flex items-center flex-row font-medium rounded-[5px] cursor-pointer hover:bg-white/15 hover:dark:bg-white/5 ${eventState.repeat === option.id ? 'font-semibold' : ''}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (option.id === 'custom') {
-                                          setIsRecurrenceModalOpen(true); // Open modal
-                                          setIsRepeatDropdownOpen(false); // Close popover
-                                        } else {
-                                          handleEventChange('repeat', option.id);
-                                          handleEventChange('rruleOptions', null); // Clear custom rule
-                                          setIsRepeatDropdownOpen(false);
-                                        }
+                              <div className="flex flex-col gap-2">
+                                <span className="text-[11px] font-medium text-white/50 dark:text-dark-text/50 px-1">Participants</span>
+                                {eventState.attendees.map((attendee, index) => (
+                                  <div key={index} className="group flex items-center gap-2 px-1 py-1 rounded-md hover:bg-white/5">
+                                    <div 
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white shrink-0"
+                                      style={{ 
+                                        backgroundColor: attendee.organizer ? '#22C55E' : 
+                                          ['#3B82F6', '#A855F7', '#EF4444', '#F59E0B', '#10B981'][index % 5]
                                       }}
-                                      role="option"
-                                      aria-selected={eventState.repeat === option.id}
                                     >
-                                      <div className="flex w-full justify-between items-center">
-                                        <span className={`text-xs text-dark-text/50 dark:text-dark-text/50 ${eventState.repeat === option.id ? 'font-semibold !text-dark-text dark:!text-dark-text' : ''}`}>{option.label}</span>
-                                        <div className="flex items-center gap-2">
-                                          {sublabel && (
-                                            <span className="text-xs text-dark-text/30 font-medium dark:text-dark-text/30">{sublabel}</span>
-                                          )}
-                                          {eventState.repeat === option.id && (
-                                            <Check className="w-4 h-4 text-dark-text dark:text-dark-text" />
-                                          )}
-                                        </div>
+                                      {(attendee.displayName || attendee.email || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex flex-col min-w-0 flex-1">
+                                      <span className="text-sm text-white dark:text-dark-text truncate">
+                                        {attendee.displayName || attendee.email}
+                                      </span>
+                                      {attendee.organizer && (
+                                        <span className="text-[10px] text-white/50 dark:text-dark-text/50">Organizer</span>
+                                      )}
+                                    </div>
+                                    {attendee.responseStatus && (
+                                      <div className="shrink-0 group-hover:hidden">
+                                        {attendee.responseStatus === 'accepted' && (
+                                          <Check className="w-3.5 h-3.5 text-green-500" />
+                                        )}
+                                        {attendee.responseStatus === 'declined' && (
+                                          <span className="text-[10px] text-red-500">Declined</span>
+                                        )}
+                                        {attendee.responseStatus === 'tentative' && (
+                                          <span className="text-[10px] text-yellow-500">Maybe</span>
+                                        )}
+                                        {attendee.responseStatus === 'needsAction' && (
+                                          <span className="text-[10px] text-white/40 dark:text-dark-text/40">Pending</span>
+                                        )}
                                       </div>
-                                    </button>
-                                  );
-                                })}
+                                    )}
+                                    {/* Remove button - shown on hover, only for non-organizers */}
+                                    {!attendee.organizer && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRemoveAttendee(attendee.email);
+                                        }}
+                                        className="hidden group-hover:flex shrink-0 w-6 h-6 items-center justify-center rounded-md hover:bg-red-500/20 text-white/50 hover:text-red-500 transition-colors"
+                                      >
+                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <path d="M18 6L6 18M6 6l12 12" />
+                                        </svg>
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             </PopoverContent>
                           </Popover>
+                        )}
+
+                        {/* Join Call Button - Same row as participants */}
+                        {eventState.hangoutLink && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Google Logo */}
+                            <svg className="w-4 h-4" viewBox="0 0 24 24">
+                              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            <a
+                              href={eventState.hangoutLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-[2px] px-2 h-[28px] rounded-[8px] border border-green-500/30 hover:border-green-500/50 bg-green-500/10 transition-colors"
+                            >
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2">
+                                <rect x="3" y="5" width="11" height="14" rx="1" />
+                                <path d="M14 9l5-3v12l-5-3" />
+                              </svg>
+                              <span className="px-1 text-[14px] font-semibold text-green-800 dark:text-green-400">Join</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Add Participant Input Section */}
+                    <div className="flex items-center gap-2 px-4 py-3 border-t border-light-border dark:border-dark-border">
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <span className="text-[11px] font-medium text-light-text/50 dark:text-dark-text/50">Add participant</span>
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-light-text/50 dark:text-dark-text/50" />
+                          <div className="relative flex-1">
+                            <Popover open={isAttendeePopoverOpen} onOpenChange={setIsAttendeePopoverOpen}>
+                              <PopoverTrigger asChild>
+                                <input
+                                  type="text"
+                                  placeholder="Enter email address"
+                                  value={attendeeSearchText}
+                                  onChange={(e) => {
+                                    setAttendeeSearchText(e.target.value);
+                                    if (e.target.value.length > 0) {
+                                      setIsAttendeePopoverOpen(true);
+                                    }
+                                  }}
+                                  onFocus={() => {
+                                    if (attendeeSearchText.length > 0 || recentContacts.length > 0) {
+                                      setIsAttendeePopoverOpen(true);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && attendeeSearchText) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if (isValidEmail(attendeeSearchText)) {
+                                        handleAddAttendee({ email: attendeeSearchText });
+                                      }
+                                    }
+                                  }}
+                                  className="w-full bg-transparent text-light-text dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50"
+                                />
+                              </PopoverTrigger>
+                              <PopoverContent 
+                                className="w-[280px] p-1 bg-dark-bg-lighter dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-[9px] shadow-lg"
+                                align="start"
+                                side="top"
+                                sideOffset={8}
+                                onOpenAutoFocus={(e) => e.preventDefault()}
+                              >
+                                <div className="flex flex-col">
+                                  {/* Show "Add email" option if valid email is typed */}
+                                  {attendeeSearchText && isValidEmail(attendeeSearchText) && (
+                                    <button
+                                      type="button"
+                                      className="flex items-center gap-2 px-2 py-2 text-sm rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
+                                      onClick={() => handleAddAttendee({ email: attendeeSearchText })}
+                                    >
+                                      <Add className="w-4 h-4 text-primary" />
+                                      <span className="text-xs text-light-text dark:text-dark-text">
+                                        Add "{attendeeSearchText}"
+                                      </span>
+                                    </button>
+                                  )}
+                                  
+                                  {/* Recent contacts / suggestions */}
+                                  {filteredAttendeeSuggestions.length > 0 && (
+                                    <>
+                                      {(attendeeSearchText && isValidEmail(attendeeSearchText)) && (
+                                        <div className="h-[1px] bg-light-border dark:bg-dark-border my-1" />
+                                      )}
+                                      <span className="text-[10px] font-medium text-light-text/40 dark:text-dark-text/40 px-2 py-1">
+                                        {attendeeSearchText ? 'Suggestions' : 'Recent'}
+                                      </span>
+                                      {filteredAttendeeSuggestions.map((contact, index) => (
+                                        <button
+                                          key={`contact-${contact.email}-${index}`}
+                                          type="button"
+                                          className="flex items-center gap-2 px-2 py-2 text-sm rounded-[5px] hover:bg-white/15 dark:hover:bg-white/5"
+                                          onClick={() => handleAddAttendee(contact)}
+                                        >
+                                          <div 
+                                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium text-white shrink-0"
+                                            style={{ backgroundColor: ['#3B82F6', '#A855F7', '#EF4444', '#F59E0B', '#10B981'][index % 5] }}
+                                          >
+                                            {(contact.displayName || contact.email || '?').charAt(0).toUpperCase()}
+                                          </div>
+                                          <div className="flex flex-col items-start min-w-0 flex-1">
+                                            <span className="text-xs text-light-text dark:text-dark-text truncate w-full text-left">
+                                              {contact.displayName || contact.email.split('@')[0]}
+                                            </span>
+                                            <span className="text-[10px] text-light-text/50 dark:text-dark-text/50 truncate w-full text-left">
+                                              {contact.email}
+                                            </span>
+                                          </div>
+                                        </button>
+                                      ))}
+                                    </>
+                                  )}
+                                  
+                                  {/* Empty state */}
+                                  {!attendeeSearchText && filteredAttendeeSuggestions.length === 0 && (
+                                    <div className="px-2 py-3 text-center">
+                                      <span className="text-xs text-light-text/50 dark:text-dark-text/50">
+                                        Type an email address to invite
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
                         </div>
-                        
-                      </div>
-                      </div>
                       </div>
                     </div>
 
-                    
+                    {/* RSVP Response Section - Only show for events where user is not the organizer */}
+                    {eventState.attendees?.length > 0 && !eventState.organizer?.self && (
+                      <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Your Response</span>
+                        </div>
+                        <div className="flex rounded-[7px] p-0.5 bg-black/5 dark:bg-dark-bg-lighter gap-1">
+                          {/* Yes Button */}
+                          <button
+                            className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px] transition-colors duration-150 ease-in-out
+                              ${eventState.myResponseStatus === 'accepted'
+                                ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                                : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                              }`}
+                            onClick={() => handleEventChange('myResponseStatus', 'accepted')}
+                          >
+                            <span className="relative z-10">Yes</span>
+                          </button>
+                          {/* No Button */}
+                          <button
+                            className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px] transition-colors duration-150 ease-in-out
+                              ${eventState.myResponseStatus === 'declined'
+                                ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                                : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                              }`}
+                            onClick={() => handleEventChange('myResponseStatus', 'declined')}
+                          >
+                            <span className="relative z-10">No</span>
+                          </button>
+                          {/* Maybe Button */}
+                          <button
+                            className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px] transition-colors duration-150 ease-in-out
+                              ${eventState.myResponseStatus === 'tentative'
+                                ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                                : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                              }`}
+                            onClick={() => handleEventChange('myResponseStatus', 'tentative')}
+                          >
+                            <span className="relative z-10">Maybe</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
-                    
+                    {/* Attachments Section - Notion docs, Google Docs, etc. */}
+                    {eventState.attachments?.length > 0 && (
+                      <div className="flex flex-col gap-2 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
+                        <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Attachments</span>
+                        <div className="flex flex-col gap-1.5">
+                          {eventState.attachments.map((attachment, index) => {
+                            // Determine the type of attachment based on URL or mimeType
+                            const isNotion = attachment.fileUrl?.includes('notion.so') || attachment.fileUrl?.includes('notion.site');
+                            const isGoogleDoc = attachment.fileUrl?.includes('docs.google.com/document');
+                            const isGoogleSheet = attachment.fileUrl?.includes('docs.google.com/spreadsheets');
+                            const isGoogleSlides = attachment.fileUrl?.includes('docs.google.com/presentation');
+                            const isGoogleDrive = attachment.fileUrl?.includes('drive.google.com');
+                            
+                            return (
+                              <a
+                                key={index}
+                                href={attachment.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-2 py-1.5 rounded-[7px] hover:bg-light-bg-lighter dark:hover:bg-dark-bg-lighter transition-colors group"
+                              >
+                                {/* Icon based on attachment type */}
+                                {isNotion ? (
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 100 100" fill="none">
+                                    <path d="M6.017 4.313l55.333 -4.087c6.797 -0.583 8.543 -0.19 12.817 2.917l17.663 12.443c2.913 2.14 3.883 2.723 3.883 5.053v68.243c0 4.277 -1.553 6.807 -6.99 7.193L24.467 99.967c-4.08 0.193 -6.023 -0.39 -8.16 -3.113L3.3 79.94c-2.333 -3.113 -3.3 -5.443 -3.3 -8.167V11.113c0 -3.497 1.553 -6.413 6.017 -6.8z" fill="#fff"/>
+                                    <path fillRule="evenodd" clipRule="evenodd" d="M61.35 0.227l-55.333 4.087C1.553 4.7 0 7.617 0 11.113v60.66c0 2.723 0.967 5.053 3.3 8.167l13.007 16.913c2.137 2.723 4.08 3.307 8.16 3.113l64.257 -3.89c5.433 -0.387 6.99 -2.917 6.99 -7.193V20.64c0 -2.21 -0.873 -2.847 -3.443 -4.733L74.167 3.143c-4.273 -3.107 -6.02 -3.5 -12.817 -2.917zM25.92 19.523c-5.247 0.353 -6.437 0.433 -9.417 -1.99L8.927 11.507c-0.77 -0.78 -0.383 -1.753 1.557 -1.947l53.193 -3.887c4.467 -0.39 6.793 1.167 8.54 2.527l9.123 6.61c0.39 0.197 1.36 1.36 0.193 1.36l-54.933 3.307 -0.68 0.047zM19.803 88.3V30.367c0 -2.53 0.777 -3.697 3.103 -3.893L86 22.78c2.14 -0.193 3.107 1.167 3.107 3.693v57.547c0 2.53 -0.39 4.67 -3.883 4.863l-60.377 3.5c-3.493 0.193 -5.043 -0.97 -5.043 -4.083zm59.6 -54.827c0.387 1.75 0 3.5 -1.75 3.7l-2.91 0.577v42.773c-2.527 1.36 -4.853 2.137 -6.797 2.137 -3.107 0 -3.883 -0.973 -6.21 -3.887l-19.03 -29.94v28.967l6.02 1.363s0 3.5 -4.857 3.5l-13.39 0.777c-0.39 -0.78 0 -2.723 1.357 -3.11l3.497 -0.97v-38.3L30.48 40.667c-0.39 -1.75 0.58 -4.277 3.3 -4.473l14.367 -0.967 19.8 30.327v-26.83l-5.047 -0.58c-0.39 -2.143 1.163 -3.7 3.103 -3.89l13.4 -0.78z" fill="#000"/>
+                                  </svg>
+                                ) : isGoogleDoc ? (
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#4285F4"/>
+                                    <path d="M14 2v6h6" fill="#A1C2FA"/>
+                                    <path d="M16 13H8v-1h8zm0 3H8v-1h8zm-2 3H8v-1h6z" fill="#fff"/>
+                                  </svg>
+                                ) : isGoogleSheet ? (
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#0F9D58"/>
+                                    <path d="M14 2v6h6" fill="#87CEAC"/>
+                                    <path d="M7 13h10v6H7z" fill="#fff"/>
+                                    <path d="M7 13h10M7 15h10M7 17h10M10 13v6M14 13v6" stroke="#0F9D58" strokeWidth="0.5"/>
+                                  </svg>
+                                ) : isGoogleSlides ? (
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#F4B400"/>
+                                    <path d="M14 2v6h6" fill="#F7D77A"/>
+                                    <rect x="7" y="12" width="10" height="6" rx="1" fill="#fff"/>
+                                  </svg>
+                                ) : isGoogleDrive ? (
+                                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                                    <path d="M8 6l4 7H2z" fill="#0F9D58"/>
+                                    <path d="M16 6l4 7h-8z" fill="#FBBC04"/>
+                                    <path d="M8 6h8l4 7H4z" fill="#4285F4"/>
+                                    <path d="M2 13l3 5h10l-3-5z" fill="#EA4335"/>
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4 shrink-0 text-light-text/50 dark:text-dark-text/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                    <polyline points="14 2 14 8 20 8"/>
+                                  </svg>
+                                )}
+                                
+                                {/* Attachment title */}
+                                <span className="text-sm text-light-text dark:text-dark-text group-hover:text-primary truncate">
+                                  {attachment.title || 'Untitled Document'}
+                                </span>
+                                
+                                {/* External link indicator */}
+                                <svg className="w-3 h-3 shrink-0 text-light-text/30 dark:text-dark-text/30 group-hover:text-primary/50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                  <polyline points="15 3 21 3 21 9"/>
+                                  <line x1="10" y1="14" x2="21" y2="3"/>
+                                </svg>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                   </div>
-                </motion.div>
+                </div>
               )}
 
                 {activeContentKey === 'go-to-date' && (
@@ -3733,6 +4245,31 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
         </motion.div>
       )}
 
+    
+    {/* Edit Original Event Modal - shown when trying to edit events not owned by user */}
+    <EditOriginalEventModal
+      isOpen={editOriginalEventModalState.isOpen}
+      eventTitle={editOriginalEventModalState.eventData?.title}
+      onClose={() => {
+        setEditOriginalEventModalState({ isOpen: false, eventData: null });
+        handleClose({ skipDelete: true });
+      }}
+      onEditEvent={() => {
+        const eventData = editOriginalEventModalState.eventData;
+        const externalId = eventData?.externalId || originalEventState?.externalId;
+        const calendarId = eventData?.externalCalendarId || originalEventState?.externalCalendarId;
+        
+        if (externalId && calendarId) {
+          window.open(`https://calendar.google.com/calendar/event?eid=${btoa(externalId + ' ' + calendarId)}`, '_blank');
+        } else if (externalId) {
+          window.open(`https://calendar.google.com/calendar/r/eventedit/${externalId}`, '_blank');
+        }
+        
+        setEditOriginalEventModalState({ isOpen: false, eventData: null });
+        handleClose({ skipDelete: true });
+      }}
+    />
+
     {/* Recurrence Modal */}
     <RecurrenceModal
       isOpen={isRecurrenceModalOpen}
@@ -3780,7 +4317,7 @@ const CommandBar = ({ onPrevious, onNext, onToday, onCreateEvent, onUpdateEvent,
     )}
   </div>
 );
-
+  return renderResult;
 }; 
 
 // Use memo to prevent unnecessary re-renders of the entire component

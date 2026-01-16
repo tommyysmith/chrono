@@ -14,14 +14,31 @@ const AllDayEventItem = ({
 }) => {
   const isTask = event.isTask;
   const isPastEvent = isEventPast(event);
+  
+  // Check if this is an unaccepted event (user hasn't responded or declined)
+  // Also check attendees array for self.responseStatus as fallback
+  const selfAttendee = event.attendees?.find(a => a.self);
+  const responseStatus = event.myResponseStatus || selfAttendee?.responseStatus;
+  const isUnacceptedEvent = responseStatus && 
+    responseStatus !== 'accepted' && 
+    !event.organizer?.self;
 
   const getEventClasses = () => {
     const baseClasses = "flex items-center text-xs cursor-pointer hover:bg-black/5 select-none dark:hover:bg-white/5 rounded-[5px] overflow-hidden";
     const taskClasses = isTask ? "border-2 border-dashed" : "";
-    return `${baseClasses} ${taskClasses}`;
+    const unacceptedClasses = isUnacceptedEvent && !isTask ? "border border-dashed" : "";
+    return `${baseClasses} ${taskClasses} ${unacceptedClasses}`;
   };
 
   const getEventStyle = () => {
+    // Unaccepted events: no background, just border color
+    if (isUnacceptedEvent && !isTask) {
+      return {
+        backgroundColor: 'transparent',
+        borderColor: event.color || "#808080",
+        opacity: isPastEvent && !event.isTaskBlock ? 0.5 : 1,
+      };
+    }
     return {
       backgroundColor: isTask ? undefined : (event.color ? `${event.color}20` : "#80808020"),
       opacity: isPastEvent && !event.isTaskBlock ? 0.5 : 1,
