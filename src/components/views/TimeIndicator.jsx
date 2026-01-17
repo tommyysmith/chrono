@@ -1,38 +1,93 @@
-import { useState, useEffect } from "react";
-import { isSameWeek } from "date-fns";
+import { useState, useEffect, useMemo } from "react";
+import { isSameWeek, isSameDay } from "date-fns";
 
-export default function TimeIndicator({ viewType, selectedDate }) {
+export default function TimeIndicator({ 
+  viewType, 
+  selectedDate,
+  visibleDays = null,
+  dayWidth = null,
+}) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
-    // Update immediately
     setCurrentTime(new Date());
 
-    // Then update every minute
     const timer = setInterval(() => {
       setCurrentTime(new Date());
     }, 60000);
 
     return () => clearInterval(timer);
-  }, []); // Empty dependency array to run only on mount
+  }, []);
 
   const getCurrentTimePosition = () => {
     const minutes = currentTime.getHours() * 60 + currentTime.getMinutes();
     const hour = Math.floor(minutes / 60);
     const minuteOffset = (minutes % 60) / 60;
-    const hourHeight = 80; // Updated from 64
+    const hourHeight = 80;
 
-    // Position is based on the hour block plus the minute offset within that hour
-    return hour * hourHeight + minuteOffset * hourHeight - 10; // -10px to align with hour markers
+    return hour * hourHeight + minuteOffset * hourHeight - 10;
   };
 
   const position = getCurrentTimePosition();
 
-  // Calculate the current day's position in the week view
-  const todayIndex = currentTime.getDay();
-  const columnWidth = `${100 / 7}%`;
-  const leftOffset = `${(todayIndex * 100) / 7}%`;
-  // Check if the current date falls within the selected week
+  const isVirtualized = visibleDays !== null && dayWidth !== null;
+
+  const todayColumnInfo = useMemo(() => {
+    if (isVirtualized) {
+      const todayIndex = visibleDays.findIndex(day => isSameDay(day, currentTime));
+      if (todayIndex === -1) return null;
+      
+      return {
+        left: todayIndex * dayWidth,
+        width: dayWidth,
+        isVisible: true,
+      };
+    } else {
+      const todayIndex = currentTime.getDay();
+      const isCurrentWeek = viewType === "week" && selectedDate && isSameWeek(currentTime, selectedDate);
+      
+      if (!isCurrentWeek) return null;
+      
+      return {
+        left: `${(todayIndex * 100) / 7}%`,
+        width: `${100 / 7}%`,
+        isVisible: true,
+      };
+    }
+  }, [isVirtualized, visibleDays, dayWidth, currentTime, viewType, selectedDate]);
+
+  if (isVirtualized) {
+    const totalWidth = visibleDays.length * dayWidth;
+    
+    return (
+      <div
+        className="absolute flex items-center pointer-events-none z-50"
+        style={{
+          top: `${position}px`,
+          left: 0,
+          width: totalWidth,
+        }}
+      >
+        <div className="relative w-full">
+          <div className="absolute inset-0 h-[1px] bg-primary/30" />
+
+          {todayColumnInfo && (
+            <div
+              className="absolute h-[2px] bg-primary"
+              style={{
+                left: `${todayColumnInfo.left}px`,
+                width: `${todayColumnInfo.width}px`,
+              }}
+            >
+              <div className="absolute left-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
+              <div className="absolute right-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const isCurrentWeek = viewType === "week" && selectedDate && isSameWeek(currentTime, selectedDate);
 
   return (
@@ -52,19 +107,16 @@ export default function TimeIndicator({ viewType, selectedDate }) {
         </span>
       </div>
       <div className="flex-1 relative">
-        {/* Base line across all days */}
         <div className="absolute inset-0 h-[1px] bg-primary/30" />
 
-        {/* Bolder line for current day */}
-        {isCurrentWeek && (
+        {isCurrentWeek && todayColumnInfo && (
           <div
             className="absolute h-[2px] bg-primary"
             style={{
-              left: leftOffset,
-              width: columnWidth,
+              left: todayColumnInfo.left,
+              width: todayColumnInfo.width,
             }}
           >
-            {/* Vertical lines at ends */}
             <div className="absolute left-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
             <div className="absolute right-0 top-[-3px] w-[2px] h-[8px] bg-primary rounded-sm" />
           </div>

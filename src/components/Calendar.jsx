@@ -24,6 +24,7 @@ import GoToDateCommand from "./GoToDateCommand";
 import Settings from "./Settings";
 import Day from "./views/Day";
 import Week from "./views/Week";
+import VirtualizedWeekView from "./views/VirtualizedWeekView";
 import Month from "./views/Month";
 import { TaskDragPreview } from "./TaskItem";
 import { TaskEventDragPreview } from "./TaskEventItem";
@@ -1650,26 +1651,34 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           <div className="flex-1 overflow-hidden flex flex-col relative" style={{ zIndex: 1 }}>
             <div className="absolute inset-0 flex flex-col">
               {viewType === ViewType.WEEK && (
-                <Week
+                <VirtualizedWeekView
                   selectedDate={selectedDate}
                   events={displayEvents}
                   dragState={dragState}
                   pendingEventCell={pendingEventCell}
                   setPendingEventCell={setPendingEventCell}
-                  handleEventClick={handleEventClick}
-                  handleEventContextMenu={handleEventContextMenu}
                   handleCellDragStart={handleCellDragStart}
                   handleCellClick={handleCellClick}
                   handleDragOver={handleDragOver}
                   handleDrop={handleDrop}
                   getTimeFromMousePosition={getTimeFromMousePosition}
-                  getColumnFromMousePosition={getColumnFromMousePosition}
-                  renderEvents={renderEvents}
-                  renderAllDayEvents={renderAllDayEvents}
                   timeGridRef={timeGridRef}
                   commandBarRef={commandBarRef}
                   setEvents={setEvents}
                   taskDropPreview={taskDropPreview}
+                  handleDragStart={handleDragStart}
+                  handleEventClick={handleEventClick}
+                  handleEventContextMenu={handleEventContextMenu}
+                  handleResizeStart={handleResizeStart}
+                  handleToggleTaskCompletion={handleToggleTaskCompletion}
+                  selectedEventId={selectedEventId}
+                  setSelectedEventId={setSelectedEventId}
+                  onDateChange={(date) => {
+                    setCurrentDate(date);
+                    if (onDateSelect) {
+                      onDateSelect(date);
+                    }
+                  }}
                 />
               )}
               {viewType === ViewType.DAY && (
@@ -1960,7 +1969,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             dropPreview: null,
             isEventCreationOpen: false,
           }));
-        }, [handleCommandBarClose, setDragState])}
+          // Remove any draft events when command bar closes (clicking outside = discard)
+          setEvents(prev => prev.filter(event => !event.isDraft));
+        }, [handleCommandBarClose, setDragState, setEvents])}
         onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
         onUpdateTask={useCallback(
           (updateTask) => handleUpdateTask(updateTask),
