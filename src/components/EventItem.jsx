@@ -57,6 +57,11 @@ const EventItem = memo(({
     const baseClasses = "absolute z-10 overflow-hidden cursor-pointer select-none event-item";
     const editingClasses = event.isEditing || dragState.eventId === event.id ? "border-primary" : "";
     
+    // Draft events (from drag-to-create) - no special styling, just regular event
+    if (event.isDraft) {
+      return `${baseClasses} rounded-[9px]`;
+    }
+    
     if (event.isTaskBlock) {
       return `${baseClasses} bg-light-bg-lighter dark:bg-dark-bg-lighter text-light-text dark:text-dark-text border border-dashed border-light-border dark:border-dark-border rounded-[5px] hover:bg-black/5 dark:hover:bg-white/5 ${editingClasses}`;
     }

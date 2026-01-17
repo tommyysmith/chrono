@@ -18,10 +18,7 @@ export default function Home() {
       <CalendarSync />
       
       <main className="w-full h-screen overflow-hidden flex flex-col">
-        {/* User menu in top right */}
-        <div className="absolute top-4 right-4 z-50">
-          <UserMenu />
-        </div>
+      
         
         <div className="flex-1 overflow-auto">
           <Calendar selectedDate={selectedDate} onDateSelect={setSelectedDate} />

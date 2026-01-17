@@ -526,9 +526,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       display: 'block'
     };
 
+    // Draft events (from drag-to-create) - solid style, no dashed border
+    if (event.isDraft) {
+      style.opacity = 0.7;
+    }
+
     // Add preview styling
     if (event._isPreview || event._isDragging) {
-      style.border = '2px dashed #fff';
       style.opacity = 0.4;
       style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
       style.transform = 'scale(1.02)';
@@ -1948,7 +1952,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
           [viewType, currentDate, onDateSelect]
         )}
         onToday={useCallback(() => handleToday(onDateSelect), [onDateSelect])}
-        onClose={useCallback(handleCommandBarClose, [])}
+        onClose={useCallback(() => {
+          handleCommandBarClose();
+          // Clear the temporary drag preview when CommandBar closes (discard/ESC)
+          setDragState(prev => ({
+            ...prev,
+            dropPreview: null,
+            isEventCreationOpen: false,
+          }));
+        }, [handleCommandBarClose, setDragState])}
         onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
         onUpdateTask={useCallback(
           (updateTask) => handleUpdateTask(updateTask),
