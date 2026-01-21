@@ -153,9 +153,6 @@ export default function Week({
 
             {/* Events layer */}
             <div className="col-span-7 h-full relative">
-              {/* Drag overlays */}
-              {dragState.isDragging &&
-                (dragState.eventId ? renderDropPreview() : renderDragOverlay())}
               {renderEvents()}
               {/* Pending event highlight */}
               {pendingEventCell && (
@@ -175,14 +172,23 @@ export default function Week({
               {/* Task drop preview */}
               {taskDropPreview && (
                 <div
-                  className="absolute pointer-events-none z-20 bg-black/5 dark:bg-white/5"
+                  className="absolute pointer-events-none z-20 rounded-[9px] border-2 border-[#4BA3E3] bg-[#4BA3E3]/20"
                   style={{
-                    left: `${(taskDropPreview.column / 7) * 100}%`,
-                    width: `${100 / 7}%`,
+                    left: `calc(${(taskDropPreview.column / 7) * 100}% + 2px)`,
+                    width: `calc(${100 / 7}% - 12px)`,
                     top: `${taskDropPreview.start.getHours() * 80 + taskDropPreview.start.getMinutes() * (80/60)}px`,
-                    height: `${((taskDropPreview.end.getTime() - taskDropPreview.start.getTime()) / (1000 * 60)) * (80/60)}px`,
+                    height: `${Math.max(((taskDropPreview.end.getTime() - taskDropPreview.start.getTime()) / (1000 * 60)) * (80/60) - 2, 20)}px`,
                   }}
-                />
+                >
+                  <div className="px-2 py-1 text-[#4BA3E3] overflow-hidden h-full">
+                    <div className="font-medium text-xs truncate">
+                      {taskDropPreview.task?.title || taskDropPreview.task?.name || 'New Event'}
+                    </div>
+                    <div className="text-xs opacity-70">
+                      {format(taskDropPreview.start, "h:mm a")} – {format(taskDropPreview.end, "h:mm a")}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 

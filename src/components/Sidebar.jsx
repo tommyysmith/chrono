@@ -56,6 +56,7 @@ export default function Sidebar({
   onDateSelect,
   setIsVisible,
   showTodaysTasks = true,
+  visibleDateRange = null,
 }) {
   // Get task management functions
   const { 
@@ -2068,6 +2069,7 @@ export default function Sidebar({
                     onTaskDelete={handleDeleteTask}
                     onTaskEdit={handleEditTaskIconClick}
                     commandBarRef={commandBarRef}
+                    visibleDateRange={visibleDateRange}
                   />
                 </div>
               </motion.div>

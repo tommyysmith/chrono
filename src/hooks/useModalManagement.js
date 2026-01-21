@@ -66,6 +66,12 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
 
   const handleRepeatEditConfirm = useCallback(
     ({ scope, event }) => {
+      console.log('[useModalManagement] 🟣 handleRepeatEditConfirm called:', {
+        scope,
+        eventId: event?.id,
+        event_timeChange: event?._timeChange,
+        isEditOperation: repeatEditModalState.isEditOperation,
+      });
       confirmationHasBeenHandled.current = true;
       if (!event) {
         setRepeatEditModalState({
@@ -87,9 +93,14 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           end: new Date(repeatEditModalState.originalEvent.end.getTime()),
         } : null;
         
-        // Calculate time differences for all events in the series
-        const startDiff = event.start.getTime() - (originalEvent ? originalEvent.start.getTime() : 0);
-        const endDiff = event.end.getTime() - (originalEvent ? originalEvent.end.getTime() : 0);
+        // Use the _timeChange from the event (from RepeatEditModal) - this is the source of truth
+        const startDiff = event._timeChange?.startDiff || 0;
+        const endDiff = event._timeChange?.endDiff || 0;
+        
+        console.log('[useModalManagement] 🔴 Using timeChange from RepeatEditModal:', {
+          startDiff,
+          endDiff,
+        });
 
         // Get the dragged event with exact position
         const draggedEvent = repeatEditModalState.draggedEvent ? {
@@ -139,6 +150,10 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           _futureUpdate: scope === 'future',
           _originalEvent: originalEvent,
           _originalSeriesId: originalEvent?.seriesId,
+          // Preserve the override date key from expanded instances for Notion Calendar-style editing
+          _overrideDateKey: event._overrideDateKey || originalEvent?._overrideDateKey,
+          // Preserve isRecurring flag for expanded instance detection
+          isRecurring: event.isRecurring,
           // Ensure manipulation flag and position metadata are preserved
           _isBeingManipulated: true,
           _exactPosition: {
@@ -180,7 +195,10 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           } : null,
           detachedEvent: eventToUpdate._detachedEvent,
           preserveExactPosition: eventToUpdate._preserveExactPosition,
-          timeChange: eventToUpdate._timeChange
+          timeChange: eventToUpdate._timeChange,
+          isRecurring: eventToUpdate.isRecurring,
+          seriesId: eventToUpdate.seriesId,
+          _overrideDateKey: eventToUpdate._overrideDateKey,
         });
 
         // Check if event has other participants - if so, show SendUpdateModal instead of updating directly
@@ -189,23 +207,46 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
           onEventUpdateWithParticipants(eventToUpdate, repeatEditModalState.originalEvent);
         } else {
           // Use the handleUpdateEvent function to ensure consistent state updates
+          console.log('[useModalManagement] 🟢 CALLING handleUpdateEvent with _timeChange:', eventToUpdate._timeChange);
           handleUpdateEvent(eventToUpdate);
         }
       } else {
-        // For double-click edits, open the CommandBar
-        if (commandBarRef?.current) {
-          setTimeout(() => {
-            commandBarRef.current.openForEdit({
-              ...JSON.parse(JSON.stringify(event)),
+        // For double-click edits (isEditOperation), the user has already made edits in the CommandBar
+        // Now we need to apply those edits based on the selected scope
+        
+        // Build the event to update with the correct scope metadata
+        const eventToUpdate = {
+          ...JSON.parse(JSON.stringify(event)),
+          start: new Date(event.start.getTime()),
+          end: new Date(event.end.getTime()),
+          _editScope: scope,
+          _preserveSeriesEvents: scope !== 'single',
+          _originalSeriesId: event.seriesId,
+          _futureUpdate: scope === 'future',
+          _seriesUpdate: scope === 'all',
+          _currentDate: new Date(),
+          // Preserve the override date key from expanded instances for Notion Calendar-style editing
+          _overrideDateKey: event._overrideDateKey,
+          // Preserve isRecurring flag for expanded instance detection
+          isRecurring: event.isRecurring,
+          // For 'single' scope on instance overrides (not detaching anymore)
+          ...(scope === 'single' && {
+            _preserveExactPosition: true,
+            _exactPosition: {
               start: new Date(event.start.getTime()),
-              end: new Date(event.end.getTime()),
-              _editScope: scope,
-              _preserveSeriesEvents: true,
-              _originalSeriesId: event.seriesId,
-              _futureUpdate: scope === 'future',
-              _currentDate: new Date()
-            });
-          }, 10);
+              end: new Date(event.end.getTime())
+            }
+          })
+        };
+        
+        console.log('[useModalManagement] Applying double-click edit with scope:', scope, 'eventId:', eventToUpdate.id, '_overrideDateKey:', eventToUpdate._overrideDateKey, 'isRecurring:', eventToUpdate.isRecurring, 'seriesId:', eventToUpdate.seriesId);
+        
+        // Check if event has other participants
+        if (event._hasOtherParticipants && onEventUpdateWithParticipants) {
+          onEventUpdateWithParticipants(eventToUpdate, repeatEditModalState.originalEvent);
+        } else {
+          // Apply the update directly
+          handleUpdateEvent(eventToUpdate);
         }
       }
 
@@ -239,19 +280,25 @@ export function useModalManagement(setEvents, commandBarRef, handleUpdateEvent, 
     }
 
     // If we have an event and original event, revert the changes
+    // This handles the case where we immediately updated the event position when the modal opened
     if (repeatEditModalState.event && repeatEditModalState.originalEvent) {
+      const originalEvent = repeatEditModalState.originalEvent;
+      const eventId = repeatEditModalState.event.id;
+      
       setEvents((prevEvents) =>
-        prevEvents.map((e) =>
-          e.id === repeatEditModalState.event.id
-            ? {
-                ...repeatEditModalState.originalEvent,
-                id: e.id,
-                repeat: e.repeat,
-                seriesId: e.seriesId,
-                isRepeat: e.isRepeat,
-              }
-            : e
-        )
+        prevEvents.map((e) => {
+          if (e.id === eventId) {
+            return {
+              ...e,
+              // Revert to original position
+              start: new Date(originalEvent.start.getTime()),
+              end: new Date(originalEvent.end.getTime()),
+              // Clear the pending flag
+              _pendingDragConfirmation: undefined,
+            };
+          }
+          return e;
+        })
       );
     }
 

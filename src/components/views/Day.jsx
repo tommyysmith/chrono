@@ -137,8 +137,6 @@ export default function Day({
 
             {/* Events layer */}
             <div className="relative h-full">
-              {/* Drag overlays */}
-              {dragState.isDragging && renderDropPreview()}
               {renderEvents()}
               {/* Pending event highlight */}
               {pendingEventCell && (

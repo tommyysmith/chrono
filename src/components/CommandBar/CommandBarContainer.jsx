@@ -54,7 +54,12 @@ export default function CommandBarContainer({ children, onClickOutside }) {
 
   // Handle click outside - close forms when clicking outside
   const handleClickOutside = useCallback(() => {
-    if (mode === VIEW_MODES.TASK || mode === VIEW_MODES.EVENT || mode === VIEW_MODES.GO_TO_DATE) {
+    console.log('[CommandBarContainer] handleClickOutside called, mode:', mode);
+    if (mode === VIEW_MODES.EVENT) {
+      // For event forms, dispatch the discard event so EventForm can handle cleanup
+      console.log('[CommandBarContainer] Dispatching commandbar-discard event');
+      window.dispatchEvent(new CustomEvent('commandbar-discard'));
+    } else if (mode === VIEW_MODES.TASK || mode === VIEW_MODES.GO_TO_DATE) {
       close();
     }
     onClickOutside?.();

@@ -15,7 +15,8 @@ import { RRule, Weekday } from 'rrule';
 import { TAG_COLORS } from '../../../constants/colors';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import RecurrenceModal from '../../RecurrenceModal';
-import FormFooter from '../components/FormFooter';
+import { useEventAutoSave } from '../../../hooks/useEventAutoSave';
+import { toast } from 'sonner';
 
 const REPEAT_OPTIONS = [
   { id: 'none', label: 'Does not repeat' },
@@ -105,7 +106,14 @@ const getRepeatDisplayText = (repeatValue, rruleOptions) => {
   return REPEAT_OPTIONS.find(o => o.id === repeatValue)?.label || 'Does not repeat';
 };
 
-function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
+const generateLocalEventId = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `event-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+function EventForm({ onCreateEvent, onUpdateEvent, onFinalizeNewEvent, setRepeatEditModalState }) {
   const { editingEvent, close, openTaskForm } = useCommandBar();
   const titleInputRef = useRef(null);
   const originalEventRef = useRef(null);
@@ -113,6 +121,7 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
   // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [startTime, setStartTime] = useState('09:00');
@@ -126,6 +135,8 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
   const [attendees, setAttendees] = useState([]);
   const [organizer, setOrganizer] = useState(null);
   const [hangoutLink, setHangoutLink] = useState(null);
+  const [addGoogleMeet, setAddGoogleMeet] = useState(false);
+  const [myResponseStatus, setMyResponseStatus] = useState('needsAction');
   const [preservedStartTime, setPreservedStartTime] = useState('09:00');
   const [preservedEndTime, setPreservedEndTime] = useState('10:00');
   const [hasChanges, setHasChanges] = useState(false);
@@ -141,6 +152,25 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
   const [attendeeSearchText, setAttendeeSearchText] = useState('');
   const [isAttendeePopoverOpen, setIsAttendeePopoverOpen] = useState(false);
   const [recentContacts, setRecentContacts] = useState([]);
+  const [eventCreated, setEventCreated] = useState(false);
+  const [localEventId, setLocalEventId] = useState(() => editingEvent?.id || generateLocalEventId());
+  const isInitializedRef = useRef(false);
+  const lastAutoSaveRef = useRef(null);
+
+  const {
+    debouncedSave,
+    undo,
+    cancelPendingSave,
+    flushPendingSave,
+    discardNewEvent,
+    isNewEvent,
+  } = useEventAutoSave({
+    onUpdateEvent,
+    onCreateEvent,
+    editingEvent,
+    setRepeatEditModalState,
+    close,
+  });
 
   // Load recent contacts from localStorage
   useEffect(() => {
@@ -185,6 +215,11 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
   // Initialize form
   useEffect(() => {
     if (editingEvent) {
+      if (editingEvent.id) {
+        setLocalEventId(editingEvent.id);
+      } else {
+        setLocalEventId(generateLocalEventId());
+      }
       originalEventRef.current = editingEvent;
       setTitle(editingEvent.title || '');
       setDescription(editingEvent.description || '');
@@ -201,11 +236,19 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
       setAttendees(editingEvent.attendees || []);
       setOrganizer(editingEvent.organizer || null);
       setHangoutLink(editingEvent.hangoutLink || null);
+      setAddGoogleMeet(false);
+      // RSVP response status - find current user's response from attendees
+      setMyResponseStatus(
+        editingEvent.myResponseStatus || 
+        (editingEvent.attendees?.find(a => a.self)?.responseStatus) || 
+        (editingEvent.organizer?.self ? 'accepted' : 'needsAction')
+      );
       setPreservedStartTime(format(new Date(editingEvent.start), 'HH:mm'));
       setPreservedEndTime(format(new Date(editingEvent.end), 'HH:mm'));
       setHasChanges(false);
     } else {
       originalEventRef.current = null;
+      setLocalEventId(generateLocalEventId());
       const now = new Date();
       const rounded = roundToNearest15Min(format(now, 'HH:mm'));
       setTitle(''); setDescription('');
@@ -213,7 +256,7 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
       setStartTime(rounded); setEndTime(format(new Date(now.getTime() + 3600000), 'HH:mm'));
       setIsAllDay(false); setIsMultiDay(false);
       setColor(getDefaultEventColor()); setRepeatOption('none'); setRruleOptions(null); setSeriesId(null);
-      setAttendees([]); setOrganizer(null); setHangoutLink(null);
+      setAttendees([]); setOrganizer(null); setHangoutLink(null); setAddGoogleMeet(false); setMyResponseStatus('needsAction');
       setPreservedStartTime(rounded); setPreservedEndTime(format(new Date(now.getTime() + 3600000), 'HH:mm'));
       setHasChanges(false);
     }
@@ -221,20 +264,10 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
 
   useEffect(() => { setTimeout(() => titleInputRef.current?.focus(), 50); }, []);
 
-  // Listen for ESC key discard event from CommandBar
-  useEffect(() => {
-    const handleDiscardEvent = () => {
-      console.log('[EventForm] Received commandbar-discard event');
-      if (editingEvent?.isDraft) {
-        console.log('[EventForm] Deleting draft event via ESC with ID:', editingEvent.id);
-        onUpdateEvent?.({ ...editingEvent, _shouldDelete: true });
-      }
-      close();
-    };
-    
-    window.addEventListener('commandbar-discard', handleDiscardEvent);
-    return () => window.removeEventListener('commandbar-discard', handleDiscardEvent);
-  }, [editingEvent, onUpdateEvent, close]);
+  // An event is "existing" if it has a Convex ID (no hyphens) - UUID IDs are local/new events
+  const currentEventId = editingEvent?.id || localEventId;
+  const isExistingEvent = currentEventId && !currentEventId.includes('-');
+  const isRecurringEvent = editingEvent?.seriesId || (editingEvent?.repeat && editingEvent?.repeat !== 'none') || editingEvent?.rruleOptions || editingEvent?.isRepeat;
 
   useEffect(() => {
     if (!originalEventRef.current) { setHasChanges(true); return; }
@@ -255,6 +288,196 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
     const [y, mo, d] = dateStr.split('-').map(Number);
     return new Date(y, mo - 1, d, h, m);
   }, []);
+
+  const buildEventData = useCallback(() => {
+    const startDate = (isAllDay || isMultiDay) ? createLocalDate(date, 0, 0) : createLocalDateTime(date, startTime);
+    const endDateVal = isMultiDay ? createLocalDate(endDate, 23, 59) : (isAllDay ? createLocalDate(date, 23, 59) : createLocalDateTime(date, endTime));
+    const isPersisted = editingEvent
+      ? (editingEvent._isPersisted ?? !editingEvent.id?.includes('-'))
+      : false;
+    
+    return {
+      id: currentEventId || generateLocalEventId(),
+      title: title.trim(),
+      description,
+      start: startDate,
+      end: endDateVal,
+      allDay: isAllDay || isMultiDay,
+      isAllDay: isAllDay || isMultiDay,
+      isMultiDay,
+      repeat: repeatOption,
+      rruleOptions,
+      seriesId,
+      color,
+      isRepeat: editingEvent?.isRepeat || false,
+      _editScope: editingEvent?._editScope || 'single',
+      _seriesUpdate: editingEvent?._seriesUpdate || false,
+      _originalSeriesId: editingEvent?._originalSeriesId || editingEvent?.seriesId,
+      _originalEvent: editingEvent?._originalEvent || editingEvent,
+      _exactPosition: { start: startDate, end: endDateVal },
+      // CRITICAL: Preserve these for Notion Calendar-style instance editing
+      _overrideDateKey: editingEvent?._overrideDateKey,
+      isRecurring: editingEvent?.isRecurring,
+      isDraft: false,
+      myResponseStatus,
+      attendees: attendees?.map(attendee => 
+        attendee.self ? { ...attendee, responseStatus: myResponseStatus } : attendee
+      ) || [],
+      organizer,
+      hangoutLink,
+      addGoogleMeet,
+      source: editingEvent?.source || 'local',
+      externalId: editingEvent?.externalId,
+      externalCalendarId: editingEvent?.externalCalendarId,
+      _isPersisted: isPersisted,
+    };
+  }, [title, description, date, endDate, startTime, endTime, isAllDay, isMultiDay, color, repeatOption, rruleOptions, seriesId, attendees, organizer, hangoutLink, addGoogleMeet, myResponseStatus, editingEvent, currentEventId, createLocalDateTime, createLocalDate]);
+
+  // Listen for ESC key discard event from CommandBar
+  useEffect(() => {
+    const handleDiscardEvent = () => {
+      console.log('[EventForm] Received commandbar-discard event');
+      console.log('[EventForm] eventCreated:', eventCreated);
+      console.log('[EventForm] title:', title);
+      console.log('[EventForm] isExistingEvent:', isExistingEvent);
+      console.log('[EventForm] currentEventId:', currentEventId);
+      console.log('[EventForm] editingEvent?.id:', editingEvent?.id);
+      console.log('[EventForm] localEventId:', localEventId);
+      console.log('[EventForm] repeatOption:', repeatOption);
+      cancelPendingSave();
+      
+      if (!eventCreated && !isExistingEvent) {
+        // No event was created yet - delete the draft/placeholder event
+        if (editingEvent?.id) {
+          console.log('[EventForm] Deleting placeholder event via ESC with ID:', editingEvent.id);
+          onUpdateEvent?.({ ...editingEvent, _shouldDelete: true });
+        }
+        close();
+      } else if (eventCreated && !isExistingEvent) {
+        // Event was created - finalize it to Convex with all the current data
+        // Close immediately for instant feedback, persist in background
+        const eventData = buildEventData();
+        console.log('[EventForm] Finalizing new event to Convex:', eventData.title, 'id:', eventData.id);
+        console.log('[EventForm] Event repeat value:', eventData.repeat, 'rruleOptions:', eventData.rruleOptions);
+        console.log('[EventForm] Current repeatOption state:', repeatOption);
+        console.log('[EventForm] onFinalizeNewEvent exists:', !!onFinalizeNewEvent);
+        close();
+        toast.success('Event created');
+        // Persist in background - don't await
+        if (onFinalizeNewEvent) {
+          onFinalizeNewEvent(eventData).then(result => {
+            console.log('[EventForm] Finalize completed:', result);
+          }).catch(error => {
+            console.error('[EventForm] Failed to finalize event:', error);
+            toast.error('Failed to save event');
+          });
+        } else {
+          console.error('[EventForm] onFinalizeNewEvent is not defined!');
+        }
+      } else if (isExistingEvent && isRecurringEvent && hasChanges && setRepeatEditModalState) {
+        // Existing recurring event with changes - show RepeatEditModal for edit scope selection
+        const eventData = buildEventData();
+        console.log('[EventForm] Opening RepeatEditModal for recurring event changes');
+        setRepeatEditModalState({
+          isOpen: true,
+          event: eventData,
+          draggedEvent: eventData,
+          originalEvent: { ...editingEvent, start: new Date(editingEvent.start), end: new Date(editingEvent.end) },
+          isEditOperation: true,
+        });
+        close();
+      } else {
+        // Existing non-recurring event - flush any pending saves
+        flushPendingSave();
+        if (hasChanges) {
+          toast.success('Event updated');
+        }
+        close();
+      }
+    };
+    
+    window.addEventListener('commandbar-discard', handleDiscardEvent);
+    return () => window.removeEventListener('commandbar-discard', handleDiscardEvent);
+  }, [editingEvent, onUpdateEvent, onFinalizeNewEvent, close, eventCreated, isExistingEvent, isRecurringEvent, cancelPendingSave, flushPendingSave, hasChanges, title, buildEventData, setRepeatEditModalState]);
+
+  useEffect(() => {
+    if (!isInitializedRef.current) {
+      isInitializedRef.current = true;
+      return;
+    }
+
+    if (isExistingEvent) {
+      const isRecurring = editingEvent?.seriesId || (editingEvent?.repeat && editingEvent?.repeat !== 'none') || editingEvent?.rruleOptions || editingEvent?.isRepeat;
+      
+      if (isRecurring) {
+        return;
+      }
+
+      const eventData = buildEventData();
+      const eventDataStr = JSON.stringify({
+        title: eventData.title,
+        description: eventData.description,
+        start: eventData.start?.getTime(),
+        end: eventData.end?.getTime(),
+        color: eventData.color,
+        isAllDay: eventData.isAllDay,
+        isMultiDay: eventData.isMultiDay,
+        repeatOption: eventData.repeat,
+      });
+
+      if (lastAutoSaveRef.current !== eventDataStr) {
+        lastAutoSaveRef.current = eventDataStr;
+        debouncedSave(eventData, { showToast: false, isRecurring: false });
+      }
+    } else if (eventCreated && !isExistingEvent && currentEventId) {
+      // For newly created events, update the local event in state so changes are visible
+      // This keeps the calendar in sync while the user is still typing
+      // IMPORTANT: Don't include repeat/rruleOptions here - they should only be applied on finalize
+      // Otherwise recurring instances will show immediately in the calendar before submission
+      const eventData = buildEventData();
+      const localUpdateData = {
+        ...eventData,
+        repeat: 'none',  // Always 'none' for local updates - real value applied on finalize
+        rruleOptions: null,
+        isRepeat: false,
+        seriesId: null,
+      };
+      onUpdateEvent?.(localUpdateData);
+    }
+  }, [title, description, date, endDate, startTime, endTime, isAllDay, isMultiDay, color, repeatOption, rruleOptions, attendees, myResponseStatus, addGoogleMeet, eventCreated, isExistingEvent, currentEventId, buildEventData, onUpdateEvent]);
+
+  useEffect(() => {
+    if (!eventCreated && title.trim() && !isExistingEvent) {
+      const eventData = buildEventData();
+      // IMPORTANT: Don't include repeat/rruleOptions on initial create - only on finalize
+      // This prevents recurring instances from showing immediately in the calendar
+      const createData = {
+        ...eventData,
+        repeat: 'none',
+        rruleOptions: null,
+        isRepeat: false,
+        seriesId: null,
+      };
+      console.log('[EventForm] Creating event via onCreateEvent:', createData.title, 'id:', createData.id);
+      onCreateEvent?.(createData);
+      setEventCreated(true);
+    }
+  }, [title, eventCreated, isExistingEvent, buildEventData, onCreateEvent]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        const isTyping = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+        if (!isTyping) {
+          e.preventDefault();
+          undo();
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo]);
 
   const filteredStartTimeOptions = useMemo(() => {
     if (!startTimeSearch) return ALL_TIME_OPTIONS;
@@ -328,7 +551,7 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
   const handleSave = useCallback(() => {
     if (!title.trim()) return;
     const eventData = {
-      id: editingEvent?.id, title: title.trim(), description,
+      id: currentEventId || generateLocalEventId(), title: title.trim(), description,
       start: (isAllDay || isMultiDay) ? createLocalDate(date, 0, 0) : createLocalDateTime(date, startTime),
       end: isMultiDay ? createLocalDate(endDate, 23, 59) : (isAllDay ? createLocalDate(date, 23, 59) : createLocalDateTime(date, endTime)),
       allDay: isAllDay || isMultiDay, isAllDay: isAllDay || isMultiDay, isMultiDay,
@@ -342,27 +565,48 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
         start: (isAllDay || isMultiDay) ? createLocalDate(date, 0, 0) : createLocalDateTime(date, startTime),
         end: isMultiDay ? createLocalDate(endDate, 23, 59) : (isAllDay ? createLocalDate(date, 23, 59) : createLocalDateTime(date, endTime))
       },
-      isDraft: false, attendees, organizer, hangoutLink,
+      isDraft: false, 
+      // RSVP response status
+      myResponseStatus,
+      // Update attendees array with user's response
+      attendees: attendees?.map(attendee => 
+        attendee.self 
+          ? { ...attendee, responseStatus: myResponseStatus }
+          : attendee
+      ) || [],
+      organizer, hangoutLink, addGoogleMeet,
       source: editingEvent?.source || 'local',
       externalId: editingEvent?.externalId, externalCalendarId: editingEvent?.externalCalendarId,
     };
 
     const isRecurring = editingEvent?.seriesId || (editingEvent?.repeat && editingEvent?.repeat !== 'none') || editingEvent?.rruleOptions || editingEvent?.isRepeat;
 
+    console.log('[EventForm] handleSave - editingEvent:', editingEvent);
+    console.log('[EventForm] handleSave - eventData:', eventData);
+
     if (editingEvent?.isDraft) {
+      console.log('[EventForm] Creating event from draft');
       onCreateEvent?.(eventData);
       onUpdateEvent?.({ ...editingEvent, _shouldDelete: true });
       close();
     } else if (editingEvent?.id && isRecurring && setRepeatEditModalState) {
+      console.log('[EventForm] Opening RepeatEditModal for recurring event');
       setRepeatEditModalState({
         isOpen: true, event: eventData, draggedEvent: eventData,
         originalEvent: { ...editingEvent, start: new Date(editingEvent.start), end: new Date(editingEvent.end) },
         isEditOperation: true,
       });
       close();
-    } else if (editingEvent?.id) { onUpdateEvent?.(eventData); close(); }
-    else { onCreateEvent?.(eventData); close(); }
-  }, [title, description, date, endDate, startTime, endTime, isAllDay, isMultiDay, color, repeatOption, rruleOptions, seriesId, attendees, organizer, hangoutLink, editingEvent, onCreateEvent, onUpdateEvent, setRepeatEditModalState, close, createLocalDateTime, createLocalDate]);
+    } else if (editingEvent?.id) { 
+      console.log('[EventForm] Updating existing event');
+      onUpdateEvent?.(eventData); 
+      close(); 
+    } else { 
+      console.log('[EventForm] Creating new event');
+      onCreateEvent?.(eventData); 
+      close(); 
+    }
+  }, [title, description, date, endDate, startTime, endTime, isAllDay, isMultiDay, color, repeatOption, rruleOptions, seriesId, attendees, organizer, hangoutLink, myResponseStatus, editingEvent, currentEventId, onCreateEvent, onUpdateEvent, setRepeatEditModalState, close, createLocalDateTime, createLocalDate]);
 
   const handleTabChange = useCallback((tab) => { if (tab === 'task') openTaskForm(); }, [openTaskForm]);
 
@@ -377,7 +621,7 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
 
   return (
     <>
-      <div className="flex flex-col gap-4 w-[550px] pb-20">
+      <div className="flex flex-col gap-4 w-[620px] pb-4">
         <div className="flex flex-col -mx-4">
           {/* Title with Color */}
           <div className="flex px-4 py-4 flex-row border-b border-dashed border-light-border dark:border-dark-border">
@@ -395,7 +639,31 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
             </Popover>
             <div className="flex flex-col gap-1 px-4 flex-1">
               <input ref={titleInputRef} type="text" placeholder="Event title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full bg-transparent text-light-text dark:text-dark-text placeholder-light-text/50 dark:placeholder-dark-text/50 text-lg font-medium outline-none" />
-              <input type="text" placeholder="Add description" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50" />
+              {isDescriptionExpanded ? (
+                <textarea
+                  placeholder="Add description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => !description && setIsDescriptionExpanded(false)}
+                  autoFocus
+                  rows={3}
+                  className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50 resize-none"
+                />
+              ) : description ? (
+                <div
+                  onClick={() => setIsDescriptionExpanded(true)}
+                  className="w-full text-light-text/50 dark:text-dark-text text-sm cursor-pointer hover:text-light-text/70 dark:hover:text-dark-text/70 prose prose-sm prose-invert max-w-none [&_a]:text-blue-400 [&_a]:underline [&_a]:hover:text-blue-300 [&_br]:block"
+                  dangerouslySetInnerHTML={{ __html: description }}
+                />
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Add description"
+                  onFocus={() => setIsDescriptionExpanded(true)}
+                  readOnly
+                  className="w-full bg-transparent text-light-text/50 dark:text-dark-text text-sm outline-none placeholder-light-text/50 dark:placeholder-dark-text/50 cursor-pointer"
+                />
+              )}
             </div>
             <Popover open={isRepeatOpen} onOpenChange={setIsRepeatOpen}>
               <PopoverTrigger className="flex items-center gap-2 h-[32px] cursor-pointer rounded-md focus:outline-none px-3 py-2 hover:bg-black/5 dark:hover:bg-white/5 transition-colors">
@@ -492,8 +760,8 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
             </div>
           </div>
 
-          {/* Participants & Join Call Section */}
-          {(attendees.length > 0 || hangoutLink) && (
+          {/* Participants & Conferencing Section */}
+          {(attendees.length > 0 || hangoutLink || addGoogleMeet) && (
             <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
               {/* Participants with popover */}
               {attendees.length > 0 && (
@@ -564,9 +832,9 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
                 </Popover>
               )}
 
-              {/* Join Call Button */}
-              {hangoutLink && (
-                <div className="flex items-center gap-2 shrink-0">
+              {/* Google Meet - Join button or pending creation indicator */}
+              {hangoutLink ? (
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
                   <svg className="w-4 h-4" viewBox="0 0 24 24">
                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -578,12 +846,50 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
                     <span className="px-1 text-[14px] font-semibold text-green-600 dark:text-green-400 group-hover:text-white dark:group-hover:text-inverse">Join</span>
                   </a>
                 </div>
+              ) : addGoogleMeet && (
+                <div className="flex items-center gap-2 shrink-0 ml-auto">
+                  <svg className="w-4 h-4 animate-pulse" viewBox="0 0 24 24">
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                  </svg>
+                  <span className="text-sm text-light-text/70 dark:text-dark-text/70">Google Meet will be created on save</span>
+                  <button
+                    type="button"
+                    onClick={() => { setAddGoogleMeet(false); setHasChanges(true); }}
+                    className="flex items-center justify-center w-5 h-5 rounded-md hover:bg-red-500/20 text-light-text/50 dark:text-dark-text/50 hover:text-red-500 transition-colors"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
               )}
             </div>
           )}
 
+          {/* Create Google Meet Link Button - shown when no hangoutLink and not already adding */}
+          {!hangoutLink && !addGoogleMeet && (
+            <div className="px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
+              <button
+                type="button"
+                onClick={() => { setAddGoogleMeet(true); setHasChanges(true); }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-[8px] border border-dashed border-light-text/20 dark:border-dark-text/20 hover:border-light-text/40 dark:hover:border-dark-text/40 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24">
+                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                </svg>
+                <span className="text-sm text-light-text/70 dark:text-dark-text/70">Create Google Meet link</span>
+              </button>
+            </div>
+          )}
+
           {/* Add Participant Input Section */}
-          <div className="flex items-center gap-2 px-4 py-3 border-t border-light-border dark:border-dark-border">
+          <div className="flex items-center gap-2 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
             <div className="flex flex-col gap-1.5 flex-1">
               <span className="text-[11px] font-medium text-light-text/50 dark:text-dark-text/50">Add participant</span>
               <div className="flex items-center gap-2">
@@ -664,11 +970,57 @@ function EventForm({ onCreateEvent, onUpdateEvent, setRepeatEditModalState }) {
               </div>
             </div>
           </div>
+
+          {/* RSVP Response Section - Only show for events where user is not the organizer */}
+          {attendees?.length > 0 && !organizer?.self && (
+            <div className="flex items-center justify-between gap-4 px-4 py-3 border-t border-dashed border-light-border dark:border-dark-border">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-light-text/50 dark:text-dark-text/50">Your Response</span>
+              </div>
+              <div className="flex rounded-[7px] p-0.5 bg-black/5 dark:bg-white/5 gap-1">
+                {/* Yes Button */}
+                <button
+                  type="button"
+                  className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px]
+                    ${myResponseStatus === 'accepted'
+                      ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                      : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                    }`}
+                  onClick={() => { setMyResponseStatus('accepted'); setHasChanges(true); }}
+                >
+                  <span className="relative z-10">Yes</span>
+                </button>
+                {/* No Button */}
+                <button
+                  type="button"
+                  className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px]
+                    ${myResponseStatus === 'declined'
+                      ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                      : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                    }`}
+                  onClick={() => { setMyResponseStatus('declined'); setHasChanges(true); }}
+                >
+                  <span className="relative z-10">No</span>
+                </button>
+                {/* Maybe Button */}
+                <button
+                  type="button"
+                  className={`group relative flex items-center justify-center cursor-pointer text-xs h-[24px] px-3 rounded-[5px]
+                    ${myResponseStatus === 'tentative'
+                      ? "font-medium text-light-text dark:text-dark-text bg-gradient-to-b from-light-bg from-70% to-light-bg-light to-100% dark:bg-gradient-to-b dark:from-white/[0.035] dark:to-white/[0.05] outline outline-1 outline-offset-[-1px] outline-light-border dark:outline-dark-border shadow-sm"
+                      : "text-light-text/50 dark:text-dark-text/50 hover:text-light-text dark:hover:text-dark-text"
+                    }`}
+                  onClick={() => { setMyResponseStatus('tentative'); setHasChanges(true); }}
+                >
+                  <span className="relative z-10">Maybe</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      <FormFooter activeTab="event" onTabChange={handleTabChange} onDiscard={handleDiscard} onSave={handleSave} saveDisabled={!title.trim() || (!hasChanges && !editingEvent?.isDraft)} isEditing={!!editingEvent?.id && !editingEvent?.isDraft} />
-      <RecurrenceModal isOpen={isRecurrenceModalOpen} onOpenChange={setIsRecurrenceModalOpen} initialValue={rruleOptions} onSave={handleSaveRecurrenceRule} startDate={(isAllDay || isMultiDay) ? createLocalDate(date, 0, 0) : createLocalDateTime(date, startTime)} />
+            <RecurrenceModal isOpen={isRecurrenceModalOpen} onOpenChange={setIsRecurrenceModalOpen} initialValue={rruleOptions} onSave={handleSaveRecurrenceRule} startDate={(isAllDay || isMultiDay) ? createLocalDate(date, 0, 0) : createLocalDateTime(date, startTime)} />
     </>
   );
 }

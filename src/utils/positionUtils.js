@@ -11,10 +11,12 @@ export const getTimeFromMousePosition = (
   mouseY,
   containerRect,
   currentDate,
-  hourHeight = 80
+  hourHeight = 80,
+  scrollTop = 0
 ) => {
-  const scrollTop = window.scrollY || document.documentElement.scrollTop;
-  const relativeY = Math.max(0, mouseY + scrollTop - containerRect.top); // Ensure relativeY is not negative
+  // Note: scrollTop should be passed by the caller if using a scrollable container
+  // For window scroll, pass window.scrollY; for container scroll, pass container.scrollTop
+  const relativeY = Math.max(0, mouseY - containerRect.top + scrollTop); // Ensure relativeY is not negative
 
   // --- Handle variable last slot height ---
   const standardGridHeight = 23 * hourHeight; // Height up to 23:00

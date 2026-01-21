@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { addDays, getISOWeek } from "date-fns";
+import { useState, useCallback, useEffect, useRef, useMemo, useDeferredValue, startTransition } from "react";
+import { addDays, getISOWeek, isSameDay } from "date-fns";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
   DndContext, 
@@ -83,6 +83,13 @@ const ViewType = {
 export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [viewType, setViewType] = useState(ViewType.WEEK);
   const [currentDate, setCurrentDate] = useState(selectedDate);
+  // Visible date tracks what's shown in the header as user scrolls (for infinite scroll)
+  const [visibleDate, setVisibleDate] = useState(selectedDate);
+  // Visible date range for highlighting in the mini calendar (7 days from visible date)
+  const [visibleDateRange, setVisibleDateRange] = useState(() => ({
+    start: selectedDate,
+    end: addDays(selectedDate, 6),
+  }));
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showTodaysTasks, setShowTodaysTasks] = useState(false);
@@ -103,6 +110,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   });
   const [isResizing, setIsResizing] = useState(false);
   const colors = TAG_COLORS;
+  
+  // Store the getDateFromPosition callback from VirtualizedWeekView for drag-to-move
+  const getDateFromPositionRef = useRef(null);
   const commandBarRef = useRef(null);
   const timeGridRef = useRef(null);
 
@@ -120,8 +130,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   // Refs for mouse move handler
   const isDraggingTaskRef = useRef(false);
   const activeTaskRef = useRef(null);
+  const activeTaskEventRef = useRef(null);
+  const activeEventRef = useRef(null);
   const selectedDateRef = useRef(selectedDate);
   const viewTypeRef = useRef(viewType);
+  
+  // Edge scroll refs for week navigation during drag
+  const edgeScrollTimeoutRef = useRef(null);
+  const lastEdgeScrollTimeRef = useRef(0);
+  const EDGE_SCROLL_ZONE = 60; // pixels from edge to trigger scroll
+  const EDGE_SCROLL_DELAY = 400; // ms to wait before scrolling
   
   // Update refs when state changes
   useEffect(() => {
@@ -133,6 +151,14 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   }, [activeTask]);
   
   useEffect(() => {
+    activeTaskEventRef.current = activeTaskEvent;
+  }, [activeTaskEvent]);
+  
+  useEffect(() => {
+    activeEventRef.current = activeEvent;
+  }, [activeEvent]);
+  
+  useEffect(() => {
     selectedDateRef.current = selectedDate;
   }, [selectedDate]);
   
@@ -140,12 +166,16 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     viewTypeRef.current = viewType;
   }, [viewType]);
 
-  // Cleanup mouse listener on unmount
+  // Cleanup mouse listener and edge scroll timeout on unmount
   useEffect(() => {
     return () => {
       if (handleMouseMoveRef.currentHandler) {
         document.removeEventListener('mousemove', handleMouseMoveRef.currentHandler);
         handleMouseMoveRef.currentHandler = null;
+      }
+      if (edgeScrollTimeoutRef.current) {
+        clearTimeout(edgeScrollTimeoutRef.current);
+        edgeScrollTimeoutRef.current = null;
       }
     };
   }, []);
@@ -256,6 +286,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     };
   }, []);
 
+  // Selected event state - must be declared before useEventManagement
+  const [selectedEventId, setSelectedEventId] = useState(null);
+
   const {
     events,
     setEvents,
@@ -263,7 +296,8 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     handleUpdateEvent,
     handleDeleteEvent,
     handleDeleteSeriesEvents,
-  } = useEventManagement(commandBarRef);
+    finalizeNewEvent,
+  } = useEventManagement(commandBarRef, selectedEventId, setSelectedEventId);
 
   // Get the event filtering hook
   const { getTaskEventsForView } = useEventFiltering();
@@ -321,7 +355,6 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
-  const [selectedEventId, setSelectedEventId] = useState(null);
 
   // Callback to clear selected event
   const clearSelectedEvent = useCallback(() => {
@@ -367,6 +400,12 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         eventData,
         originalEvent,
       });
+    },
+    getDateFromMousePositionCallback: (clientX) => {
+      if (getDateFromPositionRef.current) {
+        return getDateFromPositionRef.current(clientX);
+      }
+      return null;
     },
   });
 
@@ -527,9 +566,10 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       display: 'block'
     };
 
-    // Draft events (from drag-to-create) - solid style, no dashed border
-    if (event.isDraft) {
-      style.opacity = 0.7;
+    // Events being created (empty title with UUID) - use selected state styling (full opacity)
+    const isBeingCreated = event.title === '' && event.id?.includes('-');
+    if (isBeingCreated) {
+      // No opacity change - events being created should look like selected events
     }
 
     // Add preview styling
@@ -608,7 +648,53 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   useEffect(() => {
     console.log('Calendar: selectedDate prop changed to:', selectedDate);
     setCurrentDate(selectedDate);
+    setVisibleDate(selectedDate); // Also sync visible date for header
+    // Also sync visible date range for mini calendar
+    setVisibleDateRange({
+      start: selectedDate,
+      end: addDays(selectedDate, 6),
+    });
   }, [selectedDate]);
+
+  // Ref to track last visible date to avoid unnecessary state updates
+  const lastVisibleDateRef = useRef(selectedDate);
+  const visibleDateUpdateTimeoutRef = useRef(null);
+  
+  // Debounced handler for visible date changes during scroll
+  const handleVisibleDateChange = useCallback((date) => {
+    // Skip if date hasn't actually changed (same day)
+    if (lastVisibleDateRef.current && isSameDay(date, lastVisibleDateRef.current)) {
+      return;
+    }
+    
+    // Clear any pending update
+    if (visibleDateUpdateTimeoutRef.current) {
+      clearTimeout(visibleDateUpdateTimeoutRef.current);
+    }
+    
+    // Debounce the state update to reduce re-renders during fast scrolling
+    visibleDateUpdateTimeoutRef.current = setTimeout(() => {
+      lastVisibleDateRef.current = date;
+      // Use startTransition to mark these updates as non-urgent
+      // This prevents the UI from blocking during scroll
+      startTransition(() => {
+        setVisibleDate(date);
+        setVisibleDateRange({
+          start: date,
+          end: addDays(date, 6),
+        });
+      });
+    }, 100); // 100ms debounce for smoother scrolling
+  }, []);
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (visibleDateUpdateTimeoutRef.current) {
+        clearTimeout(visibleDateUpdateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Helper functions for task drag and drop
   const calculateTaskDropPosition = useCallback((event, over) => {
@@ -701,7 +787,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
   const handleMouseMoveRef = useRef();
   
   handleMouseMoveRef.current = (e) => {
-    if (!isDraggingTaskRef.current || (!activeTaskRef.current && !activeTaskEvent && !activeEvent)) {
+    if (!isDraggingTaskRef.current || (!activeTaskRef.current && !activeTaskEventRef.current && !activeEventRef.current)) {
       return;
     }
 
@@ -720,7 +806,56 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     if (e.clientX < containerRect.left || e.clientX > containerRect.right ||
         e.clientY < containerRect.top || e.clientY > containerRect.bottom) {
       setTaskDropPreview(null);
+      // Clear edge scroll timeout when leaving calendar area
+      if (edgeScrollTimeoutRef.current) {
+        clearTimeout(edgeScrollTimeoutRef.current);
+        edgeScrollTimeoutRef.current = null;
+      }
       return;
+    }
+    
+    // Edge detection for week navigation during drag (only for week view)
+    if (viewTypeRef.current === ViewType.WEEK) {
+      const timeColumnWidth = 60;
+      const distanceFromLeft = e.clientX - containerRect.left - timeColumnWidth;
+      const distanceFromRight = containerRect.right - e.clientX;
+      const now = Date.now();
+      
+      // Check if near left edge (go to previous week)
+      if (distanceFromLeft < EDGE_SCROLL_ZONE && distanceFromLeft >= 0) {
+        if (!edgeScrollTimeoutRef.current && now - lastEdgeScrollTimeRef.current > EDGE_SCROLL_DELAY + 100) {
+          edgeScrollTimeoutRef.current = setTimeout(() => {
+            // Scroll the calendar left (previous days)
+            if (timeGridRef.current) {
+              const scrollAmount = timeGridRef.current.clientWidth / 7 * 3; // Scroll 3 days
+              timeGridRef.current.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+              lastEdgeScrollTimeRef.current = Date.now();
+            }
+            edgeScrollTimeoutRef.current = null;
+          }, EDGE_SCROLL_DELAY);
+        }
+      }
+      // Check if near right edge (go to next week)
+      else if (distanceFromRight < EDGE_SCROLL_ZONE) {
+        if (!edgeScrollTimeoutRef.current && now - lastEdgeScrollTimeRef.current > EDGE_SCROLL_DELAY + 100) {
+          edgeScrollTimeoutRef.current = setTimeout(() => {
+            // Scroll the calendar right (next days)
+            if (timeGridRef.current) {
+              const scrollAmount = timeGridRef.current.clientWidth / 7 * 3; // Scroll 3 days
+              timeGridRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+              lastEdgeScrollTimeRef.current = Date.now();
+            }
+            edgeScrollTimeoutRef.current = null;
+          }, EDGE_SCROLL_DELAY);
+        }
+      }
+      // Not near edges - clear any pending scroll
+      else {
+        if (edgeScrollTimeoutRef.current) {
+          clearTimeout(edgeScrollTimeoutRef.current);
+          edgeScrollTimeoutRef.current = null;
+        }
+      }
     }
 
     const scrollTop = calendarContainer.scrollTop;
@@ -740,15 +875,15 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     
     // Get duration - preserve original duration for existing items, use default for new tasks
     let durationMinutes;
-    const activeItem = activeTaskRef.current || activeTaskEvent || activeEvent;
+    const activeItem = activeTaskRef.current || activeTaskEventRef.current || activeEventRef.current;
     
-    if (activeTaskEvent) {
+    if (activeTaskEventRef.current) {
       // For TaskEventItems, preserve the original task duration
-      const originalDuration = activeTaskEvent.end.getTime() - activeTaskEvent.start.getTime();
+      const originalDuration = activeTaskEventRef.current.end.getTime() - activeTaskEventRef.current.start.getTime();
       durationMinutes = Math.round(originalDuration / (1000 * 60));
-    } else if (activeEvent) {
+    } else if (activeEventRef.current) {
       // For regular events, preserve the original event duration
-      const originalDuration = activeEvent.end.getTime() - activeEvent.start.getTime();
+      const originalDuration = activeEventRef.current.end.getTime() - activeEventRef.current.start.getTime();
       durationMinutes = Math.round(originalDuration / (1000 * 60));
     } else if (activeTaskRef.current?.duration) {
       // For tasks with specified duration, use that
@@ -768,26 +903,42 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
     // For week view, calculate which day column
     let column = 0;
     if (viewTypeRef.current === ViewType.WEEK) {
-      // Get the main grid area width (excluding the 60px time column)
-      const timeColumnWidth = 60;
-      const gridWidth = containerRect.width - timeColumnWidth;
-      const adjustedX = relativeX - timeColumnWidth;
-      
-      if (adjustedX >= 0) {
-        const dayWidth = gridWidth / 7;
-        column = Math.floor(adjustedX / dayWidth);
-        column = Math.max(0, Math.min(6, column)); // Clamp to 0-6
+      // Use the getDateFromPosition callback from VirtualizedWeekView if available
+      if (getDateFromPositionRef.current) {
+        const targetDate = getDateFromPositionRef.current(e.clientX);
+        if (targetDate) {
+          // Calculate column based on the target date relative to visible week
+          const weekStart = new Date(selectedDateRef.current);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          const daysDiff = Math.floor((targetDate.getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000));
+          column = Math.max(0, Math.min(6, daysDiff));
+          
+          // Set the start and end dates to the target day
+          start.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+          end.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+        }
+      } else {
+        // Fallback for non-virtualized week view
+        const timeColumnWidth = 60;
+        const gridWidth = containerRect.width - timeColumnWidth;
+        const adjustedX = relativeX - timeColumnWidth;
         
-        // Adjust date for the correct day of the week
-        const weekStart = new Date(selectedDateRef.current);
-        weekStart.setDate(weekStart.getDate() - weekStart.getDay());
-        
-        const targetDate = new Date(weekStart);
-        targetDate.setDate(weekStart.getDate() + column);
-        
-        // Set the start and end dates to the target day
-        start.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-        end.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+        if (adjustedX >= 0) {
+          const dayWidth = gridWidth / 7;
+          column = Math.floor(adjustedX / dayWidth);
+          column = Math.max(0, Math.min(6, column)); // Clamp to 0-6
+          
+          // Adjust date for the correct day of the week
+          const weekStart = new Date(selectedDateRef.current);
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+          
+          const targetDate = new Date(weekStart);
+          targetDate.setDate(weekStart.getDate() + column);
+          
+          // Set the start and end dates to the target day
+          start.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+          end.setFullYear(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+        }
       }
     }
     
@@ -795,7 +946,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       start,
       end,
       column,
-      task: activeTaskRef.current || activeTaskEvent || activeEvent
+      task: activeTaskRef.current || activeTaskEventRef.current || activeEventRef.current
     });
   };
 
@@ -1493,13 +1644,13 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
         </div>
         <div className="flex items-center">
             <h1 className={`text-sm font-semibold`}>
-              {selectedDate.toLocaleString("en-US", { month: "long" })}
+              {visibleDate.toLocaleString("en-US", { month: "long" })}
             </h1>
             <span className="text-sm font-regular text-light-text/50 dark:text-dark-text/50 ml-1">
-              {selectedDate.getFullYear()}
+              {visibleDate.getFullYear()}
             </span>
             <span className="text-[10px] font-semibold px-1.5 py-1 bg-light-bg-lighter dark:bg-white/5 rounded-[5px] font-regular text-light-text/50 dark:text-dark-text/50 ml-2">
-              W{getISOWeek(selectedDate)}
+              W{getISOWeek(visibleDate)}
             </span>
           </div>
           </div>
@@ -1609,6 +1760,7 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                 }}
                 setIsVisible={setIsSidebarVisible}
                 showTodaysTasks={showTodaysTasks}
+                visibleDateRange={visibleDateRange}
               />
             </motion.div>
           </motion.div>
@@ -1673,11 +1825,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
                   handleToggleTaskCompletion={handleToggleTaskCompletion}
                   selectedEventId={selectedEventId}
                   setSelectedEventId={setSelectedEventId}
-                  onDateChange={(date) => {
-                    setCurrentDate(date);
-                    if (onDateSelect) {
-                      onDateSelect(date);
-                    }
+                  onDateChange={handleVisibleDateChange}
+                  onGetDateFromPositionReady={(fn) => {
+                    getDateFromPositionRef.current = fn;
                   }}
                 />
               )}
@@ -1949,8 +2099,9 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
       </motion.div>
       <CommandBar
         ref={commandBarRef}
-        onCreateEvent={useCallback(handleCreateEvent, [])}
-        onUpdateEvent={useCallback(handleUpdateEvent, [])}
+        onCreateEvent={handleCreateEvent}
+        onUpdateEvent={handleUpdateEvent}
+        onFinalizeNewEvent={finalizeNewEvent}
         setRepeatEditModalState={setRepeatEditModalState}
         onPrevious={useCallback(
           () => handlePrevious(viewType, currentDate, onDateSelect),
@@ -1969,9 +2120,11 @@ export default function Calendar({ selectedDate = new Date(), onDateSelect }) {
             dropPreview: null,
             isEventCreationOpen: false,
           }));
-          // Remove any draft events when command bar closes (clicking outside = discard)
-          setEvents(prev => prev.filter(event => !event.isDraft));
-        }, [handleCommandBarClose, setDragState, setEvents])}
+          // Don't remove any events here - let the EventForm handle cleanup via _shouldDelete flag
+          // Events that should be removed will be handled by the discard event in EventForm
+          // Clear selected event so the event appears deselected
+          setSelectedEventId(null);
+        }, [handleCommandBarClose, setDragState, setSelectedEventId])}
         onCreateTask={useCallback((newTask) => handleCreateTask(newTask), [])}
         onUpdateTask={useCallback(
           (updateTask) => handleUpdateTask(updateTask),

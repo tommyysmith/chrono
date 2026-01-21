@@ -1,7 +1,50 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalQuery } from "./_generated/server";
+import { action, mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getAuthUserId } from "@convex-dev/auth/server";
+
+// Helper function to refresh Google OAuth access token using refresh token
+async function refreshAccessToken(refreshToken: string): Promise<{ accessToken: string; expiresIn: number } | null> {
+  const clientId = process.env.AUTH_GOOGLE_ID;
+  const clientSecret = process.env.AUTH_GOOGLE_SECRET;
+  
+  if (!clientId || !clientSecret) {
+    console.error("[refreshAccessToken] Missing Google OAuth credentials in environment");
+    return null;
+  }
+  
+  try {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[refreshAccessToken] Failed to refresh token:", response.status, errorText);
+      return null;
+    }
+    
+    const data = await response.json();
+    console.log("[refreshAccessToken] Successfully refreshed access token");
+    
+    return {
+      accessToken: data.access_token,
+      expiresIn: data.expires_in || 3600, // Default 1 hour
+    };
+  } catch (error) {
+    console.error("[refreshAccessToken] Error refreshing token:", error);
+    return null;
+  }
+}
 
 // Helper to get current user ID (for mutations/queries only)
 async function getCurrentUserId(ctx: any) {
@@ -541,7 +584,8 @@ export const fetchGoogleCalendarList = action({
       throw new Error("No calendars connected - please sign in first");
     }
     
-    const accessToken = connection[0].accessTokenEncrypted;
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, connection[0]);
     
     if (!accessToken || accessToken === "pending_oauth") {
       throw new Error("Invalid access token. Please sign out and sign back in.");
@@ -706,59 +750,116 @@ function buildGoogleRecurrence(repeat: string, rruleOptions: any, startDate: Dat
   };
   
   let rruleParts: string[] = [];
+
+  const normalizeNumberArray = (value: any) => {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => (typeof item === 'string' ? parseInt(item, 10) : item))
+      .filter((item) => Number.isFinite(item));
+  };
+
+  const normalizeByweekday = (value: any) => {
+    if (!Array.isArray(value)) return [];
+    const stringMap: Record<string, number> = {
+      MO: 0, TU: 1, WE: 2, TH: 3, FR: 4, SA: 5, SU: 6,
+    };
+    return value
+      .map((day) => {
+        if (typeof day === 'number') return day;
+        if (typeof day === 'string') return stringMap[day.toUpperCase()];
+        if (day && typeof day === 'object') {
+          if (typeof day.weekday === 'number') return day.weekday;
+          if (typeof day.day === 'number') return day.day;
+        }
+        return undefined;
+      })
+      .filter((day) => Number.isFinite(day));
+  };
+
+  const hasRRuleOptions = !!rruleOptions && (
+    typeof rruleOptions.freq === 'number' ||
+    typeof rruleOptions.interval === 'number' ||
+    rruleOptions.until ||
+    rruleOptions.count ||
+    (Array.isArray(rruleOptions.byweekday) && rruleOptions.byweekday.length > 0) ||
+    (Array.isArray(rruleOptions.bymonthday) && rruleOptions.bymonthday.length > 0) ||
+    (Array.isArray(rruleOptions.bymonth) && rruleOptions.bymonth.length > 0)
+  );
+
+  const effectiveRRuleOptions = hasRRuleOptions ? rruleOptions : null;
   
-  if (rruleOptions) {
+  if (effectiveRRuleOptions) {
     // Use rruleOptions if available
-    const freq = freqMap[rruleOptions.freq] || 'DAILY';
+    const freq = freqMap[effectiveRRuleOptions.freq] || 'DAILY';
     rruleParts.push(`FREQ=${freq}`);
     
-    if (rruleOptions.interval && rruleOptions.interval > 1) {
-      rruleParts.push(`INTERVAL=${rruleOptions.interval}`);
+    if (effectiveRRuleOptions.interval && effectiveRRuleOptions.interval > 1) {
+      rruleParts.push(`INTERVAL=${effectiveRRuleOptions.interval}`);
     }
     
-    if (rruleOptions.until) {
-      const untilDate = new Date(rruleOptions.until);
+    if (effectiveRRuleOptions.until) {
+      const untilDate = new Date(effectiveRRuleOptions.until);
       const untilStr = untilDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
       rruleParts.push(`UNTIL=${untilStr}`);
     }
     
-    if (rruleOptions.count) {
-      rruleParts.push(`COUNT=${rruleOptions.count}`);
+    if (effectiveRRuleOptions.count) {
+      rruleParts.push(`COUNT=${effectiveRRuleOptions.count}`);
     }
     
-    if (rruleOptions.byweekday && rruleOptions.byweekday.length > 0) {
-      const days = rruleOptions.byweekday.map((d: number) => dayMap[d]).join(',');
-      rruleParts.push(`BYDAY=${days}`);
+    const byweekday = normalizeByweekday(effectiveRRuleOptions.byweekday);
+    if (byweekday.length > 0) {
+      const days = byweekday.map((d: number) => dayMap[d]).filter(Boolean).join(',');
+      if (days) {
+        rruleParts.push(`BYDAY=${days}`);
+      }
     }
     
-    if (rruleOptions.bymonthday && rruleOptions.bymonthday.length > 0) {
-      rruleParts.push(`BYMONTHDAY=${rruleOptions.bymonthday.join(',')}`);
+    const bymonthday = normalizeNumberArray(effectiveRRuleOptions.bymonthday);
+    if (bymonthday.length > 0) {
+      rruleParts.push(`BYMONTHDAY=${bymonthday.join(',')}`);
     }
     
-    if (rruleOptions.bymonth && rruleOptions.bymonth.length > 0) {
-      rruleParts.push(`BYMONTH=${rruleOptions.bymonth.join(',')}`);
+    const bymonth = normalizeNumberArray(effectiveRRuleOptions.bymonth);
+    if (bymonth.length > 0) {
+      rruleParts.push(`BYMONTH=${bymonth.join(',')}`);
     }
   } else {
     // Build from simple repeat value
+    const jsToRRule: Record<number, string> = { 0: 'SU', 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR', 6: 'SA' };
+    const dayOfWeek = startDate.getDay();
+    const dayOfMonth = startDate.getDate();
+    
     switch (repeat) {
       case 'daily':
         rruleParts.push('FREQ=DAILY');
         break;
+      case 'weekday':
       case 'weekdays':
         rruleParts.push('FREQ=WEEKLY', 'BYDAY=MO,TU,WE,TH,FR');
         break;
       case 'weekly':
         rruleParts.push('FREQ=WEEKLY');
-        // Add the day of week from start date
-        const dayOfWeek = startDate.getDay();
-        const jsToRRule: Record<number, string> = { 0: 'SU', 1: 'MO', 2: 'TU', 3: 'WE', 4: 'TH', 5: 'FR', 6: 'SA' };
         rruleParts.push(`BYDAY=${jsToRRule[dayOfWeek]}`);
         break;
       case 'biweekly':
         rruleParts.push('FREQ=WEEKLY', 'INTERVAL=2');
+        rruleParts.push(`BYDAY=${jsToRRule[dayOfWeek]}`);
         break;
       case 'monthly':
         rruleParts.push('FREQ=MONTHLY');
+        rruleParts.push(`BYMONTHDAY=${dayOfMonth}`);
+        break;
+      case 'monthlyWeekday':
+        // e.g., "2nd Monday of every month"
+        const weekNum = Math.ceil(dayOfMonth / 7);
+        rruleParts.push('FREQ=MONTHLY');
+        rruleParts.push(`BYDAY=${weekNum}${jsToRRule[dayOfWeek]}`);
+        break;
+      case 'monthlyLastWeekday':
+        // e.g., "Last Monday of every month"
+        rruleParts.push('FREQ=MONTHLY');
+        rruleParts.push(`BYDAY=-1${jsToRRule[dayOfWeek]}`);
         break;
       case 'yearly':
         rruleParts.push('FREQ=YEARLY');
@@ -771,13 +872,71 @@ function buildGoogleRecurrence(repeat: string, rruleOptions: any, startDate: Dat
   return rruleParts.length > 0 ? [`RRULE:${rruleParts.join(';')}`] : undefined;
 }
 
+// Internal mutation to update calendar tokens after refresh
+export const updateCalendarTokens = internalMutation({
+  args: {
+    calendarId: v.id("connectedCalendars"),
+    accessToken: v.string(),
+    tokenExpiry: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.calendarId, {
+      accessTokenEncrypted: args.accessToken,
+      tokenExpiry: args.tokenExpiry,
+      lastSyncedAt: Date.now(),
+    });
+  },
+});
+
+// Helper to get a valid access token, refreshing if needed
+async function getValidAccessToken(
+  ctx: any,
+  calendar: any,
+  forceRefresh: boolean = false
+): Promise<string | null> {
+  let accessToken = calendar.accessTokenEncrypted;
+  const refreshToken = calendar.refreshTokenEncrypted;
+  const tokenExpiry = calendar.tokenExpiry;
+  
+  // Check if token is expired or about to expire (within 5 minutes)
+  const now = Date.now();
+  const isExpired = tokenExpiry && now >= tokenExpiry - 5 * 60 * 1000;
+  
+  // Refresh if expired, forced, or if we don't have a valid expiry time (proactive refresh)
+  const shouldRefresh = forceRefresh || isExpired || !tokenExpiry;
+  
+  if (shouldRefresh && refreshToken) {
+    console.log("[getValidAccessToken] Attempting token refresh...", { forceRefresh, isExpired, hasExpiry: !!tokenExpiry });
+    const refreshResult = await refreshAccessToken(refreshToken);
+    
+    if (refreshResult) {
+      accessToken = refreshResult.accessToken;
+      const newExpiry = now + refreshResult.expiresIn * 1000;
+      
+      // Update the token in the database
+      await ctx.runMutation(internal.googleCalendar.updateCalendarTokens, {
+        calendarId: calendar._id,
+        accessToken: accessToken,
+        tokenExpiry: newExpiry,
+      });
+      
+      console.log("[getValidAccessToken] Token refreshed successfully");
+    } else {
+      console.error("[getValidAccessToken] Failed to refresh token");
+      // If force refresh failed, return null; otherwise return existing token to try
+      if (forceRefresh) return null;
+    }
+  }
+  
+  return accessToken;
+}
+
 // Sync events from Google Calendar (HTTP action) - Enhanced with RRULE support
 export const syncGoogleCalendar = action({
   args: {
     calendarId: v.string(),
   },
   handler: async (ctx, args) => {
-    
     // Get calendar connection (auth is checked in the query)
     const connection = await ctx.runQuery(api.googleCalendar.listConnectedCalendars);
     
@@ -794,8 +953,8 @@ export const syncGoogleCalendar = action({
     // Get or create a default view for the events
     const defaultViewId = await ctx.runMutation(api.views.getOrCreateDefaultView);
 
-    // Get access token
-    const accessToken = calendar.accessTokenEncrypted;
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, calendar);
     
     // Check if we have a valid token (not a placeholder)
     if (!accessToken || accessToken === "pending_oauth") {
@@ -819,7 +978,7 @@ export const syncGoogleCalendar = action({
     console.log("[syncGoogleCalendar] Fetching from calendar:", args.calendarId);
     console.log("[syncGoogleCalendar] API URL:", apiUrl);
     
-    const response = await fetch(
+    let response = await fetch(
       apiUrl,
       {
         headers: {
@@ -827,6 +986,21 @@ export const syncGoogleCalendar = action({
         },
       }
     );
+
+    // If we get a 401, try refreshing the token and retry once
+    if (response.status === 401 && calendar.refreshTokenEncrypted) {
+      console.log("[syncGoogleCalendar] Got 401, attempting token refresh and retry...");
+      const refreshedToken = await getValidAccessToken(ctx, calendar, true);
+      
+      if (refreshedToken && refreshedToken !== accessToken) {
+        console.log("[syncGoogleCalendar] Retrying with refreshed token...");
+        response = await fetch(apiUrl, {
+          headers: {
+            Authorization: `Bearer ${refreshedToken}`,
+          },
+        });
+      }
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -1104,7 +1278,7 @@ export const connectAdditionalCalendar = mutation({
   },
 });
 
-// Create event in Google Calendar - Enhanced with recurrence support
+// Create event in Google Calendar - Enhanced with recurrence support and Google Meet
 export const createGoogleEvent = action({
   args: {
     calendarId: v.string(),
@@ -1122,6 +1296,8 @@ export const createGoogleEvent = action({
         displayName: v.optional(v.string()),
         responseStatus: v.optional(v.string()),
       }))),
+      // Google Meet conferencing
+      addGoogleMeet: v.optional(v.boolean()),
     }),
   },
   handler: async (ctx, args) => {
@@ -1139,20 +1315,42 @@ export const createGoogleEvent = action({
       throw new Error("Calendar connection not found");
     }
 
-    const accessToken = calendar.accessTokenEncrypted;
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, calendar);
+    
+    if (!accessToken) {
+      throw new Error("Failed to get valid access token. Please sign out and sign back in.");
+    }
+    
     const startDate = new Date(args.event.start);
+    const endDate = new Date(args.event.end);
+    
+    // Use calendar timezone when available; otherwise default to UTC
+    const rawTimeZone = calendar.timeZone ?? calendar.googleCalendarTimezone ?? "UTC";
+    const timeZone = typeof rawTimeZone === "string" && rawTimeZone.trim() ? rawTimeZone : "UTC";
+    const isAllDay = args.event.isAllDay === true;
 
     const googleEvent: any = {
       summary: args.event.title,
       description: args.event.description || "",
       location: args.event.location || "",
-      start: args.event.isAllDay
+      start: isAllDay
         ? { date: startDate.toISOString().split("T")[0] }
-        : { dateTime: startDate.toISOString() },
-      end: args.event.isAllDay
-        ? { date: new Date(args.event.end).toISOString().split("T")[0] }
-        : { dateTime: new Date(args.event.end).toISOString() },
+        : { dateTime: startDate.toISOString(), timeZone },
+      end: isAllDay
+        ? { date: endDate.toISOString().split("T")[0] }
+        : { dateTime: endDate.toISOString(), timeZone },
     };
+
+    // Final guard: ensure timed events always include a valid timeZone
+    if (!isAllDay) {
+      if (!googleEvent.start?.timeZone) {
+        googleEvent.start = { ...googleEvent.start, timeZone };
+      }
+      if (!googleEvent.end?.timeZone) {
+        googleEvent.end = { ...googleEvent.end, timeZone };
+      }
+    }
 
     // Add attendees if specified
     if (args.event.attendees && args.event.attendees.length > 0) {
@@ -1164,17 +1362,38 @@ export const createGoogleEvent = action({
     }
 
     // Add recurrence if specified
+    console.log("[createGoogleEvent] Building recurrence - repeat:", args.event.repeat, "rruleOptions:", JSON.stringify(args.event.rruleOptions));
     const recurrence = buildGoogleRecurrence(
       args.event.repeat || 'none',
       args.event.rruleOptions,
       startDate
     );
+    console.log("[createGoogleEvent] Built recurrence:", JSON.stringify(recurrence));
     if (recurrence) {
       googleEvent.recurrence = recurrence;
     }
+    
+    console.log("[createGoogleEvent] Final googleEvent object:", JSON.stringify(googleEvent));
+
+    // Add Google Meet conferencing if requested
+    if (args.event.addGoogleMeet) {
+      googleEvent.conferenceData = {
+        createRequest: {
+          requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          conferenceSolutionKey: {
+            type: 'hangoutsMeet'
+          }
+        }
+      };
+    }
+
+    // Build URL with conferenceDataVersion if adding Google Meet
+    const apiUrl = args.event.addGoogleMeet
+      ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all&conferenceDataVersion=1`
+      : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all`;
 
     const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events?sendUpdates=all`,
+      apiUrl,
       {
         method: "POST",
         headers: {
@@ -1192,7 +1411,11 @@ export const createGoogleEvent = action({
     }
 
     const createdEvent = await response.json();
-    return { googleEventId: createdEvent.id };
+    return { 
+      googleEventId: createdEvent.id,
+      hangoutLink: createdEvent.hangoutLink || null,
+      conferenceData: createdEvent.conferenceData || null,
+    };
   },
 });
 
@@ -1215,6 +1438,9 @@ export const updateGoogleEvent = action({
         displayName: v.optional(v.string()),
         responseStatus: v.optional(v.string()),
       }))),
+      // Google Meet conferencing
+      addGoogleMeet: v.optional(v.boolean()),
+      removeGoogleMeet: v.optional(v.boolean()),
     }),
   },
   handler: async (ctx, args) => {
@@ -1232,7 +1458,12 @@ export const updateGoogleEvent = action({
       throw new Error("Calendar connection not found");
     }
 
-    const accessToken = calendar.accessTokenEncrypted;
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, calendar);
+    
+    if (!accessToken) {
+      throw new Error("Failed to get valid access token. Please sign out and sign back in.");
+    }
 
     // First, get the existing event to merge with updates
     const getResponse = await fetch(
@@ -1256,6 +1487,9 @@ export const updateGoogleEvent = action({
     const isAllDay = args.event.isAllDay ?? !!existingEvent.start?.date;
     const startDate = args.event.start ? new Date(args.event.start) : null;
     const endDate = args.event.end ? new Date(args.event.end) : null;
+    
+    // Use calendar timezone when available; otherwise default to UTC
+    const timeZone = calendar.timeZone || calendar.googleCalendarTimezone || "UTC";
 
     const googleEvent: any = {
       summary: args.event.title ?? existingEvent.summary,
@@ -1267,12 +1501,21 @@ export const updateGoogleEvent = action({
     if (startDate) {
       googleEvent.start = isAllDay
         ? { date: startDate.toISOString().split("T")[0] }
-        : { dateTime: startDate.toISOString() };
+        : { dateTime: startDate.toISOString(), timeZone };
     }
     if (endDate) {
       googleEvent.end = isAllDay
         ? { date: endDate.toISOString().split("T")[0] }
-        : { dateTime: endDate.toISOString() };
+        : { dateTime: endDate.toISOString(), timeZone };
+    }
+
+    if (!isAllDay) {
+      if (googleEvent.start?.dateTime && !googleEvent.start.timeZone) {
+        googleEvent.start = { ...googleEvent.start, timeZone };
+      }
+      if (googleEvent.end?.dateTime && !googleEvent.end.timeZone) {
+        googleEvent.end = { ...googleEvent.end, timeZone };
+      }
     }
 
     // Update recurrence if specified
@@ -1299,8 +1542,32 @@ export const updateGoogleEvent = action({
       }));
     }
 
+    // Handle Google Meet conferencing
+    let needsConferenceDataVersion = false;
+    if (args.event.addGoogleMeet && !existingEvent.hangoutLink) {
+      // Add Google Meet to an event that doesn't have one
+      googleEvent.conferenceData = {
+        createRequest: {
+          requestId: `meet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          conferenceSolutionKey: {
+            type: 'hangoutsMeet'
+          }
+        }
+      };
+      needsConferenceDataVersion = true;
+    } else if (args.event.removeGoogleMeet && existingEvent.hangoutLink) {
+      // Remove Google Meet from an event
+      googleEvent.conferenceData = null;
+      needsConferenceDataVersion = true;
+    }
+
+    // Build URL with conferenceDataVersion if modifying conference data
+    const apiUrl = needsConferenceDataVersion
+      ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.googleEventId)}?sendUpdates=all&conferenceDataVersion=1`
+      : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.googleEventId)}?sendUpdates=all`;
+
     const response = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.googleEventId)}?sendUpdates=all`,
+      apiUrl,
       {
         method: "PATCH",
         headers: {
@@ -1318,7 +1585,12 @@ export const updateGoogleEvent = action({
     }
 
     const updatedEvent = await response.json();
-    return { success: true, googleEventId: updatedEvent.id };
+    return { 
+      success: true, 
+      googleEventId: updatedEvent.id,
+      hangoutLink: updatedEvent.hangoutLink || null,
+      conferenceData: updatedEvent.conferenceData || null,
+    };
   },
 });
 
@@ -1343,7 +1615,12 @@ export const deleteGoogleEvent = action({
       throw new Error("Calendar connection not found");
     }
 
-    const accessToken = calendar.accessTokenEncrypted;
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, calendar);
+    
+    if (!accessToken) {
+      throw new Error("Failed to get valid access token. Please sign out and sign back in.");
+    }
 
     const response = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.googleEventId)}`,
@@ -1366,13 +1643,190 @@ export const deleteGoogleEvent = action({
   },
 });
 
+// Update a specific instance of a recurring event in Google Calendar
+// This is used for "This event" edits where only one occurrence is modified
+export const updateRecurringEventInstance = action({
+  args: {
+    calendarId: v.string(),
+    recurringEventId: v.string(), // The base recurring event's Google ID
+    originalStartTime: v.string(), // ISO string of the original start time (e.g., "2026-01-20T13:00:00Z")
+    newStart: v.number(), // New start time as timestamp
+    newEnd: v.number(), // New end time as timestamp
+    title: v.optional(v.string()),
+    description: v.optional(v.string()),
+    location: v.optional(v.string()),
+    isAllDay: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // Get calendar connection
+    const connection = await ctx.runQuery(api.googleCalendar.listConnectedCalendars);
+    
+    if (!connection || connection.length === 0) {
+      throw new Error("Not authenticated or no calendars connected");
+    }
+    
+    const calendar = connection.find((c: any) => c.googleCalendarId === args.calendarId);
+    
+    if (!calendar) {
+      throw new Error("Calendar connection not found");
+    }
+
+    // Get access token (with automatic refresh if expired)
+    const accessToken = await getValidAccessToken(ctx, calendar);
+    
+    if (!accessToken) {
+      throw new Error("Failed to get valid access token. Please sign out and sign back in.");
+    }
+
+    // Build the instance ID: recurringEventId_originalStartTime (in RFC3339 format without punctuation)
+    // Google uses format like: eventId_20260120T130000Z
+    const originalDate = new Date(args.originalStartTime);
+    const formattedOriginalStart = originalDate.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const instanceId = `${args.recurringEventId}_${formattedOriginalStart}`;
+    
+    console.log("[updateRecurringEventInstance] Updating instance:", {
+      recurringEventId: args.recurringEventId,
+      originalStartTime: args.originalStartTime,
+      instanceId,
+      newStart: new Date(args.newStart).toISOString(),
+      newEnd: new Date(args.newEnd).toISOString(),
+    });
+
+    // First, try to get the specific instance
+    const getResponse = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(instanceId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!getResponse.ok) {
+      // If instance doesn't exist, try getting instances list and find the right one
+      console.log("[updateRecurringEventInstance] Instance not found directly, trying instances list");
+      
+      const instancesResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(args.calendarId)}/events/${encodeURIComponent(args.recurringEventId)}/instances?timeMin=${encodeURIComponent(new Date(args.originalStartTime).toISOString())}&timeMax=${encodeURIComponent(new Date(new Date(args.originalStartTime).getTime() + 86400000).toISOString())}&maxResults=10`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+      
+      if (!instancesResponse.ok) {
+        const errorText = await instancesResponse.text();
+        console.error("[updateRecurringEventInstance] Failed to get instances:", errorText);
+        throw new Error(`Failed to get recurring event instances: ${instancesResponse.statusText}`);
+      }
+      
+      const instancesData = await instancesResponse.json();
+      const targetInstance = instancesData.items?.find((inst: any) => {
+        const instStart = new Date(inst.start?.dateTime || inst.start?.date).getTime();
+        const targetStart = new Date(args.originalStartTime).getTime();
+        // Allow 1 minute tolerance for matching
+        return Math.abs(instStart - targetStart) < 60000;
+      });
+      
+      if (!targetInstance) {
+        console.error("[updateRecurringEventInstance] Could not find matching instance");
+        throw new Error("Could not find the specific recurring event instance");
+      }
+      
+      // Use the found instance ID
+      const foundInstanceId = targetInstance.id;
+      console.log("[updateRecurringEventInstance] Found instance via list:", foundInstanceId);
+      
+      // Update the found instance
+      return await updateInstanceById(ctx, accessToken, args.calendarId, foundInstanceId, args, calendar);
+    }
+
+    const existingInstance = await getResponse.json();
+    console.log("[updateRecurringEventInstance] Found instance directly:", existingInstance.id);
+    
+    // Update the instance
+    return await updateInstanceById(ctx, accessToken, args.calendarId, instanceId, args, calendar);
+  },
+});
+
+// Helper function to update an instance by its ID
+async function updateInstanceById(
+  ctx: any,
+  accessToken: string,
+  calendarId: string,
+  instanceId: string,
+  args: {
+    newStart: number;
+    newEnd: number;
+    title?: string;
+    description?: string;
+    location?: string;
+    isAllDay?: boolean;
+  },
+  calendar: any
+) {
+  const timeZone = calendar.timeZone || calendar.googleCalendarTimezone || "UTC";
+  const isAllDay = args.isAllDay ?? false;
+  
+  const startDate = new Date(args.newStart);
+  const endDate = new Date(args.newEnd);
+  
+  const googleEvent: any = {};
+  
+  if (args.title !== undefined) {
+    googleEvent.summary = args.title;
+  }
+  if (args.description !== undefined) {
+    googleEvent.description = args.description;
+  }
+  if (args.location !== undefined) {
+    googleEvent.location = args.location;
+  }
+  
+  if (isAllDay) {
+    googleEvent.start = { date: startDate.toISOString().split('T')[0] };
+    googleEvent.end = { date: endDate.toISOString().split('T')[0] };
+  } else {
+    googleEvent.start = { dateTime: startDate.toISOString(), timeZone };
+    googleEvent.end = { dateTime: endDate.toISOString(), timeZone };
+  }
+
+  console.log("[updateInstanceById] Updating with:", googleEvent);
+
+  const response = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(instanceId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(googleEvent),
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("[updateInstanceById] Failed:", response.statusText, errorText);
+    throw new Error(`Failed to update recurring event instance: ${response.statusText} - ${errorText}`);
+  }
+
+  const updatedInstance = await response.json();
+  console.log("[updateInstanceById] Successfully updated instance:", updatedInstance.id);
+  
+  return {
+    success: true,
+    instanceId: updatedInstance.id,
+  };
+}
+
 // Push local event to Google Calendar (for bi-directional sync)
 export const pushEventToGoogle = action({
   args: {
     eventId: v.id("events"),
   },
   handler: async (ctx, args) => {
-    
     // Get the event from our database
     const events = await ctx.runQuery(api.events.listEvents);
     const event = events.find((e: any) => e._id === args.eventId || e.id === args.eventId);
@@ -1380,6 +1834,9 @@ export const pushEventToGoogle = action({
     if (!event) {
       throw new Error("Event not found");
     }
+    
+    // DEBUG: Log the event data from Convex
+    console.log("[pushEventToGoogle] Event from Convex - repeat:", event.repeat, "rruleOptions:", JSON.stringify(event.rruleOptions));
     
     // Get connected calendars
     const calendars = await ctx.runQuery(api.googleCalendar.listConnectedCalendars);
@@ -1398,19 +1855,31 @@ export const pushEventToGoogle = action({
       location: event.location || "",
       start: event.start instanceof Date ? event.start.getTime() : event.start,
       end: event.end instanceof Date ? event.end.getTime() : event.end,
-      isAllDay: event.isAllDay || false,
+      isAllDay: event.isAllDay === true,
       repeat: event.repeat || "none",
       rruleOptions: event.rruleOptions,
       attendees: event.attendees || undefined,
+      addGoogleMeet: event.addGoogleMeet || false,
     };
+    
+    // DEBUG: Log the eventData being sent
+    console.log("[pushEventToGoogle] eventData being sent - repeat:", eventData.repeat, "rruleOptions:", JSON.stringify(eventData.rruleOptions));
     
     if (event.externalId) {
       // Update existing Google event
-      await ctx.runAction(api.googleCalendar.updateGoogleEvent, {
+      const result = await ctx.runAction(api.googleCalendar.updateGoogleEvent, {
         calendarId,
         googleEventId: event.externalId,
         event: eventData,
       });
+      
+      // Update local event with hangoutLink if returned
+      if (result.hangoutLink) {
+        await ctx.runMutation(api.events.updateEvent, {
+          id: event._id,
+          hangoutLink: result.hangoutLink,
+        });
+      }
       
       // Update local event with sync status
       await ctx.runMutation(api.events.updateEvent, {
@@ -1427,7 +1896,7 @@ export const pushEventToGoogle = action({
         event: eventData,
       });
       
-      // Update local event with Google ID
+      // Update local event with Google ID and hangoutLink if returned
       await ctx.runMutation(api.events.updateEvent, {
         id: event._id,
         externalId: result.googleEventId,
@@ -1435,9 +1904,10 @@ export const pushEventToGoogle = action({
         source: "local", // Keep as local since it originated here
         lastSyncedAt: Date.now(),
         syncStatus: "synced",
+        hangoutLink: result.hangoutLink || undefined,
       });
       
-      return { success: true, action: "created", googleEventId: result.googleEventId };
+      return { success: true, action: "created", googleEventId: result.googleEventId, hangoutLink: result.hangoutLink };
     }
   },
 });

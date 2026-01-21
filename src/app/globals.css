@@ -63,6 +63,28 @@
     transform: translateZ(0);
   }
   
+  /* Infinite scroll optimizations to prevent flashing */
+  .infinite-scroll-container {
+    -webkit-overflow-scrolling: touch;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: scroll-position;
+  }
+  
+  .infinite-scroll-content {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: layout style paint;
+  }
+  
+  /* Prevent paint flashing during scroll */
+  .scroll-stable {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    isolation: isolate;
+  }
+  
   /* Fix select-none for Safari browsers */
   .select-none {
     -webkit-user-select: none !important;

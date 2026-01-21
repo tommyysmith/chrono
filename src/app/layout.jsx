@@ -4,6 +4,7 @@ import "./globals.css";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/react"
 import { ConvexClientProvider } from "../components/ConvexClientProvider";
+import { Toaster } from "sonner";
 
 // Force dynamic rendering to avoid static generation issues
 export const dynamic = 'force-dynamic';
@@ -41,7 +42,13 @@ export default function RootLayout({ children }) {
             <div className="min-h-screen bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text">
               {children}
           <SpeedInsights />
-
+              <Toaster 
+                position="bottom-center"
+                toastOptions={{
+                  className: 'bg-dark-bg-lighter border border-dark-border text-dark-text',
+                  duration: 5000,
+                }}
+              />
             </div>
           </ThemeProvider>
         </ConvexClientProvider>

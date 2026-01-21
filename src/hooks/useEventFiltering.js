@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { isSameDay, addDays, startOfDay, endOfDay, endOfDay as endOfDayFn } from "date-fns";
 import { RRule } from "rrule";
 import { ViewType } from "../constants/views";
+import { eventToRRule } from "../utils/recurrenceUtils";
 
 export const useEventFiltering = () => {
   const expandRecurringEvents = useCallback((events, dateRangeStart, dateRangeEnd) => {
@@ -9,32 +10,36 @@ export const useEventFiltering = () => {
 
     events.forEach(event => {
       // Direct pass-through for non-recurring events
-      if (!event.rruleOptions && !event.seriesId) {
+      const isRecurring = event.rruleOptions || event.isRepeat || (event.repeat && event.repeat !== 'none');
+      if (!isRecurring) {
         expandedEvents.push(event);
         return;
       }
 
       try {
-        // Handle both types of recurring events: pre-defined (seriesId) and custom (rruleOptions)
+        // Handle recurring events - expand instances on-the-fly using RRULE
+        // This is the industry standard approach (single event with RRULE, expand for display)
 
-        // CASE 1: Events with seriesId that were already generated
-        // These should be passed through directly
-        if (event.seriesId) {
-          // Check if this event falls within our date range
-          const eventStart = new Date(event.start);
-          if (eventStart >= dateRangeStart && eventStart <= dateRangeEnd) {
-            expandedEvents.push(event);
-          }
-          return;
-        }
-
-        // CASE 2: Root events with rruleOptions that need to be expanded
-        // These are the template events that define the recurrence pattern
+        // Events with rruleOptions OR repeat pattern that need to be expanded
+        // These are the base events that define the recurrence pattern
+        let rule;
+        
         if (event.rruleOptions) {
-          const rule = new RRule({
+          // Use custom rruleOptions if available
+          rule = new RRule({
             ...event.rruleOptions,
             dtstart: new Date(event.start)
           });
+        } else if (event.repeat && event.repeat !== 'none') {
+          // Convert simple repeat pattern (daily, weekly, etc.) to RRule
+          rule = eventToRRule(event);
+        }
+        
+        if (!rule) {
+          // Couldn't create rule, pass through as-is
+          expandedEvents.push(event);
+          return;
+        }
 
           // Generate occurrences within the date range
           const occurrences = rule.between(dateRangeStart, dateRangeEnd, true);
@@ -46,6 +51,14 @@ export const useEventFiltering = () => {
               expandedEvents.push(event);
             }
             return;
+          }
+
+          // Get instance overrides for this recurring event (Notion Calendar style)
+          const instanceOverrides = event.instanceOverrides || {};
+          
+          // Debug: log if there are any instance overrides
+          if (Object.keys(instanceOverrides).length > 0) {
+            console.log('[useEventFiltering] Event has instanceOverrides:', event.id, instanceOverrides);
           }
 
           // For each occurrence, create an event instance
@@ -62,17 +75,46 @@ export const useEventFiltering = () => {
             // CRITICAL: For the *first real occurrence* (index 0), use the original ID
             // This ensures the base event can be manipulated
             const isFirstOccurrence = index === 0;
+            
+            // Check for instance override (Notion Calendar style)
+            // Use ISO date string as key for the override lookup
+            const dateKey = occurrenceStart.toISOString().split('T')[0]; // YYYY-MM-DD
+            const override = instanceOverrides[dateKey];
+            
+            // Debug: log override lookup
+            if (Object.keys(instanceOverrides).length > 0) {
+              console.log('[useEventFiltering] Checking override for dateKey:', dateKey, 'found:', !!override, 'available keys:', Object.keys(instanceOverrides));
+            }
+
+            // Calculate final start/end times, applying time offset if present in override
+            let finalStart = occurrenceStart;
+            let finalEnd = occurrenceEnd;
+            
+            if (override?.startOffset !== undefined || override?.endOffset !== undefined) {
+              // Apply time offsets from drag/resize operations
+              finalStart = new Date(occurrenceStart.getTime() + (override.startOffset || 0));
+              finalEnd = new Date(occurrenceEnd.getTime() + (override.endOffset || 0));
+            }
 
             expandedEvents.push({
               ...event,
+              // Apply instance override if exists (title, description, color, location, etc.)
+              // But exclude startOffset/endOffset as they're applied to the times above
+              ...(override ? {
+                title: override.title,
+                description: override.description,
+                color: override.color,
+                location: override.location,
+              } : {}),
               id: isFirstOccurrence ? event.id : `${event.id}_${index}`,
-              start: occurrenceStart,
-              end: occurrenceEnd,
+              start: finalStart,
+              end: finalEnd,
               isRecurring: true,
-              seriesId: event.id // The base event itself becomes the series ID
+              seriesId: event.id, // The base event itself becomes the series ID
+              _hasOverride: !!override, // Flag to indicate this instance has been individually edited
+              _overrideDateKey: dateKey, // Store the date key for later reference
             });
           });
-        }
       } catch (error) {
         console.error('Error expanding recurring event:', error);
         expandedEvents.push(event); // Fallback to original event

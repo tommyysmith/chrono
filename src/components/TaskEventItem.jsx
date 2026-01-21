@@ -1,4 +1,3 @@
-import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { useDraggable } from '@dnd-kit/core';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -136,7 +135,7 @@ const TaskEventItem = ({
     <TooltipProvider delayDuration={2000}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <motion.div
+          <div
             ref={setNodeRef}
             className={`${getTaskEventClasses()} ${repeatClass} ${isDragging ? 'opacity-0' : ''}`}
             style={{ ...eventStyle, ...dragStyle }}
@@ -343,7 +342,7 @@ const TaskEventItem = ({
             )}
 
 
-          </motion.div>
+          </div>
         </TooltipTrigger>
         {/* No tooltip for task events */}
       </Tooltip>

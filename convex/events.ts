@@ -47,6 +47,7 @@ export const createEvent = mutation({
     // Google Meet / Conference data
     hangoutLink: v.optional(v.string()),
     conferenceData: v.optional(v.any()),
+    addGoogleMeet: v.optional(v.boolean()),
     // Attendees
     attendees: v.optional(v.array(v.object({
       email: v.string(),
@@ -100,6 +101,7 @@ export const createEvent = mutation({
       syncStatus: args.syncStatus,
       hangoutLink: args.hangoutLink,
       conferenceData: args.conferenceData,
+      addGoogleMeet: args.addGoogleMeet,
       attendees: args.attendees,
       organizer: args.organizer,
       myResponseStatus: args.myResponseStatus,
@@ -125,6 +127,8 @@ export const updateEvent = mutation({
     seriesId: v.optional(v.string()),
     isRepeat: v.optional(v.boolean()),
     rruleOptions: v.optional(v.any()),
+    // Instance overrides for Notion Calendar-style editing
+    instanceOverrides: v.optional(v.any()),
     viewId: v.optional(v.string()),
     source: v.optional(v.string()),
     externalId: v.optional(v.string()),
@@ -135,6 +139,7 @@ export const updateEvent = mutation({
     // Google Meet / Conference data
     hangoutLink: v.optional(v.string()),
     conferenceData: v.optional(v.any()),
+    addGoogleMeet: v.optional(v.boolean()),
     // Attendees
     attendees: v.optional(v.array(v.object({
       email: v.string(),

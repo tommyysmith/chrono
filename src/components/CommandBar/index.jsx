@@ -16,6 +16,7 @@ const CommandBarInner = forwardRef(function CommandBarInner({
   onToday,
   onCreateEvent,
   onUpdateEvent,
+  onFinalizeNewEvent,
   onCreateTask,
   onUpdateTask,
   onToggleTaskCompletion,
@@ -63,11 +64,13 @@ const CommandBarInner = forwardRef(function CommandBarInner({
 
       // Escape to close/clear
       if (e.key === 'Escape') {
+        console.log('[CommandBar] ESC pressed, mode:', mode);
         if (mode === VIEW_MODES.EVENT) {
           e.preventDefault();
           // Delete draft event if exists before closing
           const editingEvent = document.querySelector('[data-editing-event-id]')?.dataset?.editingEventId;
           // Trigger the discard handler in EventForm by dispatching a custom event
+          console.log('[CommandBar] Dispatching commandbar-discard event');
           window.dispatchEvent(new CustomEvent('commandbar-discard'));
           return;
         }
@@ -153,8 +156,8 @@ const CommandBarInner = forwardRef(function CommandBarInner({
       if (end !== undefined) {
         // Called with (start, end, draftEventId) parameters
         eventData = {
-          id: draftEventId, // Include the draft event ID so we can delete it on discard
-          isDraft: true,
+          id: draftEventId, // Include the event ID so we can track it
+          isDraft: false,
           title: '',
           start: startOrData,
           end: end,
@@ -165,7 +168,7 @@ const CommandBarInner = forwardRef(function CommandBarInner({
         // Called with dragData object
         eventData = {
           id: startOrData.id,
-          isDraft: true,
+          isDraft: false,
           title: '',
           start: startOrData.start,
           end: startOrData.end,
@@ -247,6 +250,7 @@ const CommandBarInner = forwardRef(function CommandBarInner({
           <EventForm
             onCreateEvent={onCreateEvent}
             onUpdateEvent={onUpdateEvent}
+            onFinalizeNewEvent={onFinalizeNewEvent}
             setRepeatEditModalState={setRepeatEditModalState}
             onShowSendUpdateModal={onShowSendUpdateModal}
           />

@@ -42,6 +42,9 @@ const DayColumn = memo(function DayColumn({
       className="day-column flex-shrink-0 relative h-full"
       style={{ 
         width: dayWidth,
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
+        contain: 'layout style paint',
       }}
       data-date={date.toISOString()}
     >
@@ -84,6 +87,8 @@ export const DayColumnHeader = memo(function DayColumnHeader({
       className="day-column-header flex-shrink-0 h-12 flex gap-1 flex-row items-center justify-center"
       style={{ 
         width: dayWidth,
+        transform: 'translateZ(0)',
+        backfaceVisibility: 'hidden',
       }}
     >
       <div className="text-xs text-light-text/50 dark:text-dark-text/50 font-medium">

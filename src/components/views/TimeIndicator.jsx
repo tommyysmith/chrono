@@ -61,7 +61,7 @@ export default function TimeIndicator({
     
     return (
       <div
-        className="absolute flex items-center pointer-events-none z-50"
+        className="absolute flex items-center pointer-events-none z-10"
         style={{
           top: `${position}px`,
           left: 0,
@@ -92,7 +92,7 @@ export default function TimeIndicator({
 
   return (
     <div
-      className="absolute left-0 right-0 flex items-center pointer-events-none z-50"
+      className="absolute left-0 right-0 flex items-center pointer-events-none z-10"
       style={{
         top: `${position}px`,
       }}

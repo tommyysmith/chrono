@@ -20,6 +20,8 @@ export default defineSchema({
     seriesId: v.optional(v.string()),
     isRepeat: v.boolean(),
     rruleOptions: v.optional(v.any()),
+    // Instance overrides for Notion Calendar-style editing (event stays in series, only specific instance gets override)
+    instanceOverrides: v.optional(v.any()), // Map of dateKey (YYYY-MM-DD) -> override object
     viewId: v.string(),
     // Google Calendar sync
     source: v.string(), // "local" or "google"
@@ -32,6 +34,7 @@ export default defineSchema({
     // Google Meet / Conference data
     hangoutLink: v.optional(v.string()),
     conferenceData: v.optional(v.any()),
+    addGoogleMeet: v.optional(v.boolean()),
     // Attendees
     attendees: v.optional(v.array(v.object({
       email: v.string(),

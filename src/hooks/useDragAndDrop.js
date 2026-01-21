@@ -33,6 +33,7 @@ export function useDragAndDrop({
   handleUpdateEvent,
   onEventUpdateWithParticipants,
   onEventUpdateNotOwned,
+  getDateFromMousePositionCallback = null,
 }) {
   const [dragState, setDragState] = useState(initialDragState);
 
@@ -158,16 +159,22 @@ export function useDragAndDrop({
 
         if (!hasMoved) return;
 
-        const currentTime = getTimeFromMousePosition(
-          moveEvent.clientY,
-          containerRect,
-          currentDate,
-          80
-        );
-
         // Adjust current time based on column in week view
         let adjustedCurrentTime;
-        if (viewType === ViewType.WEEK) {
+        const targetDate = getDateFromMousePositionCallback ? getDateFromMousePositionCallback(moveEvent.clientX) : null;
+        
+        if (viewType === ViewType.WEEK && targetDate) {
+          // Use the callback for virtualized week view - it handles scroll position correctly
+          const timeInfo = getTimeFromMousePosition(
+            moveEvent.clientY,
+            containerRect,
+            currentDate,
+            80
+          );
+          adjustedCurrentTime = new Date(targetDate);
+          adjustedCurrentTime.setHours(timeInfo.getHours(), timeInfo.getMinutes(), 0, 0);
+        } else if (viewType === ViewType.WEEK) {
+          // Fallback for non-virtualized week view
           const weekStart = new Date(selectedDate);
           weekStart.setDate(weekStart.getDate() - weekStart.getDay());
           const currentColumn = getColumnFromMousePosition(
@@ -176,24 +183,20 @@ export function useDragAndDrop({
           );
           adjustedCurrentTime = new Date(weekStart);
           adjustedCurrentTime.setDate(weekStart.getDate() + currentColumn);
-          adjustedCurrentTime.setHours(
-            getTimeFromMousePosition(
-              moveEvent.clientY,
-              containerRect,
-              currentDate,
-              80
-            ).getHours(),
-            getTimeFromMousePosition(
-              moveEvent.clientY,
-              containerRect,
-              currentDate,
-              80
-            ).getMinutes(),
-            0,
-            0
+          const timeInfo = getTimeFromMousePosition(
+            moveEvent.clientY,
+            containerRect,
+            currentDate,
+            80
           );
+          adjustedCurrentTime.setHours(timeInfo.getHours(), timeInfo.getMinutes(), 0, 0);
         } else {
-          adjustedCurrentTime = currentTime;
+          adjustedCurrentTime = getTimeFromMousePosition(
+            moveEvent.clientY,
+            containerRect,
+            currentDate,
+            80
+          );
         }
         console.log('[DragDebug] handleMove adjustedCurrentTime:', adjustedCurrentTime);
 
@@ -284,13 +287,30 @@ export function useDragAndDrop({
 
           if (isRepeatedEvent && finalDraggedEvent) {
             // For repeated events owned by user, show the RepeatEditModal
+            // IMMEDIATELY update the event position so it stays at the dragged location while modal is open
+            // This will be reverted in handleRepeatEditDiscard if user cancels
+            setEvents(prevEvents => prevEvents.map(e => {
+              if (e.id === event.id) {
+                return {
+                  ...e,
+                  start: new Date(finalDraggedEvent.start.getTime()),
+                  end: new Date(finalDraggedEvent.end.getTime()),
+                  _pendingDragConfirmation: true, // Flag to indicate this is a pending drag
+                };
+              }
+              return e;
+            }));
+            
             // Mark if event has participants so we can show SendUpdateModal after scope selection
             setRepeatEditModalState({
               isOpen: true,
               event: {
                 ...event,
-                start: new Date(event.start.getTime()),
-                end: new Date(event.end.getTime()),
+                start: new Date(finalDraggedEvent.start.getTime()),
+                end: new Date(finalDraggedEvent.end.getTime()),
+                // Preserve override date key for Notion Calendar-style instance editing
+                _overrideDateKey: event._overrideDateKey,
+                isRecurring: event.isRecurring,
               },
               draggedEvent: {
                 ...finalDraggedEvent,
@@ -301,6 +321,9 @@ export function useDragAndDrop({
                 _isResizing: false,
                 // Flag to indicate this event has other participants - will trigger SendUpdateModal after scope selection
                 _hasOtherParticipants: hasOtherParticipants(event.attendees),
+                // Preserve override date key for Notion Calendar-style instance editing
+                _overrideDateKey: event._overrideDateKey,
+                isRecurring: event.isRecurring,
               },
               originalEvent: {
                 ...dragStartOriginalEvent,
@@ -309,6 +332,9 @@ export function useDragAndDrop({
                 // Also add flags to original event
                 _isDragging: true,
                 _isResizing: false,
+                // Preserve override date key for Notion Calendar-style instance editing
+                _overrideDateKey: dragStartOriginalEvent._overrideDateKey || event._overrideDateKey,
+                isRecurring: dragStartOriginalEvent.isRecurring || event.isRecurring,
               },
               isEditOperation: false,
             });
@@ -772,10 +798,31 @@ export function useDragAndDrop({
 
             if (isRepeatedEvent) {
               // For repeated events owned by user, show the RepeatEditModal
+              // IMMEDIATELY update the event position so it stays at the resized size while modal is open
+              // This will be reverted in handleRepeatEditDiscard if user cancels
+              setEvents(prevEvents => prevEvents.map(e => {
+                if (e.id === resizedEvent.id) {
+                  return {
+                    ...e,
+                    start: new Date(resizedEvent.start.getTime()),
+                    end: new Date(resizedEvent.end.getTime()),
+                    _pendingDragConfirmation: true, // Flag to indicate this is a pending resize
+                  };
+                }
+                return e;
+              }));
+              
               // Mark if event has participants so we can show SendUpdateModal after scope selection
               setRepeatEditModalState({
                 isOpen: true,
-                event: originalEvent,
+                event: {
+                  ...originalEvent,
+                  start: new Date(resizedEvent.start.getTime()),
+                  end: new Date(resizedEvent.end.getTime()),
+                  // Preserve override date key for Notion Calendar-style instance editing
+                  _overrideDateKey: originalEvent._overrideDateKey || resizedEvent._overrideDateKey,
+                  isRecurring: originalEvent.isRecurring || resizedEvent.isRecurring,
+                },
                 draggedEvent: {
                   ...resizedEvent,
                   // Add flags for the type of operation
@@ -783,12 +830,18 @@ export function useDragAndDrop({
                   _isResizing: true,
                   // Flag to indicate this event has other participants - will trigger SendUpdateModal after scope selection
                   _hasOtherParticipants: hasOtherParticipants(resizedEvent.attendees),
+                  // Preserve override date key for Notion Calendar-style instance editing
+                  _overrideDateKey: originalEvent._overrideDateKey || resizedEvent._overrideDateKey,
+                  isRecurring: originalEvent.isRecurring || resizedEvent.isRecurring,
                 },
                 originalEvent: {
                   ...originalEvent,
                   // Also add flags to original event
                   _isDragging: false,
                   _isResizing: true,
+                  // Preserve override date key for Notion Calendar-style instance editing
+                  _overrideDateKey: originalEvent._overrideDateKey || resizedEvent._overrideDateKey,
+                  isRecurring: originalEvent.isRecurring || resizedEvent.isRecurring,
                 },
                 isEditOperation: false,
               });

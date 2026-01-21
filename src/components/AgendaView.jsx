@@ -18,9 +18,9 @@ import Checkbox from './Checkbox';
 import 'react-day-picker/dist/style.css';
 
 const dayPickerStyles = {
-  day_today: "!bg-primary hover:!text-light-text dark:hover:!text-dark-text !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
+  day_today: "!bg-orange-500 hover:!bg-orange-600 hover:!text-white dark:hover:!text-white !border !border-none !text-white !rounded-[5px] !h-7 !w-7",
   day: "!h-7 !w-7 !p-0 !font-normal !text-light-text dark:!text-dark-text [&:not(.rdp-day_today)]:hover:!bg-black/10 [&:not(.rdp-day_today)]:dark:hover:!bg-white/5 !rounded-[5px]",
-  day_selected: "!bg-dark-bg-lighter  hover:!text-light-text dark:hover:!text-dark-text dark:!bg-white/15 !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text rounded-[5px]",
+  day_selected: "!bg-dark-bg-lighter hover:!text-light-text dark:hover:!text-dark-text dark:!bg-white/15 !border !border-dark-border dark:border-dark-border !text-white !font-semibold dark:text-dark-text rounded-[5px]",
 };
 
 const EventItem = memo(({ event }) => {
@@ -174,7 +174,7 @@ const IconRight = memo(() => (
 IconLeft.displayName = 'IconLeft';
 IconRight.displayName = 'IconRight';
 
-export default function AgendaView({ events = [], tasks = [], selectedDate = new Date(), onDateSelect, isWeekView = false, onTaskComplete, onTaskDelete, onTaskEdit, commandBarRef }) {
+export default function AgendaView({ events = [], tasks = [], selectedDate = new Date(), onDateSelect, isWeekView = false, onTaskComplete, onTaskDelete, onTaskEdit, commandBarRef, visibleDateRange = null }) {
   // Get task management functions
   const { getRecurringTaskInstances, handleToggleTaskCompletion, ensureActiveRecurringInstances, handleUpdateTask } = useTaskManagement();
   
@@ -218,6 +218,39 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
       setMonth(selectedDate);
     }
   }, [selectedDate, currentDate]);
+
+  // Sync month display with visible date range from infinite scroll
+  useEffect(() => {
+    if (visibleDateRange?.start) {
+      const visibleStart = new Date(visibleDateRange.start);
+      // Only change month if the visible range's start is in a different month
+      if (visibleStart.getMonth() !== month.getMonth() || visibleStart.getFullYear() !== month.getFullYear()) {
+        setMonth(visibleStart);
+      }
+    }
+  }, [visibleDateRange]);
+
+  // Check if a date is within the visible range (for infinite scroll highlighting)
+  const isDateInVisibleRange = useCallback((date) => {
+    if (!visibleDateRange || !visibleDateRange.start || !visibleDateRange.end) return false;
+    const start = new Date(visibleDateRange.start);
+    const end = new Date(visibleDateRange.end);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    return isWithinInterval(date, { start, end });
+  }, [visibleDateRange]);
+
+  // Check if date is the start of visible range
+  const isVisibleRangeStart = useCallback((date) => {
+    if (!visibleDateRange || !visibleDateRange.start) return false;
+    return isSameDay(date, new Date(visibleDateRange.start));
+  }, [visibleDateRange]);
+
+  // Check if date is the end of visible range
+  const isVisibleRangeEnd = useCallback((date) => {
+    if (!visibleDateRange || !visibleDateRange.end) return false;
+    return isSameDay(date, new Date(visibleDateRange.end));
+  }, [visibleDateRange]);
 
   const isDateInSelectedWeek = useCallback((date) => {
     if (!isWeekView) return false;
@@ -494,6 +527,16 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
             onMonthChange={setMonth}
             className="rounded-md w-[260px] [--week-bg:rgba(0,0,0,0.05)] dark:[--week-bg:rgba(255,255,255,0.05)]"
             showOutsideDays={true}
+            modifiers={{
+              visibleRange: (date) => isDateInVisibleRange(date),
+              visibleRangeStart: (date) => isVisibleRangeStart(date),
+              visibleRangeEnd: (date) => isVisibleRangeEnd(date),
+            }}
+            modifiersClassNames={{
+              visibleRange: "!bg-black/[0.06] dark:!bg-white/[0.08] !rounded-none",
+              visibleRangeStart: "!rounded-l-[5px] !rounded-r-none",
+              visibleRangeEnd: "!rounded-r-[5px] !rounded-l-none",
+            }}
             classNames={{
               root: "w-full",
               months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
@@ -507,7 +550,7 @@ export default function AgendaView({ events = [], tasks = [], selectedDate = new
               table: "w-full border-collapse space-y-2",
               head_row: "flex w-full justify-between px-1",
               head_cell: "text-light-text/50 dark:text-dark-text/50 rounded-md w-7 font-normal text-[0.8rem] text-center",
-              row: "flex w-full justify-between px-1 py-1 [&:has([aria-selected=true])]:bg-black/5 dark:[&:has([aria-selected=true])]:bg-white/5 [&:has([aria-selected=true])]:rounded-[5px]",
+              row: "flex w-full justify-between px-1 py-1",
               cell: "text-center text-xs p-0 relative focus-within:relative focus-within:z-20",
               day: dayPickerStyles.day,
               day_selected: dayPickerStyles.day_selected,

@@ -1,5 +1,4 @@
 import { memo, useCallback } from "react";
-import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { useDraggable } from '@dnd-kit/core';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
@@ -22,10 +21,12 @@ const EventItem = memo(({
   const repeatClass = isRepeatEvent ? "repeat-event" : "";
   
   // Check if this is an unaccepted event (user hasn't responded or declined)
-  // Also check attendees array for self.responseStatus as fallback
+  // Only applies to events with other attendees - you can't RSVP to your own solo event
   const selfAttendee = event.attendees?.find(a => a.self);
   const responseStatus = event.myResponseStatus || selfAttendee?.responseStatus;
-  const isUnacceptedEvent = responseStatus && 
+  const hasOtherAttendees = event.attendees?.some(a => !a.self) || false;
+  const isUnacceptedEvent = hasOtherAttendees && 
+    responseStatus && 
     responseStatus !== 'accepted' && 
     !event.organizer?.self;
 
@@ -57,8 +58,9 @@ const EventItem = memo(({
     const baseClasses = "absolute z-10 overflow-hidden cursor-pointer select-none event-item";
     const editingClasses = event.isEditing || dragState.eventId === event.id ? "border-primary" : "";
     
-    // Draft events (from drag-to-create) - no special styling, just regular event
-    if (event.isDraft) {
+    // Events being created (empty title) - use selected state styling
+    const isBeingCreated = event.title === '' && event.id?.includes('-');
+    if (isBeingCreated) {
       return `${baseClasses} rounded-[9px]`;
     }
     
@@ -93,20 +95,20 @@ const EventItem = memo(({
     <TooltipProvider delayDuration={2000}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <motion.div
+          <div
             ref={setNodeRef}
             className={`${getEventClasses()} ${repeatClass} ${isDragging ? '!opacity-0' : ''}`}
             data-is-dragging={isDragging}
             style={{ 
               ...eventStyle, 
               ...dragTransform,
-              // Selected state: solid background color
-              ...(isSelected && !event.isTaskBlock && !event.isTask ? {
+              // Selected state or event being created: solid background color
+              ...((isSelected || (event.title === '' && event.id?.includes('-'))) && !event.isTaskBlock && !event.isTask ? {
                 backgroundColor: event.color || "#808080",
                 color: 'white',
               } : {}),
               // Unaccepted event: no background, just border color
-              ...(isUnacceptedEvent && !isSelected ? {
+              ...(isUnacceptedEvent && !isSelected && !(event.title === '' && event.id?.includes('-')) ? {
                 backgroundColor: 'transparent',
                 borderColor: event.color || "#808080",
               } : {})
@@ -128,7 +130,7 @@ const EventItem = memo(({
               {...listeners}
             />
             {/* Color stripe for non-task events (hidden for unaccepted events) */}
-            {!event.isTask && !event.isTaskBlock && !event.isDraft && !isUnacceptedEvent && (
+            {!event.isTask && !event.isTaskBlock && !isUnacceptedEvent && (
               <div
                 className="absolute left-0 top-0 bottom-0 w-1"
                 style={{ backgroundColor: event.color || "#808080" }}
@@ -182,7 +184,7 @@ const EventItem = memo(({
                 <Repeat className="w-3 h-3" />
               </div>
             )}
-          </motion.div>
+          </div>
         </TooltipTrigger>
         <TooltipContent side="right" align="start">
           <EventTooltipContent event={event} />

@@ -100,6 +100,9 @@ const RepeatEditModal = ({
         start: new Date(draggedEvent.start),
         end: new Date(draggedEvent.end)
       },
+      // CRITICAL: Preserve isRecurring and _overrideDateKey for Notion Calendar-style instance editing
+      isRecurring: draggedEvent.isRecurring,
+      _overrideDateKey: draggedEvent._overrideDateKey,
       // For 'this event' scope, ensure we're using the dragged event's exact position
       ...(editScope === 'single' && {
         _detachedEvent: true,
@@ -111,17 +114,13 @@ const RepeatEditModal = ({
 
     console.log('🟡 [REPEAT-EDIT-MODAL] Confirming edit with flags:', {
       id: updatedEvent.id,
+      seriesId: updatedEvent.seriesId,
       isDragging: updatedEvent._isDragging,
       isResizing: updatedEvent._isResizing,
       editScope,
+      timeChange: updatedEvent._timeChange,
       start: updatedEvent.start.toISOString(),
       end: updatedEvent.end.toISOString(),
-      exactPosition: updatedEvent._exactPosition ? {
-        start: updatedEvent._exactPosition.start.toISOString(),
-        end: updatedEvent._exactPosition.end.toISOString()
-      } : null,
-      preserveExactPosition: updatedEvent._preserveExactPosition,
-      detachedEvent: updatedEvent._detachedEvent,
       originalEventTimes: {
         start: originalEvent.start.toISOString(),
         end: originalEvent.end.toISOString()
@@ -137,11 +136,6 @@ const RepeatEditModal = ({
       scope: editScope,
       event: updatedEvent
     });
-
-    // For double-click edits, also open command bar
-    if (isEditOperation && commandBarRef?.current) {
-      commandBarRef.current.openForEdit(updatedEvent);
-    }
     
     // Close the modal
     onClose();
@@ -189,7 +183,7 @@ const RepeatEditModal = ({
      originalEvent.end.getTime() !== draggedEvent.end.getTime());
   
   // Determine the appropriate button text based on operation type
-  const continueButtonText = isEditOperation ? "Continue editing" : "Confirm edits";
+  const continueButtonText = isEditOperation ? "Confirm changes" : "Confirm edits";
 
   return (
     <div className="fixed inset-0 flex items-center justify-center z-[9999]">

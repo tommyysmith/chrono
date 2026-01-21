@@ -91,7 +91,14 @@ export default function EventTooltipContent({ event }) {
         />
         <div>
           <p className="font-semibold text-sm text-dark-text truncate">{event.title || 'New Event'}</p>
-          <p className="text-xs font-regular text-dark-text/70 truncate">{event.description || 'No event description...'}</p>
+          {event.description ? (
+            <div 
+              className="text-xs font-regular text-dark-text/70 line-clamp-2 [&_a]:text-blue-400 [&_a]:underline [&_br]:hidden"
+              dangerouslySetInnerHTML={{ __html: event.description }}
+            />
+          ) : (
+            <p className="text-xs font-regular text-dark-text/70 truncate">No event description...</p>
+          )}
         </div>
       </div>
 
